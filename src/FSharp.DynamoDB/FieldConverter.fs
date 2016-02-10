@@ -1,4 +1,4 @@
-﻿module internal FSharp.DynamoDB.FieldConverter
+﻿module FSharp.DynamoDB.FieldConverter
 
 open System
 open System.IO
