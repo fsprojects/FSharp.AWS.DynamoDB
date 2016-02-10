@@ -70,13 +70,29 @@ and ShapeDouble() =
     inherit TypeShape<double> ()
     override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitDouble()
 
+and ShapeString() =
+    inherit TypeShape<string> ()
+    override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitString()
+
+and ShapeGuid() =
+    inherit TypeShape<Guid> ()
+    override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitGuid()
+
 and ShapeDecimal() =
     inherit TypeShape<decimal> ()
     override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitDecimal()
 
-and ShapeString() =
-    inherit TypeShape<string> ()
-    override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitString()
+and ShapeTimeSpan() =
+    inherit TypeShape<TimeSpan> ()
+    override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitTimeSpan()
+
+and ShapeDateTime() =
+    inherit TypeShape<DateTime> ()
+    override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitDateTime()
+
+and ShapeDateTimeOffset() = 
+    inherit TypeShape<DateTimeOffset> ()
+    override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitDateTimeOffset()
 
 /////////////// Enumerations
 
@@ -192,6 +208,21 @@ and ShapeArray4D<'T>() =
     interface IShapeArray4D with
         member __.Accept v = v.VisitArray4D<'T> ()
 
+////////////// System.Collections.List
+
+and IResizeArrayVisitor<'R> =
+    abstract VisitResizeArray<'T> : unit -> 'R
+
+and IShapeResizeArray =
+    abstract Accept : IResizeArrayVisitor<'R> -> 'R
+
+and IShapeResizeArray<'T> () =
+    inherit TypeShape<ResizeArray<'T>> ()
+    override __.Accept(v : ITypeShapeVisitor<'R>) = v.VisitResizeArray<'T> ()
+    interface IShapeResizeArray with
+        member __.Accept v = v.VisitResizeArray<'T> ()
+
+
 
 ////////////// System.Collections.Dictionary
 
@@ -211,19 +242,23 @@ and ShapeDictionary<'K, 'V when 'K : equality> () =
     interface IShapeCollection with
         member __.Accept v = v.VisitCollection<KeyValuePair<'K, 'V>> ()
 
-////////////// System.Collections.List
+////////////// System.Collections.HashSet
 
-and IResizeArrayVisitor<'R> =
-    abstract VisitResizeArray<'T> : unit -> 'R
+and IHashSetVisitor<'R> =
+    abstract VisitHashSet<'T when 'T : equality> : unit -> 'R
 
-and IShapeResizeArray =
-    abstract Accept : IResizeArrayVisitor<'R> -> 'R
+and IShapeHashSet =
+    abstract Accept : IHashSetVisitor<'R> -> 'R
 
-and IShapeResizeArray<'T> () =
-    inherit TypeShape<ResizeArray<'T>> ()
-    override __.Accept(v : ITypeShapeVisitor<'R>) = v.VisitResizeArray<'T> ()
-    interface IShapeResizeArray with
-        member __.Accept v = v.VisitResizeArray<'T> ()
+and ShapeHashSet<'T when 'T : equality> () =
+    inherit TypeShape<HashSet<'T>> ()
+    override __.Accept(v : ITypeShapeVisitor<'R>) = v.VisitHashSet<'T> ()
+    interface IShapeHashSet with
+        member __.Accept v = v.VisitHashSet<'T> ()
+    interface IShapeEnumerable with
+        member __.Accept v = v.VisitEnumerable<'T> ()
+    interface IShapeCollection with
+        member __.Accept v = v.VisitCollection<'T> ()
 
 
 //////// System.Tuple
@@ -530,14 +565,20 @@ and ITypeShapeVisitor<'R> =
     abstract VisitUInt64 : unit -> 'R
     abstract VisitSingle : unit -> 'R
     abstract VisitDouble : unit -> 'R
-    abstract VisitDecimal : unit -> 'R
     abstract VisitString : unit -> 'R
+    abstract VisitGuid : unit -> 'R
+    abstract VisitTimeSpan : unit -> 'R
+    abstract VisitDateTime : unit -> 'R
+    abstract VisitDateTimeOffset : unit -> 'R
+    abstract VisitDecimal : unit -> 'R
+
     abstract VisitUnknown<'T> : unit -> 'R
 
     inherit INullableVisitor<'R>
     inherit IEnumVisitor<'R>
     inherit IKeyValuePairVisitor<'R>
     inherit IDictionaryVisitor<'R>
+    inherit IHashSetVisitor<'R>
     inherit IResizeArrayVisitor<'R>
 
     inherit IArrayVisitor<'R>
@@ -617,12 +658,14 @@ module private TypeShapeImpl =
         else
             Union
 
-    let (|Dictionary|ResizeArray|FSharpMap|FSharpSet|KeyValuePair|Other|) (t : Type) =
+    let (|Dictionary|HashSet|ResizeArray|FSharpMap|FSharpSet|KeyValuePair|Other|) (t : Type) =
         if t.IsGenericType then
             let gt = t.GetGenericTypeDefinition()
             let gas = t.GetGenericArguments()
             if gt = typedefof<System.Collections.Generic.Dictionary<_,_>> then
                 Dictionary(gas.[0], gas.[1])
+            elif gt = typedefof<System.Collections.Generic.HashSet<_>> then
+                HashSet(gas.[0])
             elif gt = typedefof<System.Collections.Generic.List<_>> then
                 ResizeArray(gas.[0])
             elif gt = typedefof<Map<_,_>> then
@@ -667,6 +710,10 @@ module private TypeShapeImpl =
 
         elif t = typeof<decimal> then ShapeDecimal() :> _
         elif t = typeof<string> then ShapeString() :> _
+        elif t = typeof<Guid> then ShapeGuid() :> _
+        elif t = typeof<TimeSpan> then ShapeTimeSpan() :> _
+        elif t = typeof<DateTime> then ShapeDateTime() :> _
+        elif t = typeof<DateTimeOffset> then ShapeDateTimeOffset() :> _
         elif FSharpType.IsTuple t then
             let gas = t.GetGenericArguments()
             match gas.Length with
@@ -713,6 +760,7 @@ module private TypeShapeImpl =
         else
             match t with
             | Dictionary(k,v) -> activate2 typedefof<ShapeDictionary<_,_>> k v
+            | HashSet e -> activate1 typedefof<ShapeHashSet<_>> e
             | ResizeArray e -> activate1 typedefof<IShapeResizeArray<_>> e
             | FSharpMap(k,v) -> activate2 typedefof<ShapeFSharpMap<_,_>> k v
             | KeyValuePair(k,v) -> activate2 typedefof<ShapeKeyValuePair<_,_>> k v
@@ -766,12 +814,19 @@ module TypeShapeModule =
     let (|ShapeUInt64|_|) t = test<ShapeUInt64> t
     let (|ShapeSingle|_|) t = test<ShapeSingle> t
     let (|ShapeDouble|_|) t = test<ShapeDouble> t
+
     let (|ShapeString|_|) t = test<ShapeString> t
+    let (|ShapeGuid|_|) t = test<ShapeGuid> t
+    let (|ShapeDecimal|_|) t = test<ShapeDecimal> t
+    let (|ShapeTimeSpan|_|) t = test<ShapeTimeSpan> t
+    let (|ShapeDateTime|_|) t = test<ShapeDateTime> t
+    let (|ShapeDateTimeOffset|_|) t = test<ShapeDateTimeOffset> t
     
     let (|ShapeNullable|_|) t = test<IShapeNullable> t
     let (|ShapeEnum|_|) t = test<IShapeEnum> t
     let (|ShapeKeyValuePair|_|) t = test<IShapeKeyValuePair> t
     let (|ShapeDictionary|_|) t = test<IShapeDictionary> t
+    let (|ShapeHashSet|_|) t = test<IShapeHashSet> t
     let (|ShapeResizeArray|_|) t = test<IShapeResizeArray> t
 
     let (|ShapeArray|_|) t = test<IShapeArray> t
@@ -788,7 +843,7 @@ module TypeShapeModule =
     let (|ShapeTuple7|_|) t = test<IShapeTuple7> t
     let (|ShapeTuple8|_|) t = test<IShapeTuple8> t
 
-    let (|ShapeFsharpList|_|) t = test<IShapeFSharpList> t
+    let (|ShapeFSharpList|_|) t = test<IShapeFSharpList> t
     let (|ShapeFSharpOption|_|) t = test<IShapeFSharpOption> t
     let (|ShapeFSharpRef|_|) t = test<IShapeFSharpRef> t
     let (|ShapeFSharpSet|_|) t = test<IShapeFSharpSet> t
@@ -821,7 +876,6 @@ module TypeShapeModule =
         | :? ShapeUInt64    -> SomeU
         | :? ShapeSingle    -> SomeU
         | :? ShapeDouble    -> SomeU
-        | :? ShapeString    -> SomeU
         | _ -> None
 
     let (|ShapeTuple|_|) (t : TypeShape) =

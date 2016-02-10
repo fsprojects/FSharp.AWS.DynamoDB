@@ -7,6 +7,8 @@ open System.Threading.Tasks
 [<AutoOpen>]
 module internal Utils =
 
+    let inline rlist (ts : seq<'T>) = new ResizeArray<_>(ts)
+
     /// taken from mscorlib's Tuple.GetHashCode() implementation
     let inline private combineHash (h1 : int) (h2 : int) =
         ((h1 <<< 5) + h1) ^^^ h2
