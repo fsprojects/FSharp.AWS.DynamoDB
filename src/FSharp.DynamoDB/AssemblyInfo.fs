@@ -1,4 +1,4 @@
-﻿namespace Rql.Core.AssemblyInfo
+﻿namespace FSharp.DynamoDB.AssemblyInfo
 
 open System.Reflection
 open System.Runtime.CompilerServices
@@ -7,11 +7,11 @@ open System.Runtime.InteropServices
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[<assembly: AssemblyTitle("Rql.Core")>]
+[<assembly: AssemblyTitle("FSharp.DynamoDB")>]
 [<assembly: AssemblyDescription("")>]
 [<assembly: AssemblyConfiguration("")>]
 [<assembly: AssemblyCompany("")>]
-[<assembly: AssemblyProduct("Rql.Core")>]
+[<assembly: AssemblyProduct("FSharp.DynamoDB")>]
 [<assembly: AssemblyCopyright("Copyright ©  2016")>]
 [<assembly: AssemblyTrademark("")>]
 [<assembly: AssemblyCulture("")>]
@@ -22,7 +22,7 @@ open System.Runtime.InteropServices
 [<assembly: ComVisible(false)>]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[<assembly: Guid("7c0da37d-9b8e-4c99-9318-1d3367b75eee")>]
+[<assembly: Guid("57485723-02fa-4baf-939f-570b8b3024ba")>]
 
 // Version information for an assembly consists of the following four values:
 // 

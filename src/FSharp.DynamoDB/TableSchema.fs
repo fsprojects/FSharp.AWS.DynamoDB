@@ -1,4 +1,4 @@
-﻿namespace Rql.DynamoDB
+﻿namespace FSharp.DynamoDB
 
 open System
 
@@ -32,7 +32,7 @@ module internal TableUtils =
     open Microsoft.FSharp.Reflection
     open Amazon.DynamoDBv2
     open Amazon.DynamoDBv2.Model
-    open Rql.Core
+    open FSharp.Core
 
     let extractKeySchema (rfe : RecordFieldExtractor<'TRecord>) =
         let mkKeySchema (p : RecordProperty) =

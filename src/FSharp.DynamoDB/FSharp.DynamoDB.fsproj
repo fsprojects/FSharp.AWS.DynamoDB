@@ -46,6 +46,7 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Utils.fs" />
+    <Compile Include="TypeShape.fs" />
     <Compile Include="TableSchema.fs" />
     <None Include="Script.fsx" />
     <None Include="paket.references" />

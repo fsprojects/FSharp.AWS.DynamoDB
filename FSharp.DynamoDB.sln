@@ -17,11 +17,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "project", "project", "{BF60
 		RELEASE_NOTES.md = RELEASE_NOTES.md
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{ED8079DD-2B06-4030-9F0F-DC548F98E1C4}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A157294B-F680-4AA4-910C-BC63840FF6E3}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.DynamoDB", "src\Rql.DynamoDB\FSharp.DynamoDB.fsproj", "{57485723-02FA-4BAF-939F-570B8B3024BA}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.DynamoDB", "src\FSharp.DynamoDB\FSharp.DynamoDB.fsproj", "{57485723-02FA-4BAF-939F-570B8B3024BA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
