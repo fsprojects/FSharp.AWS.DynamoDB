@@ -51,7 +51,8 @@
     <Compile Include="Common.fs" />
     <Compile Include="FieldConverter.fs" />
     <Compile Include="RecordInfo.fs" />
-    <Compile Include="TableSchema.fs" />
+    <Compile Include="RecordDescriptor.fs" />
+    <Compile Include="TableContext.fs" />
     <None Include="Script.fsx" />
     <None Include="paket.references" />
   </ItemGroup>

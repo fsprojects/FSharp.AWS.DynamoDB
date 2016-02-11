@@ -1,6 +1,7 @@
 ﻿namespace FSharp.DynamoDB
 
 open System
+open System.Collections.Generic
 open System.Reflection
 open System.Threading.Tasks
 
@@ -8,6 +9,11 @@ open System.Threading.Tasks
 module internal Utils =
 
     let inline rlist (ts : seq<'T>) = new ResizeArray<_>(ts)
+
+    let inline cdict (kvs : seq<KeyValuePair<'K,'V>>) = 
+        let d = new Dictionary<'K, 'V>()
+        for kv in kvs do d.Add(kv.Key, kv.Value)
+        d
 
     /// taken from mscorlib's Tuple.GetHashCode() implementation
     let inline private combineHash (h1 : int) (h2 : int) =

@@ -4,6 +4,9 @@ open System
 open System.IO
 open System.Runtime.Serialization.Formatters.Binary
 
+open Amazon.DynamoDBv2
+open Amazon.DynamoDBv2.Model
+
 [<Sealed>]
 type HashKeyAttribute() =
     inherit Attribute()
@@ -12,15 +15,10 @@ type HashKeyAttribute() =
 type RangeKeyAttribute() =
     inherit Attribute()
 
-type KeyAttributeType = 
-    | String 
-    | Bytes 
-    | Number
-
 type KeySchema = 
-    { 
+    {
         AttributeName : string
-        KeyType : KeyAttributeType 
+        KeyType : ScalarAttributeType 
     }
 
 type TableKeySchema = 
