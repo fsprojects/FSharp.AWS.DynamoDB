@@ -45,9 +45,12 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Utils.fs" />
-    <Compile Include="TypeShape.fs" />
+    <Compile Include="Utils\Utils.fs" />
+    <Compile Include="Utils\TypeShape.fs" />
+    <Compile Include="Utils\ExprEqualityComparer.fs" />
+    <Compile Include="Common.fs" />
     <Compile Include="FieldConverter.fs" />
+    <Compile Include="RecordInfo.fs" />
     <Compile Include="TableSchema.fs" />
     <None Include="Script.fsx" />
     <None Include="paket.references" />

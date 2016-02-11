@@ -1,4 +1,4 @@
-﻿module FSharp.DynamoDB.FieldConverter
+﻿module internal FSharp.DynamoDB.FieldConverter
 
 open System
 open System.IO
@@ -127,6 +127,12 @@ type EnumerationConverter<'E, 'U when 'E : enum<'U>>(uconv : StringRepresentable
     override __.ToField a = EnumOfValue<'U, 'E>(uconv.ToField a)
     override __.Parse s = uconv.Parse s |> EnumOfValue<'U, 'E>
     override __.UnParse e = EnumToValue<'E, 'U> e |> uconv.UnParse
+
+//type NullableConverter<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct>(tconv : FieldConverter<'T>) =
+//    inherit FieldConverter<Nullable<'T>> ()
+//    override __.Representation = tconv.Representation
+//    override __.OfField n = if n.HasValue then tconv.OfField n.Value else new AttributeValue()
+//    override __.ToField a = if a.Has
 
 type NumericalSeqConverter<'NSeq, 'N when 'NSeq :> seq<'N>>(ctor : seq<'N> -> 'NSeq, nconv : StringRepresentableFieldConverter<'N>) =
     inherit FieldConverter<'NSeq>()
