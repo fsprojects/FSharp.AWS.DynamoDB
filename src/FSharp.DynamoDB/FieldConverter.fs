@@ -191,7 +191,7 @@ type DateTimeOffsetConverter() =
     override __.Representation = FieldRepresentation.String
     override __.DefaultValue = DateTimeOffset()
     override __.OfField d = String(d.ToUniversalTime().ToString(AWSSDKUtils.ISO8601DateFormat))
-    override __.ToField a = match a with String s -> DateTimeOffset.Parse s | _ -> invalidCast a
+    override __.ToField a = match a with String s -> DateTimeOffset.Parse(s).ToLocalTime() | _ -> invalidCast a
     override __.Parse s = DateTimeOffset.Parse(s).ToLocalTime()
     override __.UnParse d = d.ToUniversalTime().ToString(AWSSDKUtils.ISO8601DateFormat)
 
