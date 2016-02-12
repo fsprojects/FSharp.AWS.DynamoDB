@@ -1,6 +1,7 @@
 ﻿namespace FSharp.DynamoDB.Tests
 
 open System
+open System.Threading
 
 open Xunit
 open FsUnit.Xunit
@@ -24,7 +25,7 @@ type ``Simple Table Operation Tests`` () =
 
     let table = TableContext.GetTableContext<SimpleRecord>(client, tableName, createIfNotExists = true) |> run
 
-//    [<Fact>]
+    [<Fact>]
     let ``Simple Put Operation`` () =
         let value = { Name = guid() ; Value = 42L }
         let key = table.PutItemAsync value |> run
