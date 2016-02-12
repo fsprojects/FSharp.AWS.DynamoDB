@@ -216,7 +216,7 @@ and IResizeArrayVisitor<'R> =
 and IShapeResizeArray =
     abstract Accept : IResizeArrayVisitor<'R> -> 'R
 
-and IShapeResizeArray<'T> () =
+and ShapeResizeArray<'T> () =
     inherit TypeShape<ResizeArray<'T>> ()
     override __.Accept(v : ITypeShapeVisitor<'R>) = v.VisitResizeArray<'T> ()
     interface IShapeResizeArray with
@@ -632,52 +632,13 @@ module private TypeShapeImpl =
     let getGenericEnumType () = 
         typeof<ShapeEnum<BindingFlags,int>>.GetGenericTypeDefinition()
 
-    let activate (gt : Type) (tp : Type []) args =
+    let activate (gt : Type) (tp : Type []) =
         let ti = gt.MakeGenericType tp
         let ctor = ti.GetConstructor(allConstructors, null, CallingConventions.Standard, [||], [||])
-        ctor.Invoke args :?> TypeShape
+        ctor.Invoke [||] :?> TypeShape
 
-    let activate1 (gt : Type) (tp : Type) = activate gt [|tp|] [||]
-    let activate2 (gt : Type) (p1 : Type) (p2 : Type) = activate gt [|p1 ; p2|] [||]
-
-    let (|List|Option|Choice|Union|) (t : Type) =
-        if t.IsGenericType then
-            let gt = t.GetGenericTypeDefinition()
-            let gas = t.GetGenericArguments()
-            if gt = typedefof<_ list> then List (gas.[0])
-            elif gt = typedefof<_ option> then Option (gas.[0])
-            elif 
-                gt.Name.StartsWith "FSharpChoice" && 
-                gt.Namespace = "Microsoft.FSharp.Core" && 
-                gt.Assembly = typeof<int option>.Assembly then
-
-                Choice gas
-
-            else
-                Union
-        else
-            Union
-
-    let (|Dictionary|HashSet|ResizeArray|FSharpMap|FSharpSet|KeyValuePair|Other|) (t : Type) =
-        if t.IsGenericType then
-            let gt = t.GetGenericTypeDefinition()
-            let gas = t.GetGenericArguments()
-            if gt = typedefof<System.Collections.Generic.Dictionary<_,_>> then
-                Dictionary(gas.[0], gas.[1])
-            elif gt = typedefof<System.Collections.Generic.HashSet<_>> then
-                HashSet(gas.[0])
-            elif gt = typedefof<System.Collections.Generic.List<_>> then
-                ResizeArray(gas.[0])
-            elif gt = typedefof<Map<_,_>> then
-                FSharpMap(gas.[0], gas.[1])
-            elif gt = typedefof<Set<_>> then
-                FSharpSet(gas.[0])
-            elif gt = typedefof<KeyValuePair<_,_>> then
-                KeyValuePair(gas.[0], gas.[1])
-            else
-                Other
-        else
-            Other
+    let activate1 (gt : Type) (tp : Type) = activate gt [|tp|]
+    let activate2 (gt : Type) (p1 : Type) (p2 : Type) = activate gt [|p1 ; p2|]
 
     let private canon = Type.GetType("System.__Canon")
     let private isIntrinsicType (t : Type) =
@@ -714,39 +675,64 @@ module private TypeShapeImpl =
         elif t = typeof<TimeSpan> then ShapeTimeSpan() :> _
         elif t = typeof<DateTime> then ShapeDateTime() :> _
         elif t = typeof<DateTimeOffset> then ShapeDateTimeOffset() :> _
+
+        elif t.IsEnum then 
+            activate2 (getGenericEnumType()) t <| Enum.GetUnderlyingType t
+
+        elif t.IsArray then
+            let et = t.GetElementType()
+            match t.GetArrayRank() with
+            | 1 -> activate1 typedefof<ShapeArray<_>> et
+            | 2 -> activate1 typedefof<ShapeArray2D<_>> et
+            | 3 -> activate1 typedefof<ShapeArray3D<_>> et
+            | 4 -> activate1 typedefof<ShapeArray4D<_>> et
+            | _ -> raise <| UnsupportedShape t
+
         elif FSharpType.IsTuple t then
             let gas = t.GetGenericArguments()
             match gas.Length with
-            | 1 -> activate typedefof<ShapeTuple<_>> gas [||]
-            | 2 -> activate typedefof<ShapeTuple<_,_>> gas [||]
-            | 3 -> activate typedefof<ShapeTuple<_,_,_>> gas [||]
-            | 4 -> activate typedefof<ShapeTuple<_,_,_,_>> gas [||]
-            | 5 -> activate typedefof<ShapeTuple<_,_,_,_,_>> gas [||]
-            | 6 -> activate typedefof<ShapeTuple<_,_,_,_,_,_>> gas [||]
-            | 7 -> activate typedefof<ShapeTuple<_,_,_,_,_,_,_>> gas [||]
-            | 8 -> activate typedefof<ShapeTuple<_,_,_,_,_,_,_,_>> gas [||]
+            | 1 -> activate typedefof<ShapeTuple<_>> gas
+            | 2 -> activate typedefof<ShapeTuple<_,_>> gas
+            | 3 -> activate typedefof<ShapeTuple<_,_,_>> gas
+            | 4 -> activate typedefof<ShapeTuple<_,_,_,_>> gas
+            | 5 -> activate typedefof<ShapeTuple<_,_,_,_,_>> gas
+            | 6 -> activate typedefof<ShapeTuple<_,_,_,_,_,_>> gas
+            | 7 -> activate typedefof<ShapeTuple<_,_,_,_,_,_,_>> gas
+            | 8 -> activate typedefof<ShapeTuple<_,_,_,_,_,_,_,_>> gas
             | _ -> raise <| UnsupportedShape t
 
         elif FSharpType.IsUnion(t, true) then
-            match t with
-            | List et -> activate1 typedefof<ShapeFSharpList<_>> et
-            | Option et -> activate1 typedefof<ShapeFSharpOption<_>> et
-            | Choice args -> 
-                match args.Length with
-                | 2 -> activate typedefof<ShapeFSharpChoice<_,_>> args [||]
-                | 3 -> activate typedefof<ShapeFSharpChoice<_,_,_>> args [||]
-                | 4 -> activate typedefof<ShapeFSharpChoice<_,_,_,_>> args [||]
-                | 5 -> activate typedefof<ShapeFSharpChoice<_,_,_,_,_>> args [||]
-                | 6 -> activate typedefof<ShapeFSharpChoice<_,_,_,_,_,_>> args [||]
-                | 7 -> activate typedefof<ShapeFSharpChoice<_,_,_,_,_,_,_>> args [||]
-                | _ -> raise <| UnsupportedShape t
+            if t.IsGenericType then
+                let gt = t.GetGenericTypeDefinition()
+                let gas = t.GetGenericArguments()
+                if gt = typedefof<_ list> then 
+                    activate typedefof<ShapeFSharpList<_>> gas
+                elif gt = typedefof<_ option> then 
+                    activate typedefof<ShapeFSharpOption<_>> gas
+                elif 
+                    gt.Name.StartsWith "FSharpChoice" && 
+                    gt.Namespace = "Microsoft.FSharp.Core" && 
+                    gt.Assembly = typeof<int option>.Assembly 
+                then
+                    match gas.Length with
+                    | 2 -> activate typedefof<ShapeFSharpChoice<_,_>> gas
+                    | 3 -> activate typedefof<ShapeFSharpChoice<_,_,_>> gas
+                    | 4 -> activate typedefof<ShapeFSharpChoice<_,_,_,_>> gas
+                    | 5 -> activate typedefof<ShapeFSharpChoice<_,_,_,_,_>> gas
+                    | 6 -> activate typedefof<ShapeFSharpChoice<_,_,_,_,_,_>> gas
+                    | 7 -> activate typedefof<ShapeFSharpChoice<_,_,_,_,_,_,_>> gas
+                    | _ -> raise <| UnsupportedShape t
 
-            | Union u -> activate1 typedefof<ShapeUnknown<_>> t
+                else
+                    activate1 typedefof<ShapeUnknown<_>> t
+
+            else
+                activate1 typedefof<ShapeUnknown<_>> t
 
         elif FSharpType.IsRecord(t, true) then
             if t.IsGenericType && t.GetGenericTypeDefinition () = typedefof<_ ref> then
-                let et = t.GetGenericArguments().[0]
-                activate1 typedefof<ShapeFSharpRef<_>> et
+                let gas = t.GetGenericArguments()
+                activate typedefof<ShapeFSharpRef<_>> gas
             else
                 activate1 typedefof<ShapeUnknown<_>> t
 
@@ -757,32 +743,30 @@ module private TypeShapeImpl =
             let d,c = FSharpType.GetFunctionElements t
             activate2 typedefof<ShapeFSharpFunc<_,_>> d c
 
-        else
-            match t with
-            | Dictionary(k,v) -> activate2 typedefof<ShapeDictionary<_,_>> k v
-            | HashSet e -> activate1 typedefof<ShapeHashSet<_>> e
-            | ResizeArray e -> activate1 typedefof<IShapeResizeArray<_>> e
-            | FSharpMap(k,v) -> activate2 typedefof<ShapeFSharpMap<_,_>> k v
-            | KeyValuePair(k,v) -> activate2 typedefof<ShapeKeyValuePair<_,_>> k v
-            | FSharpSet e -> activate1 typedefof<ShapeFSharpSet<_>> e
-            | Other ->
+        elif t.IsGenericType then
+            let gt = t.GetGenericTypeDefinition()
+            let gas = t.GetGenericArguments()
 
-            if t.IsEnum then 
-                activate2 (getGenericEnumType()) t <| Enum.GetUnderlyingType t
-
-            elif t.IsArray then
-                let et = t.GetElementType()
-                match t.GetArrayRank() with
-                | 1 -> activate1 typedefof<ShapeArray<_>> et
-                | 2 -> activate1 typedefof<ShapeArray2D<_>> et
-                | 3 -> activate1 typedefof<ShapeArray3D<_>> et
-                | 4 -> activate1 typedefof<ShapeArray4D<_>> et
-                | _ -> raise <| UnsupportedShape t
-
-            else 
-                match aux |> Option.bind (fun f -> f t) with
-                | Some ts -> ts
-                | None -> activate1 typedefof<ShapeUnknown<_>> t
+            if gt = typedefof<System.Nullable<_>> then
+                activate typedefof<ShapeNullable<_>> gas
+            elif gt = typedefof<System.Collections.Generic.Dictionary<_,_>> then
+                activate typedefof<ShapeDictionary<_,_>> gas
+            elif gt = typedefof<System.Collections.Generic.HashSet<_>> then
+                activate typedefof<ShapeHashSet<_>> gas
+            elif gt = typedefof<System.Collections.Generic.List<_>> then
+                activate typedefof<ShapeResizeArray<_>> gas
+            elif gt = typedefof<Map<_,_>> then
+                activate typedefof<ShapeFSharpMap<_,_>> gas
+            elif gt = typedefof<Set<_>> then
+                activate typedefof<ShapeFSharpSet<_>> gas
+            elif gt = typedefof<KeyValuePair<_,_>> then
+                activate typedefof<ShapeKeyValuePair<_,_>> gas
+            else
+                activate1 typedefof<ShapeUnknown<_>> t
+        else 
+            match aux |> Option.bind (fun f -> f t) with
+            | Some ts -> ts
+            | None -> activate1 typedefof<ShapeUnknown<_>> t
 
 
     let dict = new System.Collections.Concurrent.ConcurrentDictionary<Type, TypeShape>()

@@ -28,14 +28,14 @@ type Test3 =
         [<HashKey; CustomName("ID")>]
         Id : string
     
-        TimeSpan : TimeSpan
+        TimeSpan : Nullable<TimeSpan>
     }
 
 [<HashKeyConstant("ID", "42")>]
 type Test4 =
     {
         [<RangeKey>]
-        Value : int
+        Value : Nullable<int>
     }
 
 let table = TableContext.GetTableContext<Test3>(ddb, "test", createIfNotExists = true) |> Async.RunSynchronously
@@ -43,6 +43,10 @@ let table = TableContext.GetTableContext<Test3>(ddb, "test", createIfNotExists =
 table.KeySchema
 
 table.WithRecordType<Test4> ()
+
+open FSharp.DynamoDB.TypeShape
+
+shapeof<Nullable<int>>
 
 let table' = TableContext.GetTableContext<Test4>(ddb, "test2", createIfNotExists = true) |> Async.RunSynchronously
 

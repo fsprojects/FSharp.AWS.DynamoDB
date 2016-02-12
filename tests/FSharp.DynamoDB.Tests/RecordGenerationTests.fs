@@ -147,11 +147,45 @@ module ``Record Generation Tests`` =
 
             Values : ResizeArray<byte []>
             Map : System.Collections.Generic.Dictionary<int64, decimal>
-            Set : System.Collections.Generic.HashSet<string>
+            Set : System.Collections.Generic.HashSet<string> ref
 
             [<BinaryFormatter>]
             BlobValue : (int * string) [][]
         }
+
+    type ``Complex Record C`` = 
+        { 
+            [<HashKey>]HashKey : decimal
+            [<RangeKey>]RangeKey : byte
+
+            Bool : bool
+            Byte : byte
+            SByte : sbyte
+            Int16 : int16
+            Int32 : int32
+            Int64 : int64
+            UInt16 : uint16
+            UInt32 : uint32
+            UInt64 : uint64
+            Single : single
+            Double : double
+            Decimal : decimal
+        }
+
+    type ``Complex Record D`` =
+        {
+            [<HashKey>]HashKey : byte[]
+            [<RangeKey>]RangeKey : int64
+
+            Guid : Guid
+            Enum : System.Reflection.BindingFlags
+            EnumArray : System.Reflection.BindingFlags[]
+            Nullable : Nullable<int64>
+            Optional : string option
+            Bytess : byte[][]
+            Ref : byte[] ref ref ref
+        }
+
 
 
     [<Fact>]
@@ -161,6 +195,14 @@ module ``Record Generation Tests`` =
     [<Fact>]
     let ``Roundtrip complex record B`` () =
         testRoundTrip<``Complex Record B``> ()
+
+    [<Fact>]
+    let ``Roundtrip complex record C`` () =
+        testRoundTrip<``Complex Record C``> ()
+
+    [<Fact>]
+    let ``Roundtrip complex record D`` () =
+        testRoundTrip<``Complex Record D``> ()
 
 
     // Section C: test errors

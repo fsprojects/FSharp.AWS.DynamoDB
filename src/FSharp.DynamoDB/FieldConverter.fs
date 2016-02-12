@@ -255,6 +255,25 @@ type OptionConverter<'T>(tconv : FieldConverter<'T>) =
         | Undefined | Null -> None
         | _ -> Some(tconv.ToField a)
 
+let mkFSharpRefConverter (tconv : FieldConverter<'T>) =
+    match tconv with
+    | :? StringRepresentableFieldConverter<'T> as tconv ->
+        { new StringRepresentableFieldConverter<'T ref>() with
+            member __.DefaultValue = ref tconv.DefaultValue
+            member __.Representation = tconv.Representation
+            member __.OfField tref = tconv.OfField tref.Value
+            member __.ToField a = tconv.ToField a |> ref
+            member __.Parse s = tconv.Parse s |> ref
+            member __.UnParse tref = tconv.UnParse tref.Value
+        } :> FieldConverter<'T ref>
+
+    | _ ->
+        { new FieldConverter<'T ref>() with
+            member __.DefaultValue = ref tconv.DefaultValue
+            member __.Representation = tconv.Representation
+            member __.OfField tref = tconv.OfField tref.Value
+            member __.ToField a = tconv.ToField a |> ref }
+
 type NumericalSeqConverter<'NSeq, 'N when 'NSeq :> seq<'N>>(ctor : seq<'N> -> 'NSeq, nconv : StringRepresentableFieldConverter<'N>) =
     inherit FieldConverter<'NSeq>()
     override __.Representation = FieldRepresentation.Numbers
@@ -319,6 +338,13 @@ type SetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, tconv 
         | List es -> es |> Seq.map tconv.ToField |> ctor
         | _ -> invalidCast a
 
+
+//type FSharpRefConverter<'T>(tconv : FieldConverter<'T>) =
+//    inherit FieldConverter<'T ref>()
+//    override __.DefaultValue = ref tconv.DefaultValue
+//    override __.Representation = tconv.Representation
+//    override __.OfField set = set |> Seq.map
+
 type UnSupportedField =
     static member Raise(fieldType : Type, ?reason : string) =
         let message = 
@@ -365,6 +391,12 @@ and resolveConvUntyped (t : Type) : FieldConverter =
             new INullableVisitor<FieldConverter> with
                 member __.VisitNullable<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct> () = 
                     new NullableConverter<'T>(resolveConv()) :> _ }
+
+    | ShapeFSharpRef s ->
+        s.Accept {
+            new IFSharpRefVisitor<FieldConverter> with
+                member __.VisitFSharpRef<'T> () =
+                    mkFSharpRefConverter (resolveConv<'T>()) :> _ }
 
     | ShapeFSharpOption s ->
         s.Accept {
