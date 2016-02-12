@@ -363,12 +363,13 @@ type MapConverter<'Map, 'Key, 'Value when 'Map :> seq<KeyValuePair<'Key, 'Value>
         | Map attrs -> attrs |> Seq.map (fun kv -> KeyValuePair(kconv.Parse kv.Key, vconv.ToField kv.Value)) |> ctor
         | _ -> invalidCast a
 
+
 let rec resolveConv<'T> () = resolveConvUntyped typeof<'T> :?> FieldConverter<'T>
 
-and resolveSRConv<'T> () = 
+and private resolveSRConv<'T, 'RequestingType> () = 
     match resolveConv<'T> () with
     | :? StringRepresentableFieldConverter<'T> as sr -> sr
-    | _ -> UnSupportedField.Raise typeof<'T>
+    | _ -> UnSupportedField.Raise typeof<'RequestingType>
 
 and resolveConvUntyped (t : Type) : FieldConverter =
     match getShape t with
@@ -393,7 +394,7 @@ and resolveConvUntyped (t : Type) : FieldConverter =
         s.Accept {
             new IEnumVisitor<FieldConverter> with
                 member __.VisitEnum<'E, 'U when 'E : enum<'U>> () =
-                    new EnumerationConverter<'E, 'U>(resolveSRConv()) :> _ }
+                    new EnumerationConverter<'E, 'U>(resolveSRConv<_,'E>()) :> _ }
 
     | ShapeNullable s ->
         s.Accept {
@@ -466,7 +467,7 @@ and resolveConvUntyped (t : Type) : FieldConverter =
         s.Accept {
             new IDictionaryVisitor<FieldConverter> with
                 member __.VisitDictionary<'K, 'V when 'K : equality> () =
-                    new MapConverter<Dictionary<'K, 'V>, 'K, 'V>(cdict, resolveSRConv(), resolveConv()) :> _ }
+                    new MapConverter<Dictionary<'K, 'V>, 'K, 'V>(cdict, resolveSRConv<_,Dictionary<'K,'V>>(), resolveConv()) :> _ }
 
     | ShapeFSharpMap s ->
         s.Accept { 
@@ -475,7 +476,7 @@ and resolveConvUntyped (t : Type) : FieldConverter =
                     let mkMap (kvs : seq<KeyValuePair<'K,'V>>) =
                         kvs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
 
-                    new MapConverter<Map<'K,'V>, 'K, 'V>(mkMap, resolveSRConv(), resolveConv()) :> _ }
+                    new MapConverter<Map<'K,'V>, 'K, 'V>(mkMap, resolveSRConv<_,Map<'K,'V>>(), resolveConv()) :> _ }
 
     | _ -> UnSupportedField.Raise t
 
