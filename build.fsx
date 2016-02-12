@@ -54,6 +54,7 @@ Target "AssemblyInfo" (fun _ ->
             Attribute.Copyright "Copyright \169 Eirik Tsarpalis 2016"
             Attribute.Version release.AssemblyVersion
             Attribute.FileVersion release.AssemblyVersion
+            Attribute.InternalsVisibleTo "FSharp.DynamoDB.Tests"
         ] 
 
     !! "**/AssemblyInfo.fs" |> Seq.iter (fun f -> CreateFSharpAssemblyInfo f attrs)
