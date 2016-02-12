@@ -35,7 +35,7 @@ let emulatorTests = environVarOrDefault "RunEmulatorTests" "false" |> Boolean.Pa
 
 //// Read release notes & version info from RELEASE_NOTES.md
 Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
-let release = parseReleaseNotes (IO.File.ReadAllLines "RELEASE_NOTES.md")
+let release = parseReleaseNotes (File.ReadAllLines "RELEASE_NOTES.md")
 let nugetVersion = release.NugetVersion
 
 let testAssemblies = [ "bin/FSharp.DynamoDB.Tests.dll" ]
