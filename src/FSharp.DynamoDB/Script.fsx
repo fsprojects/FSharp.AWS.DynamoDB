@@ -23,27 +23,23 @@ type Test =
         Values : Map<int, string[]>
     }
 
-type Test2 =
+type Test3 =
     {
         [<HashKey; CustomName("ID")>]
         Id : string
-
-        Values : int list
-
-        Date : DateTimeOffset
-
+    
         TimeSpan : TimeSpan
-
-        Boolean : bool
     }
 
-let table = TableContext.GetTableContext<Test>(ddb, "test", createIfNotExists = true) |> Async.RunSynchronously
+let table = TableContext.GetTableContext<Test3>(ddb, "test", createIfNotExists = true) |> Async.RunSynchronously
 
-let table2 = table.WithRecordType<Test2> ()
+let values = [1 .. 25] |> List.map (fun i -> { Id = string i ; TimeSpan = TimeSpan.FromMinutes(float i) })
 
+values |> Seq.length
 
-let value = { Id = "42" ; Values = [1 .. 100]; Date = DateTimeOffset.Now; TimeSpan = TimeSpan.FromMinutes 2. ; Boolean = true }
+table.PutItemsAsync(values) |> Async.RunSynchronously
 
-let value' = table2.GetItemAsync("42") |> Async.RunSynchronously
+let keys = values |> List.map table.ExtractKey
+table.GetItemsAsync(keys) |> Async.RunSynchronously |> Seq.length
 
-value'.Date.ToLocalTime()
+table.DeleteItemsAsync(keys) |> Async.RunSynchronously

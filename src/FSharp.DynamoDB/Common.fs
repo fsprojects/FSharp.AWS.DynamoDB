@@ -21,6 +21,22 @@ type KeySchema =
         KeyType : ScalarAttributeType 
     }
 
+[<Struct; StructuredFormatDisplay("{Format}")>]
+type TableKey private (hashKey : obj, rangeKey : obj) =
+    member __.HashKey = hashKey
+    member __.IsRangeKeySpecified = not <| obj.ReferenceEquals(rangeKey, null)
+    member __.RangeKey = if obj.ReferenceEquals(rangeKey, null) then None else Some rangeKey
+    member internal __.RangeKeyInternal = rangeKey
+    member private __.Format =
+        match rangeKey with
+        | null -> sprintf "{ HashKey = %O }" hashKey
+        | rk -> sprintf "{ HashKey = %O ; RangeKey = %O }" hashKey rangeKey
+
+    override __.ToString() = __.Format
+
+    static member Hash<'HashKey>(hashKey : 'HashKey) = new TableKey(hashKey, null)
+    static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey) = new TableKey(hashKey, rangeKey)
+
 type TableKeySchema = 
     { 
         HashKey : KeySchema
