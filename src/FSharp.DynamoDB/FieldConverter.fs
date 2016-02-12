@@ -1,9 +1,10 @@
 ﻿module internal FSharp.DynamoDB.FieldConverter
 
 open System
-open System.IO
 open System.Collections
 open System.Collections.Generic
+open System.IO
+open System.Reflection
 
 open Microsoft.FSharp.Core.LanguagePrimitives
 
@@ -11,6 +12,15 @@ open Amazon.Util
 open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB.TypeShape
+
+type UnSupportedField =
+    static member Raise(fieldType : Type, ?reason : string) =
+        let message = 
+            match reason with
+            | None -> sprintf "unsupported record field type '%O'" fieldType
+            | Some r -> sprintf "unsupported record field type '%O': %s" fieldType r
+
+        raise <| new ArgumentException(message)
 
 type FieldRepresentation =
     | Number        = 01
@@ -20,7 +30,7 @@ type FieldRepresentation =
     | Strings       = 05
     | Numbers       = 06
     | Bytess        = 07
-    | Set           = 08
+    | List          = 08
     | Map           = 09
     | Serializer    = 10
 
@@ -138,8 +148,14 @@ type FieldConverter<'T>() =
 [<AbstractClass>]
 type StringRepresentableFieldConverter<'T>() =
     inherit FieldConverter<'T>()
+    override __.Representation = FieldRepresentation.String
     abstract Parse : string -> 'T
     abstract UnParse : 'T -> string
+
+[<AbstractClass>]
+type NumRepresentableFieldConverter<'T>() =
+    inherit StringRepresentableFieldConverter<'T> ()
+    override __.Representation = FieldRepresentation.Number
 
 type BoolConverter() =
     inherit StringRepresentableFieldConverter<bool>()
@@ -157,7 +173,6 @@ type BoolConverter() =
 type StringConverter() =
     inherit StringRepresentableFieldConverter<string> ()
     override __.DefaultValue = null
-    override __.Representation = FieldRepresentation.String
     override __.OfField s = String s
     override __.ToField a =
         match a with
@@ -169,7 +184,7 @@ type StringConverter() =
     override __.UnParse s = s
 
 type BytesConverter() =
-    inherit StringRepresentableFieldConverter<byte[]> ()
+    inherit FieldConverter<byte[]> ()
     override __.Representation = FieldRepresentation.Bytes
     override __.DefaultValue = null
     override __.OfField bs = Bytes bs
@@ -179,12 +194,8 @@ type BytesConverter() =
         | Bytes bs -> bs
         | _ -> invalidCast a
 
-    override __.Parse s = Convert.FromBase64String s
-    override __.UnParse s = Convert.ToBase64String s
-
 type GuidConverter() =
     inherit StringRepresentableFieldConverter<Guid> ()
-    override __.Representation = FieldRepresentation.String
     override __.DefaultValue = Guid.Empty
     override __.OfField g = String(string g)
     override __.ToField a =
@@ -197,7 +208,6 @@ type GuidConverter() =
 
 type DateTimeOffsetConverter() =
     inherit StringRepresentableFieldConverter<DateTimeOffset> ()
-    override __.Representation = FieldRepresentation.String
     override __.DefaultValue = DateTimeOffset()
     override __.OfField d = String(d.ToUniversalTime().ToString(AWSSDKUtils.ISO8601DateFormat))
     override __.ToField a = match a with String s -> DateTimeOffset.Parse(s).ToLocalTime() | _ -> invalidCast a
@@ -205,8 +215,7 @@ type DateTimeOffsetConverter() =
     override __.UnParse d = d.ToUniversalTime().ToString(AWSSDKUtils.ISO8601DateFormat)
 
 type TimeSpanConverter() =
-    inherit StringRepresentableFieldConverter<TimeSpan> ()
-    override __.Representation = FieldRepresentation.Number
+    inherit NumRepresentableFieldConverter<TimeSpan> ()
     override __.DefaultValue = TimeSpan.Zero
     override __.OfField t = Number(string t.Ticks)
     override __.ToField a = match a with Number n -> TimeSpan.FromTicks(int64 n) | _ -> invalidCast a
@@ -215,8 +224,7 @@ type TimeSpanConverter() =
 
 let inline mkNumericalConverter< ^N when ^N : (static member Parse : string -> ^N)> () =
     let inline parseNum x = ( ^N : (static member Parse : string -> ^N) x)
-    { new StringRepresentableFieldConverter< ^N>() with
-        member __.Representation = FieldRepresentation.Number
+    { new NumRepresentableFieldConverter< ^N>() with
         member __.DefaultValue = Unchecked.defaultof< ^N>
         member __.OfField num = Number(string num)
         member __.ToField a = match a with Number n -> parseNum n | _ -> invalidCast a
@@ -225,8 +233,7 @@ let inline mkNumericalConverter< ^N when ^N : (static member Parse : string -> ^
     }
 
 type EnumerationConverter<'E, 'U when 'E : enum<'U>>(uconv : StringRepresentableFieldConverter<'U>) =
-    inherit StringRepresentableFieldConverter<'E> ()
-    override __.Representation = FieldRepresentation.Number
+    inherit NumRepresentableFieldConverter<'E> ()
     override __.DefaultValue = Unchecked.defaultof<'E>
     override __.OfField e = let u = EnumToValue<'E,'U> e in Number(u.ToString())
     override __.ToField a = EnumOfValue<'U, 'E>(uconv.ToField a)
@@ -257,10 +264,18 @@ type OptionConverter<'T>(tconv : FieldConverter<'T>) =
 
 let mkFSharpRefConverter (tconv : FieldConverter<'T>) =
     match tconv with
+    | :? NumRepresentableFieldConverter<'T> as tconv ->
+        { new NumRepresentableFieldConverter<'T ref>() with
+            member __.DefaultValue = ref tconv.DefaultValue
+            member __.OfField tref = tconv.OfField tref.Value
+            member __.ToField a = tconv.ToField a |> ref
+            member __.Parse s = tconv.Parse s |> ref
+            member __.UnParse tref = tconv.UnParse tref.Value
+        } :> FieldConverter<'T ref>
+
     | :? StringRepresentableFieldConverter<'T> as tconv ->
         { new StringRepresentableFieldConverter<'T ref>() with
             member __.DefaultValue = ref tconv.DefaultValue
-            member __.Representation = tconv.Representation
             member __.OfField tref = tconv.OfField tref.Value
             member __.ToField a = tconv.ToField a |> ref
             member __.Parse s = tconv.Parse s |> ref
@@ -274,29 +289,7 @@ let mkFSharpRefConverter (tconv : FieldConverter<'T>) =
             member __.OfField tref = tconv.OfField tref.Value
             member __.ToField a = tconv.ToField a |> ref }
 
-type NumericalSeqConverter<'NSeq, 'N when 'NSeq :> seq<'N>>(ctor : seq<'N> -> 'NSeq, nconv : StringRepresentableFieldConverter<'N>) =
-    inherit FieldConverter<'NSeq>()
-    override __.Representation = FieldRepresentation.Numbers
-    override __.DefaultValue = ctor [||]
-    override __.OfField nums = let nums = nums |> Seq.map nconv.UnParse |> Seq.toArray in Numbers(nums)
-    override __.ToField a =
-        match a with
-        | Null -> ctor [||]
-        | Numbers ns -> ns |> Seq.map nconv.Parse |> ctor
-        | _ -> invalidCast a
-
-type StringSeqConverter<'SSeq when 'SSeq :> seq<string>>(ctor : seq<string> -> 'SSeq) =
-    inherit FieldConverter<'SSeq>()
-    override __.Representation = FieldRepresentation.Strings
-    override __.DefaultValue = ctor [||]
-    override __.OfField strings = Strings(Seq.toArray strings)
-    override __.ToField a =
-        match a with
-        | Null -> ctor [||]
-        | Numbers ns -> ctor ns
-        | _ -> invalidCast a
-
-type BytesSeqConverter<'BSeq when 'BSeq :> seq<byte[]>>(ctor : seq<byte []> -> 'BSeq) =
+type BytesListConverter<'BSeq when 'BSeq :> seq<byte[]>>(ctor : seq<byte []> -> 'BSeq) =
     inherit FieldConverter<'BSeq>()
     override __.Representation = FieldRepresentation.Bytess
     override __.DefaultValue = ctor [||]
@@ -307,12 +300,55 @@ type BytesSeqConverter<'BSeq when 'BSeq :> seq<byte[]>>(ctor : seq<byte []> -> '
         | Bytess ns -> ctor ns
         | _ -> invalidCast a
 
+type NumListConverter<'List, 'T when 'List :> seq<'T>> (ctor : seq<'T> -> 'List, tconv : NumRepresentableFieldConverter<'T>) =
+    inherit FieldConverter<'List>()
+    override __.DefaultValue = ctor [||]
+    override __.Representation = FieldRepresentation.Numbers
+    override __.OfField set = set |> Seq.map tconv.UnParse |> Seq.toArray |> Numbers
+    override __.ToField a =
+        match a with
+        | Null -> ctor [||]
+        | Numbers es -> es |> Seq.map tconv.Parse |> ctor
+        | _ -> invalidCast a
+
+type StringListConverter<'List, 'T when 'List :> seq<'T>> (ctor : seq<'T> -> 'List, tconv : StringRepresentableFieldConverter<'T>) =
+    inherit FieldConverter<'List>()
+    override __.DefaultValue = ctor [||]
+    override __.Representation = FieldRepresentation.Strings
+    override __.OfField set = set |> Seq.map tconv.UnParse |> Seq.toArray |> Strings
+    override __.ToField a =
+        match a with
+        | Null -> ctor [||]
+        | Strings es -> es |> Seq.map tconv.Parse |> ctor
+        | _ -> invalidCast a
+
+type ListConverter<'List, 'T when 'List :> seq<'T>> (ctor : seq<'T> -> 'List, tconv : FieldConverter<'T>) =
+    inherit FieldConverter<'List>()
+    override __.DefaultValue = ctor [||]
+    override __.Representation = FieldRepresentation.List
+    override __.OfField set = 
+        set |> Seq.map tconv.OfField |> Seq.toArray |> List
+
+    override __.ToField a =
+        match a with
+        | Null -> ctor [||]
+        | List es -> es |> Seq.map tconv.ToField |> ctor
+        | _ -> invalidCast a
+
+let mkListConverter ctor (tconv : FieldConverter<'T>) : FieldConverter<'List> =
+    if tconv.IsOptionalType then UnSupportedField.Raise typeof<'List>
+    match tconv with
+    | :? NumRepresentableFieldConverter<'T> as tc -> NumListConverter<'List, 'T>(ctor, tc) :> _
+    | :? StringRepresentableFieldConverter<'T> as tc -> StringListConverter<'List, 'T>(ctor, tc) :> _
+    | _ -> new ListConverter<'List, 'T>(ctor, tconv) :> _
+
 type MapConverter<'Map, 'Key, 'Value when 'Map :> seq<KeyValuePair<'Key, 'Value>>>
                     (ctor : seq<KeyValuePair<'Key, 'Value>> -> 'Map, 
                         kconv : StringRepresentableFieldConverter<'Key>,
                         vconv : FieldConverter<'Value>) =
 
     inherit FieldConverter<'Map>()
+    do if vconv.IsOptionalType then UnSupportedField.Raise typeof<'Map>
     override __.Representation = FieldRepresentation.Map
     override __.DefaultValue = ctor [||]
     override __.OfField map = 
@@ -326,33 +362,6 @@ type MapConverter<'Map, 'Key, 'Value when 'Map :> seq<KeyValuePair<'Key, 'Value>
         | Null -> ctor [||]
         | Map attrs -> attrs |> Seq.map (fun kv -> KeyValuePair(kconv.Parse kv.Key, vconv.ToField kv.Value)) |> ctor
         | _ -> invalidCast a
-
-type SetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, tconv : FieldConverter<'T>) =
-    inherit FieldConverter<'Set>()
-    override __.DefaultValue = ctor [||]
-    override __.Representation = FieldRepresentation.Map
-    override __.OfField set = set |> Seq.map tconv.OfField |> Seq.toArray |> List
-    override __.ToField a =
-        match a with
-        | Null -> ctor [||]
-        | List es -> es |> Seq.map tconv.ToField |> ctor
-        | _ -> invalidCast a
-
-
-//type FSharpRefConverter<'T>(tconv : FieldConverter<'T>) =
-//    inherit FieldConverter<'T ref>()
-//    override __.DefaultValue = ref tconv.DefaultValue
-//    override __.Representation = tconv.Representation
-//    override __.OfField set = set |> Seq.map
-
-type UnSupportedField =
-    static member Raise(fieldType : Type, ?reason : string) =
-        let message = 
-            match reason with
-            | None -> sprintf "unsupported record field type '%O'" fieldType
-            | Some r -> sprintf "unsupported record field type '%O': %s" fieldType r
-
-        raise <| new ArgumentException(message)
 
 let rec resolveConv<'T> () = resolveConvUntyped typeof<'T> :?> FieldConverter<'T>
 
@@ -410,68 +419,54 @@ and resolveConvUntyped (t : Type) : FieldConverter =
         s.Accept { 
             new IArrayVisitor<FieldConverter> with
                 member __.VisitArray<'T> () =
-                    if typeof<'T> = typeof<string> then
-                        StringSeqConverter<string []>(Array.ofSeq) :> _
-                    elif typeof<'T> = typeof<byte> then
+                    if typeof<'T> = typeof<byte> then
                         BytesConverter() :> _
                     elif typeof<'T> = typeof<byte []> then
-                        BytesSeqConverter<byte [][]>(Array.ofSeq) :> _
-                    elif typeof<'T>.IsPrimitive || typeof<'T>.IsEnum then
-                        new NumericalSeqConverter<'T[], 'T>(Array.ofSeq, resolveSRConv()) :> _
+                        BytesListConverter<byte [][]>(Array.ofSeq) :> _
                     else
-                        UnSupportedField.Raise t }
+                        mkListConverter Array.ofSeq (resolveConv<'T>()) :> _ }
 
     | ShapeFSharpList s ->
         s.Accept {
             new IFSharpListVisitor<FieldConverter> with
                 member __.VisitFSharpList<'T> () =
-                    if typeof<'T> = typeof<string> then
-                        StringSeqConverter<string list>(List.ofSeq) :> _
-                    elif typeof<'T> = typeof<byte []> then
-                        BytesSeqConverter<byte [] list>(List.ofSeq) :> _
-                    elif typeof<'T>.IsPrimitive || typeof<'T>.IsEnum then
-                        new NumericalSeqConverter<'T list, 'T>(List.ofSeq, resolveSRConv()) :> _
+                    if typeof<'T> = typeof<byte []> then
+                        BytesListConverter<byte [] list>(List.ofSeq) :> _
                     else
-                        UnSupportedField.Raise t }
+                        mkListConverter List.ofSeq (resolveConv<'T>()) :> _ }
 
     | ShapeResizeArray s ->
         s.Accept {
             new IResizeArrayVisitor<FieldConverter> with
                 member __.VisitResizeArray<'T> () =
-                    if typeof<'T> = typeof<string> then
-                        StringSeqConverter<ResizeArray<string>>(rlist) :> _
-                    elif typeof<'T> = typeof<byte []> then
-                        BytesSeqConverter<ResizeArray<byte []>>(rlist) :> _
-                    elif typeof<'T>.IsPrimitive || typeof<'T>.IsEnum then
-                        NumericalSeqConverter<ResizeArray<'T>, 'T>(rlist, resolveSRConv()) :> _
+                    if typeof<'T> = typeof<byte []> then
+                        BytesListConverter<ResizeArray<byte []>>(rlist) :> _
                     else
-                        UnSupportedField.Raise t }
+                        mkListConverter rlist (resolveConv<'T>()) :> _ }
 
     | ShapeHashSet s ->
         s.Accept {
             new IHashSetVisitor<FieldConverter> with
                 member __.VisitHashSet<'T when 'T : equality> () =
-                    let tconv = resolveConv<'T> ()
-                    if tconv.IsOptionalType then UnSupportedField.Raise typeof<HashSet<'T>>
-                    new SetConverter<HashSet<'T>, 'T>(HashSet, tconv) :> _ }
+                    if typeof<'T> = typeof<byte []> then
+                        BytesListConverter<HashSet<byte []>>(HashSet) :> _
+                    else
+                        mkListConverter HashSet (resolveConv<'T>()) :> _ }
 
     | ShapeFSharpSet s ->
         s.Accept {
             new IFSharpSetVisitor<FieldConverter> with
                 member __.VisitFSharpSet<'T when 'T : comparison> () =
-                    let tconv = resolveConv<'T> ()
-                    if tconv.IsOptionalType then UnSupportedField.Raise typeof<Set<'T>>
-                    new SetConverter<Set<'T>, 'T>(Set.ofSeq, tconv) :> _ }
+                    if typeof<'T> = typeof<byte []> then
+                        BytesListConverter<Set<byte []>>(Set.ofSeq) :> _
+                    else
+                        mkListConverter Set.ofSeq (resolveConv<'T>()) :> _ }
 
     | ShapeDictionary s ->
         s.Accept {
             new IDictionaryVisitor<FieldConverter> with
                 member __.VisitDictionary<'K, 'V when 'K : equality> () =
-                    let kconv = resolveSRConv<'K> ()
-                    let vconv = resolveConv<'V> ()
-                    if vconv.IsOptionalType then UnSupportedField.Raise typeof<Dictionary<'K,'V>>
-
-                    new MapConverter<Dictionary<'K, 'V>, 'K, 'V>(cdict, kconv, vconv) :> _ }
+                    new MapConverter<Dictionary<'K, 'V>, 'K, 'V>(cdict, resolveSRConv(), resolveConv()) :> _ }
 
     | ShapeFSharpMap s ->
         s.Accept { 
@@ -480,20 +475,16 @@ and resolveConvUntyped (t : Type) : FieldConverter =
                     let mkMap (kvs : seq<KeyValuePair<'K,'V>>) =
                         kvs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
 
-                    let kconv = resolveSRConv<'K> ()
-                    let vconv = resolveConv<'V> ()
-                    if vconv.IsOptionalType then UnSupportedField.Raise typeof<Map<'K,'V>>
-
-                    new MapConverter<Map<'K,'V>, 'K, 'V>(mkMap, kconv, vconv) :> _ }
+                    new MapConverter<Map<'K,'V>, 'K, 'V>(mkMap, resolveSRConv(), resolveConv()) :> _ }
 
     | _ -> UnSupportedField.Raise t
 
 
-type SerializerConverter(serializer : PropertySerializerAttribute, propertyType : Type) =
+type SerializerConverter(propertyInfo : PropertyInfo, serializer : PropertySerializerAttribute) =
     inherit FieldConverter()
     let converter = resolveConvUntyped serializer.PickleType
 
-    override __.Type = propertyType
+    override __.Type = propertyInfo.PropertyType
     override __.Representation = FieldRepresentation.Serializer
     override __.DefaultValueUntyped = raise <| NotSupportedException("Default values not supported in serialized types.")
     override __.OfFieldUntyped value = 

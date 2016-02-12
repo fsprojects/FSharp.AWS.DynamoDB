@@ -45,7 +45,7 @@ let mkRecordProperty (propertyInfo : PropertyInfo) =
     let attributes = propertyInfo.GetAttributes()
     let converter = 
         match tryGetAttribute<PropertySerializerAttribute> attributes with
-        | Some serializer -> new SerializerConverter(serializer, propertyInfo.PropertyType) :> FieldConverter
+        | Some serializer -> new SerializerConverter(propertyInfo, serializer) :> FieldConverter
         | None -> resolveConvUntyped propertyInfo.PropertyType
 
     let name =

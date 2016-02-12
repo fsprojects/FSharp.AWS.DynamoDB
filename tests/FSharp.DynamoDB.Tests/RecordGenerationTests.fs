@@ -179,7 +179,8 @@ module ``Record Generation Tests`` =
 
             Guid : Guid
             Enum : System.Reflection.BindingFlags
-            EnumArray : System.Reflection.BindingFlags[]
+            EnumArray : System.Reflection.BindingFlags []
+            GuidArray : Guid []
             Nullable : Nullable<int64>
             Optional : string option
             Bytess : byte[][]
