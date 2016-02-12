@@ -8,6 +8,7 @@ open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB.FieldConverter
+open FSharp.DynamoDB.Common
 open FSharp.DynamoDB.RecordInfo
 
 type internal RecordDescriptor<'Record> internal () =

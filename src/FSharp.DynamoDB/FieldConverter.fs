@@ -33,9 +33,14 @@ with
         elif av.B <> null then Bytes (av.B.ToArray())
         elif av.SS.Count > 0 then Strings (Seq.toArray av.SS)
         elif av.NS.Count > 0 then Numbers (Seq.toArray av.NS)
-        elif av.BS.Count > 0 then Bytess (av.BS |> Seq.map (fun bs -> bs.ToArray()) |> Seq.toArray)
-        elif av.IsLSet then List(av.L |> Seq.map FsAttributeValue.FromAttributeValue |> Seq.toArray)
-        elif av.IsMSet then Map(av.M |> Seq.map (fun kv -> KeyValuePair(kv.Key, FsAttributeValue.FromAttributeValue kv.Value)) |> Seq.toArray)
+        elif av.BS.Count > 0 then av.BS |> Seq.map (fun bs -> bs.ToArray()) |> Seq.toArray |> Bytess
+        elif av.IsLSet then av.L |> Seq.map FsAttributeValue.FromAttributeValue |> Seq.toArray |> List
+        elif av.IsMSet then 
+            av.M 
+            |> Seq.map (fun kv -> KeyValuePair(kv.Key, FsAttributeValue.FromAttributeValue kv.Value)) 
+            |> Seq.toArray
+            |> Map
+
         else Undefined
 
     static member ToAttributeValue(fsav : FsAttributeValue) =
@@ -58,8 +63,23 @@ with
         | List (null | [||]) -> AttributeValue(NULL = true)
         | List attrs -> AttributeValue(L = (attrs |> Seq.map FsAttributeValue.ToAttributeValue |> rlist))
         | Map (null | [||]) -> AttributeValue(NULL = true)
-        | Map attrs -> AttributeValue(M = (attrs |> Seq.map (fun kv -> KeyValuePair(kv.Key, FsAttributeValue.ToAttributeValue kv.Value)) |> cdict))
+        | Map attrs -> 
+            AttributeValue(M =
+                (attrs
+                |> Seq.map (fun kv -> KeyValuePair(kv.Key, FsAttributeValue.ToAttributeValue kv.Value)) 
+                |> cdict))
 
+type FieldRepresentation =
+    | Number        = 01
+    | String        = 02
+    | Bool          = 03
+    | Bytes         = 04
+    | Strings       = 05
+    | Numbers       = 06
+    | Bytess        = 07
+    | Set           = 08
+    | Map           = 09
+    | Serializer    = 10
 
 let inline private invalidCast (fsa:FsAttributeValue) : 'T = 
     raise <| new InvalidCastException(sprintf "could not convert value %A to type '%O'" fsa typeof<'T>)
@@ -77,18 +97,6 @@ type AttributeValue with
         av.IsLSet = false &&
         av.IsMSet = false
 
-type FieldRepresentation =
-    | Number        = 01
-    | String        = 02
-    | Bool          = 03
-    | Bytes         = 04
-    | Strings       = 05
-    | Numbers       = 06
-    | Bytess        = 07
-    | Set           = 08
-    | Map           = 09
-    | Serializer    = 10
-
 let isKeyRepr repr =
     match repr with
     | FieldRepresentation.Number
@@ -103,6 +111,7 @@ let isScalarRepr repr =
     | FieldRepresentation.Bytes
     | FieldRepresentation.Bool -> true
     | _ -> false
+
 
 [<AbstractClass>]
 type FieldConverter() =
@@ -351,8 +360,7 @@ and resolveConvUntyped (t : Type) : FieldConverter =
         s.Accept {
             new INullableVisitor<FieldConverter> with
                 member __.VisitNullable<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct> () = 
-                    new NullableConverter<'T>(resolveConv()) :> _
-        }
+                    new NullableConverter<'T>(resolveConv()) :> _ }
 
     | ShapeFSharpOption s ->
         s.Accept {
@@ -360,8 +368,7 @@ and resolveConvUntyped (t : Type) : FieldConverter =
                 member __.VisitFSharpOption<'T> () =
                     let tconv = resolveConv<'T>()
                     if tconv.IsOptionalType then raise <| UnSupportedFieldType(typeof<'T option>)
-                    new OptionConverter<'T>(tconv) :> _
-        }
+                    new OptionConverter<'T>(tconv) :> _ }
 
     | ShapeArray s ->
         s.Accept { 
