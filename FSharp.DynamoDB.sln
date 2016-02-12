@@ -12,7 +12,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".paket", ".paket", "{63297B
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "project", "project", "{BF60BC93-E09B-4E5F-9D85-95A519479D54}"
 	ProjectSection(SolutionItems) = preProject
+		build.cmd = build.cmd
 		build.fsx = build.fsx
+		build.sh = build.sh
 		README.md = README.md
 		RELEASE_NOTES.md = RELEASE_NOTES.md
 	EndProjectSection
@@ -20,6 +22,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A157294B-F680-4AA4-910C-BC63840FF6E3}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.DynamoDB", "src\FSharp.DynamoDB\FSharp.DynamoDB.fsproj", "{57485723-02FA-4BAF-939F-570B8B3024BA}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.DynamoDB.Tests", "tests\FSharp.DynamoDB.Tests\FSharp.DynamoDB.Tests.fsproj", "{2C9367A6-2835-40D3-BEAE-00B66C7EF063}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -31,6 +35,10 @@ Global
 		{57485723-02FA-4BAF-939F-570B8B3024BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{57485723-02FA-4BAF-939F-570B8B3024BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{57485723-02FA-4BAF-939F-570B8B3024BA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2C9367A6-2835-40D3-BEAE-00B66C7EF063}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2C9367A6-2835-40D3-BEAE-00B66C7EF063}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2C9367A6-2835-40D3-BEAE-00B66C7EF063}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2C9367A6-2835-40D3-BEAE-00B66C7EF063}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

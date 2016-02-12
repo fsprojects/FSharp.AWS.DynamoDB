@@ -12,20 +12,21 @@ open Fake
 open Fake.Git
 open Fake.ReleaseNotesHelper
 open Fake.AssemblyInfoFile
+open Fake.Testing
 
 // --------------------------------------------------------------------------------------
 // Information about the project to be used at NuGet and in AssemblyInfo files
 // --------------------------------------------------------------------------------------
 
-let project = "FsPickler"
+let project = "FSharp.DynamoDB"
 
-let gitOwner = "nessos"
+let gitOwner = "eiriktsarpalis"
 let gitHome = "https://github.com/" + gitOwner
-let gitName = "FsPickler"
-let gitRaw = environVarOrDefault "gitRaw" "https://raw.github.com/nessos"
+let gitName = "FSharp.DynamoDB"
+let gitRaw = environVarOrDefault "gitRaw" "https://raw.github.com/" + gitOwner
 
-
-let testAssemblies = ["bin/FsPickler.Tests.dll" ; "bin/NoEmit/FsPickler.Tests.dll"]
+let remoteTests = environVarOrDefault "RunRemoteTests" "false" |> Boolean.Parse
+let emulatorTests = environVarOrDefault "RunEmulatorTests" "false" |> Boolean.Parse
 
 //
 //// --------------------------------------------------------------------------------------
@@ -37,6 +38,8 @@ Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 let release = parseReleaseNotes (IO.File.ReadAllLines "RELEASE_NOTES.md")
 let nugetVersion = release.NugetVersion
 
+let testAssemblies = [ "bin/FSharp.DynamoDB.Tests.dll" ]
+
 Target "BuildVersion" (fun _ ->
     Shell.Exec("appveyor", sprintf "UpdateBuild -Version \"%s\"" nugetVersion) |> ignore
 )
@@ -45,15 +48,15 @@ Target "BuildVersion" (fun _ ->
 Target "AssemblyInfo" (fun _ ->
     let attrs =
         [ 
+            Attribute.Title project
             Attribute.Product project
-            Attribute.Copyright "\169 Eirik Tsarpalis."
+            Attribute.Company "Eirik Tsarpalis"
+            Attribute.Copyright "Copyright \169 Eirik Tsarpalis 2016"
             Attribute.Version release.AssemblyVersion
             Attribute.FileVersion release.AssemblyVersion
         ] 
 
-    CreateFSharpAssemblyInfo "src/FsPickler/AssemblyInfo.fs" attrs
-    CreateFSharpAssemblyInfo "src/FsPickler.Json/AssemblyInfo.fs" attrs
-    CreateCSharpAssemblyInfo "src/FsPickler.CSharp/Properties/AssemblyInfo.cs" attrs
+    !! "**/AssemblyInfo.fs" |> Seq.iter (fun f -> CreateFSharpAssemblyInfo f attrs)
 )
 
 
@@ -72,35 +75,36 @@ Target "Clean" (fun _ ->
 
 let configuration = environVarOrDefault "Configuration" "Release"
 
-let build configuration () =
+Target "Build" (fun () ->
     // Build the rest of the project
     { BaseDirectory = __SOURCE_DIRECTORY__
       Includes = [ project + ".sln" ]
       Excludes = [] } 
-    |> MSBuild "" "Build" ["Configuration", configuration]
-    |> Log "AppBuild-Output: "
-
-Target "Build.Default" (build configuration)
-Target "Build.NoEmit" (build "NoEmit")
-Target "Build.Net35" (build "Release-NET35")
-Target "Build.Net40" (build "Release-NET40")
+    |> MSBuild "" "Build" ["Configuration", "Release"]
+    |> Log "AppBuild-Output: ")
 
 // --------------------------------------------------------------------------------------
 // Run the unit tests using test runner & kill test runner when complete
 
 Target "RunTests" (fun _ ->
     testAssemblies
-    |> NUnit (fun p ->
+    |> Seq.collect (!!)
+    |> xUnit2 (fun (p : XUnit2Params) -> 
         { p with
-            Framework = "v4.0.30319"
-            DisableShadowCopy = true
-            TimeOut = TimeSpan.FromMinutes 60.
-            OutputFile = "TestResults.xml" })
+            TimeOut = TimeSpan.FromMinutes 20.
+            Parallel = ParallelMode.NoParallelization
+            ExcludeTraits = 
+                [ if not emulatorTests then yield ("Category", "Emulator")
+                  if not remoteTests then yield ("Category", "Remote") ]
+
+            HtmlOutputPath = Some "xunit.html"})
 )
 
 FinalTarget "CloseTestRunner" (fun _ ->  
-    ProcessHelper.killProcess "nunit-agent.exe"
+//    ProcessHelper.killProcess "nunit-agent.exe"
+    ()
 )
+
 //
 //// --------------------------------------------------------------------------------------
 //// Build a NuGet package
@@ -184,25 +188,20 @@ Target "ReleaseGitHub" (fun _ ->
 
 Target "Prepare" DoNothing
 Target "PrepareRelease" DoNothing
-Target "Build" DoNothing
 Target "Default" DoNothing
 Target "Release" DoNothing
 
 "Clean"
   ==> "AssemblyInfo"
   ==> "Prepare"
-  ==> "Build.Default"
-  ==> "Build.NoEmit"
   ==> "Build"
   ==> "RunTests"
   ==> "Default"
 
 "Build"
-  ==> "Build.Net40"
-  ==> "Build.Net35"
   ==> "PrepareRelease"
-  ==> "GenerateDocs"
-  ==> "ReleaseDocs"
+//  ==> "GenerateDocs"
+//  ==> "ReleaseDocs"
   ==> "NuGet"
   ==> "NuGetPush"
   ==> "ReleaseGithub"

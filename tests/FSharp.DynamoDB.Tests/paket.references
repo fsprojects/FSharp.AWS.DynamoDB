@@ -1,0 +1,4 @@
+﻿AWSSDK.DynamoDBv2
+xunit
+xunit.extensions
+xunit.runner.visualstudio
