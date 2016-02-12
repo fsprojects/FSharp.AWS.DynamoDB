@@ -13,6 +13,11 @@ open Amazon.Runtime
 [<AutoOpen>]
 module Utils =
 
+    let getRandomTableName() =
+        sprintf "fsdynamodb-%s" <| System.Guid.NewGuid().ToString("N")
+
+    let guid() = Guid.NewGuid().ToString()
+
     let shouldFailwith<'T, 'Exn when 'Exn :> exn>(f : unit -> 'T) =
         ignore <| Assert.Throws<'Exn>(f >> ignore)
 

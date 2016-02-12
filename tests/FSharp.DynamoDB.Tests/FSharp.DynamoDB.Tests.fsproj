@@ -59,6 +59,7 @@
   <ItemGroup>
     <Compile Include="Utils.fs" />
     <Compile Include="RecordGenerationTests.fs" />
+    <Compile Include="SimpleTableOperationTests.fs" />
     <None Include="paket.references" />
     <Content Include="App.config" />
   </ItemGroup>

@@ -24,7 +24,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.ExtractKey(item : 'TRecord) =
         record.ExtractKey item
 
-    member __.PutItemAsync(item : 'TRecord) : Async<unit> = async {
+    member __.PutItemAsync(item : 'TRecord) : Async<TableKey> = async {
         let attrValues = record.ToAttributeValues(item)
         let request = new PutItemRequest(tableName, attrValues)
         request.ReturnValues <- ReturnValue.NONE
@@ -32,9 +32,11 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let! response = client.PutItemAsync(request, ct) |> Async.AwaitTaskCorrect
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "PutItem request returned error %O" response.HttpStatusCode
+
+        return record.ExtractKey item
     }
 
-    member __.PutItemsAsync(items : seq<'TRecord>) : Async<unit> = async {
+    member __.PutItemsAsync(items : seq<'TRecord>) : Async<TableKey[]> = async {
         let mkWriteRequest (item : 'TRecord) =
             let attrValues = record.ToAttributeValues(item)
             let pr = new PutRequest(attrValues)
@@ -49,6 +51,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let! response = client.BatchWriteItemAsync(pbr, ct) |> Async.AwaitTaskCorrect
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "PutItem request returned error %O" response.HttpStatusCode
+
+        return items |> Array.map record.ExtractKey
     }
 
     member __.GetItemAsync(key : TableKey) : Async<'TRecord> = async {
@@ -82,16 +86,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.DeleteItemAsync(key : TableKey) : Async<unit> = async {
         let kav = record.ToAttributeValues key
         let request = new DeleteItemRequest(tableName, kav)
-        request.ReturnValues <- ReturnValue.NONE
-        let! ct = Async.CancellationToken
-        let! response = client.DeleteItemAsync(request, ct) |> Async.AwaitTaskCorrect
-        if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf "DeleteItem request returned error %O" response.HttpStatusCode
-    }
-
-    member __.DeleteItemAsync(item : 'TRecord) : Async<unit> = async {
-        let key = item |> record.ExtractKey |> record.ToAttributeValues
-        let request = new DeleteItemRequest(tableName, key)
         request.ReturnValues <- ReturnValue.NONE
         let! ct = Async.CancellationToken
         let! response = client.DeleteItemAsync(request, ct) |> Async.AwaitTaskCorrect
