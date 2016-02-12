@@ -12,6 +12,18 @@ open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB.TypeShape
 
+type FieldRepresentation =
+    | Number        = 01
+    | String        = 02
+    | Bool          = 03
+    | Bytes         = 04
+    | Strings       = 05
+    | Numbers       = 06
+    | Bytess        = 07
+    | Set           = 08
+    | Map           = 09
+    | Serializer    = 10
+
 type FsAttributeValue =
     | Undefined
     | Null
@@ -68,18 +80,6 @@ with
                 (attrs
                 |> Seq.map (fun kv -> KeyValuePair(kv.Key, FsAttributeValue.ToAttributeValue kv.Value)) 
                 |> cdict))
-
-type FieldRepresentation =
-    | Number        = 01
-    | String        = 02
-    | Bool          = 03
-    | Bytes         = 04
-    | Strings       = 05
-    | Numbers       = 06
-    | Bytess        = 07
-    | Set           = 08
-    | Map           = 09
-    | Serializer    = 10
 
 let inline private invalidCast (fsa:FsAttributeValue) : 'T = 
     raise <| new InvalidCastException(sprintf "could not convert value %A to type '%O'" fsa typeof<'T>)
@@ -319,19 +319,21 @@ type SetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, tconv 
         | List es -> es |> Seq.map tconv.ToField |> ctor
         | _ -> invalidCast a
 
+type UnSupportedField =
+    static member Raise(fieldType : Type, ?reason : string) =
+        let message = 
+            match reason with
+            | None -> sprintf "unsupported record field type '%O'" fieldType
+            | Some r -> sprintf "unsupported record field type '%O': %s" fieldType r
 
-type UnSupportedFieldType (fieldType:Type, ?message:string) =
-    inherit System.Exception()
-    override e.Message = 
-        match message with None -> "" | Some m -> ": " + m
-        |> sprintf "unsupported record field type '%O'%s" fieldType 
+        raise <| new ArgumentException(message)
 
 let rec resolveConv<'T> () = resolveConvUntyped typeof<'T> :?> FieldConverter<'T>
 
 and resolveSRConv<'T> () = 
     match resolveConv<'T> () with
     | :? StringRepresentableFieldConverter<'T> as sr -> sr
-    | _ -> raise <| UnSupportedFieldType typeof<'T>
+    | _ -> UnSupportedField.Raise typeof<'T>
 
 and resolveConvUntyped (t : Type) : FieldConverter =
     match getShape t with
@@ -344,11 +346,13 @@ and resolveConvUntyped (t : Type) : FieldConverter =
     | :? ShapeUInt16 -> mkNumericalConverter<uint16> () :> _
     | :? ShapeUInt32 -> mkNumericalConverter<uint32> () :> _
     | :? ShapeUInt64 -> mkNumericalConverter<uint64> () :> _
+    | :? ShapeSingle -> mkNumericalConverter<single> () :> _
+    | :? ShapeDouble -> mkNumericalConverter<double> () :> _
     | :? ShapeDecimal -> mkNumericalConverter<decimal> () :> _
     | :? ShapeString -> new StringConverter() :> _
     | :? ShapeGuid -> new GuidConverter() :> _
     | :? ShapeTimeSpan -> new TimeSpanConverter() :> _
-    | :? ShapeDateTime -> raise <| UnSupportedFieldType(t, "please use DateTimeOffset instead.")
+    | :? ShapeDateTime -> UnSupportedField.Raise(t, "please use DateTimeOffset instead.")
     | :? ShapeDateTimeOffset -> new DateTimeOffsetConverter() :> _
     | ShapeEnum s ->
         s.Accept {
@@ -367,7 +371,7 @@ and resolveConvUntyped (t : Type) : FieldConverter =
             new IFSharpOptionVisitor<FieldConverter> with
                 member __.VisitFSharpOption<'T> () =
                     let tconv = resolveConv<'T>()
-                    if tconv.IsOptionalType then raise <| UnSupportedFieldType(typeof<'T option>)
+                    if tconv.IsOptionalType then UnSupportedField.Raise typeof<'T option>
                     new OptionConverter<'T>(tconv) :> _ }
 
     | ShapeArray s ->
@@ -383,7 +387,7 @@ and resolveConvUntyped (t : Type) : FieldConverter =
                     elif typeof<'T>.IsPrimitive || typeof<'T>.IsEnum then
                         new NumericalSeqConverter<'T[], 'T>(Array.ofSeq, resolveSRConv()) :> _
                     else
-                        raise <| UnSupportedFieldType t }
+                        UnSupportedField.Raise t }
 
     | ShapeFSharpList s ->
         s.Accept {
@@ -396,7 +400,7 @@ and resolveConvUntyped (t : Type) : FieldConverter =
                     elif typeof<'T>.IsPrimitive || typeof<'T>.IsEnum then
                         new NumericalSeqConverter<'T list, 'T>(List.ofSeq, resolveSRConv()) :> _
                     else
-                        raise <| UnSupportedFieldType t }
+                        UnSupportedField.Raise t }
 
     | ShapeResizeArray s ->
         s.Accept {
@@ -409,14 +413,14 @@ and resolveConvUntyped (t : Type) : FieldConverter =
                     elif typeof<'T>.IsPrimitive || typeof<'T>.IsEnum then
                         NumericalSeqConverter<ResizeArray<'T>, 'T>(rlist, resolveSRConv()) :> _
                     else
-                        raise <| UnSupportedFieldType t }
+                        UnSupportedField.Raise t }
 
     | ShapeHashSet s ->
         s.Accept {
             new IHashSetVisitor<FieldConverter> with
                 member __.VisitHashSet<'T when 'T : equality> () =
                     let tconv = resolveConv<'T> ()
-                    if tconv.IsOptionalType then raise <| UnSupportedFieldType typeof<HashSet<'T>>
+                    if tconv.IsOptionalType then UnSupportedField.Raise typeof<HashSet<'T>>
                     new SetConverter<HashSet<'T>, 'T>(HashSet, tconv) :> _ }
 
     | ShapeFSharpSet s ->
@@ -424,7 +428,7 @@ and resolveConvUntyped (t : Type) : FieldConverter =
             new IFSharpSetVisitor<FieldConverter> with
                 member __.VisitFSharpSet<'T when 'T : comparison> () =
                     let tconv = resolveConv<'T> ()
-                    if tconv.IsOptionalType then raise <| UnSupportedFieldType typeof<Set<'T>>
+                    if tconv.IsOptionalType then UnSupportedField.Raise typeof<Set<'T>>
                     new SetConverter<Set<'T>, 'T>(Set.ofSeq, tconv) :> _ }
 
     | ShapeDictionary s ->
@@ -433,7 +437,7 @@ and resolveConvUntyped (t : Type) : FieldConverter =
                 member __.VisitDictionary<'K, 'V when 'K : equality> () =
                     let kconv = resolveSRConv<'K> ()
                     let vconv = resolveConv<'V> ()
-                    if vconv.IsOptionalType then raise <| UnSupportedFieldType typeof<Dictionary<'K,'V>>
+                    if vconv.IsOptionalType then UnSupportedField.Raise typeof<Dictionary<'K,'V>>
 
                     new MapConverter<Dictionary<'K, 'V>, 'K, 'V>(cdict, kconv, vconv) :> _ }
 
@@ -446,11 +450,11 @@ and resolveConvUntyped (t : Type) : FieldConverter =
 
                     let kconv = resolveSRConv<'K> ()
                     let vconv = resolveConv<'V> ()
-                    if vconv.IsOptionalType then raise <| UnSupportedFieldType typeof<Map<'K,'V>>
+                    if vconv.IsOptionalType then UnSupportedField.Raise typeof<Map<'K,'V>>
 
                     new MapConverter<Map<'K,'V>, 'K, 'V>(mkMap, kconv, vconv) :> _ }
 
-    | _ -> raise <| UnSupportedFieldType t
+    | _ -> UnSupportedField.Raise t
 
 
 type SerializerConverter(serializer : PropertySerializerAttribute, propertyType : Type) =

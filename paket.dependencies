@@ -1,4 +1,4 @@
-redirects on
+redirects: force
 source https://www.nuget.org/api/v2
 
 nuget Unquote
@@ -10,5 +10,6 @@ nuget xunit.runner.visualstudio version_in_path: true
 nuget FsUnit.xUnit
 nuget Nuget.CommandLine
 nuget FAKE
+nuget FsCheck
 
 github fsharp/FAKE modules/Octokit/Octokit.fsx

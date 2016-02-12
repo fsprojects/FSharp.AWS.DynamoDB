@@ -1,4 +1,3 @@
-REDIRECTS: ON
 NUGET
   remote: https://www.nuget.org/api/v2
   specs:
@@ -9,6 +8,8 @@ NUGET
     AWSSDK.DynamoDBv2 (3.1.1.4)
       AWSSDK.Core (>= 3.1.4.3 < 3.2.0)
     FAKE (4.20.0)
+    FsCheck (2.2.4)
+      FSharp.Core (>= 3.1.2.5)
     FSharp.Core (4.0.0.1)
     FsUnit.xUnit (1.4.1)
       FSharp.Core (>= 3.1.2.5)
