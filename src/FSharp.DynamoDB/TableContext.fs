@@ -134,5 +134,15 @@ type TableContext =
             if response.HttpStatusCode <> HttpStatusCode.OK then
                 failwithf "CreateTable request returned error %O" response.HttpStatusCode
 
+            let rec awaitReady retries = async {
+                if retries = 0 then return failwithf "Failed to create table '%s'" tableName
+                let! descr = client.DescribeTableAsync(tableName, ct) |> Async.AwaitTaskCorrect
+                if descr.Table.TableStatus <> TableStatus.ACTIVE then
+                    do! Async.Sleep 1000
+                    return! awaitReady (retries - 1)
+            }
+
+            do! awaitReady 20
+
         return new TableContext<'TRecord>(client, tableName, rd)
     }
