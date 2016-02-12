@@ -9,7 +9,7 @@ open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB.FieldConverter
 open FSharp.DynamoDB.Common
-open FSharp.DynamoDB.RecordInfo
+open FSharp.DynamoDB.RecordInfoBuilder
 
 type internal RecordDescriptor<'Record> internal () =
     let recordInfo = mkRecordInfo typeof<'Record>
@@ -18,27 +18,40 @@ type internal RecordDescriptor<'Record> internal () =
     member __.Properties = recordInfo.Properties
     member __.ToAttributeValues(key : TableKey) =
         let dict = new Dictionary<string, AttributeValue> ()
-        let extractKey (rp : RecordProperty) (value:obj) =
-            let fav = rp.Converter.OfFieldUntyped value
+        let extractKey name (conv : FieldConverter) (value:obj) =
+            if obj.ReferenceEquals(value, null) then invalidArg name "Key value was not specified."
+            let fav = conv.OfFieldUntyped value
             let av = FsAttributeValue.ToAttributeValue fav
-            dict.Add(rp.Name, av)
+            dict.Add(name, av)
 
-        extractKey recordInfo.HashKeyProperty key.HashKey
-        match recordInfo.RangeKeyProperty with
-        | None when key.IsRangeKeySpecified -> invalidArg "rangeKey" "RangeKey parameters not supported."
-        | None -> ()
-        | Some _ when not key.IsRangeKeySpecified -> invalidArg "rangeKey" "A RangeKey value must be specified."
-        | Some rkp -> extractKey rkp key.RangeKeyInternal
+        match recordInfo.KeyStructure with
+        | HashKeyOnly hkp -> extractKey hkp.Name hkp.Converter key.HashKey
+        | Combined(hkp,rkp) ->
+            extractKey hkp.Name hkp.Converter key.HashKey
+            extractKey rkp.Name rkp.Converter key.RangeKey
+        | DefaultHashKey(name, value, conv, rkp) ->
+            if key.IsHashKeySpecified then
+                extractKey name conv key.HashKey
+            else
+                let av = value |> conv.OfFieldUntyped |> FsAttributeValue.ToAttributeValue
+                dict.Add(name, av)
+
+            extractKey rkp.Name rkp.Converter key.RangeKey
 
         dict
 
     member __.ExtractKey(record : 'Record) =
         let dict = new Dictionary<string, AttributeValue> ()
         let inline getValue (rp : RecordProperty) = rp.PropertyInfo.GetValue(record)
-        let hashKey = getValue recordInfo.HashKeyProperty
-        match recordInfo.RangeKeyProperty with
-        | None -> TableKey.Hash hashKey
-        | Some rk -> TableKey.Combined(hashKey, getValue rk)
+        match recordInfo.KeyStructure with
+        | HashKeyOnly hkp -> let hashKey = getValue hkp in TableKey.Hash hashKey
+        | Combined(hkp,rkp) ->
+            let hashKey = getValue hkp
+            let rangeKey = getValue rkp
+            TableKey.Combined(hashKey, rangeKey)
+        | DefaultHashKey(_, hashKey, _, rkp) ->
+            let rangeKey = getValue rkp
+            TableKey.Combined(hashKey, rangeKey)
 
     member __.ToAttributeValues(record : 'Record) =
         let dict = new Dictionary<string, AttributeValue> ()
@@ -49,6 +62,13 @@ type internal RecordDescriptor<'Record> internal () =
             | repr -> 
                 let av = FsAttributeValue.ToAttributeValue(repr) 
                 dict.Add(rp.Name, av)
+
+        match recordInfo.KeyStructure with
+        | DefaultHashKey(name, hashKey, converter, _) ->
+            let av = hashKey |> converter.OfFieldUntyped |> FsAttributeValue.ToAttributeValue
+            dict.Add(name, av)
+
+        | _ -> ()
 
         dict
 

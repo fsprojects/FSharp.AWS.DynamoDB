@@ -31,7 +31,22 @@ type Test3 =
         TimeSpan : TimeSpan
     }
 
+[<HashKeyConstant("ID", "42")>]
+type Test4 =
+    {
+        [<RangeKey>]
+        Value : int
+    }
+
 let table = TableContext.GetTableContext<Test3>(ddb, "test", createIfNotExists = true) |> Async.RunSynchronously
+
+table.KeySchema
+
+table.WithRecordType<Test4> ()
+
+let table' = TableContext.GetTableContext<Test4>(ddb, "test2", createIfNotExists = true) |> Async.RunSynchronously
+
+table'.PutItemAsync({ Value = 41}) |> Async.RunSynchronously
 
 let values = [1 .. 25] |> List.map (fun i -> { Id = string i ; TimeSpan = TimeSpan.FromMinutes(float i) })
 

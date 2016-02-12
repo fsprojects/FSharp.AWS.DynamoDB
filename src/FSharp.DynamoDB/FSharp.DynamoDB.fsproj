@@ -52,7 +52,7 @@
     <Compile Include="FieldConverter.fs" />
     <Compile Include="Common.fs" />
     <Compile Include="TableOps.fs" />
-    <Compile Include="RecordInfo.fs" />
+    <Compile Include="RecordInfoBuilder.fs" />
     <Compile Include="RecordDescriptor.fs" />
     <Compile Include="TableContext.fs" />
     <None Include="Script.fsx" />

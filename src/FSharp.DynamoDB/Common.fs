@@ -25,13 +25,17 @@ with
     member rp.ContainsAttribute<'Attribute when 'Attribute :> Attribute> () = containsAttribute<'Attribute> rp.Attributes
 
 
+type KeyStructure =
+    | HashKeyOnly of hashKeyProperty:RecordProperty
+    | Combined of hashKeyProperty:RecordProperty * rangeKeyProperty:RecordProperty
+    | DefaultHashKey of hkName:string * hkValue:obj * hkConverter:FieldConverter * rangeKeyProperty:RecordProperty
+
 [<NoEquality; NoComparison>]
 type RecordInfo =
     {
         RecordType : Type
         KeySchema : TableKeySchema
+        KeyStructure : KeyStructure
         Properties : RecordProperty []
-        HashKeyProperty : RecordProperty
-        RangeKeyProperty : RecordProperty option
         ConstructorInfo : ConstructorInfo
     }

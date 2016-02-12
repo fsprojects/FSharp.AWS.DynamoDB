@@ -6,11 +6,12 @@ open System.Net
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.RecordInfo
+open FSharp.DynamoDB.TableOps
 
 type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : string, record : RecordDescriptor<'TRecord>) =
 
     member __.Client = client
+    member __.KeySchema = record.KeySchema
     member __.TableName = tableName
 
     member __.WithRecordType<'TRecord2>() =
@@ -125,7 +126,7 @@ type TableContext =
             let dtr = new DescribeTableRequest(tableName)
             let! ct = Async.CancellationToken
             let! response = client.DescribeTableAsync(dtr, ct) |> Async.AwaitTaskCorrect
-            let existingSchema = ofTableDescription response.Table
+            let existingSchema = TableKeySchema.OfTableDescription response.Table
             if existingSchema <> rd.KeySchema then 
                 sprintf "table '%s' contains incompatible key schema %A, which is incompatible with record '%O'." 
                     tableName existingSchema typeof<'TRecord>
@@ -133,7 +134,7 @@ type TableContext =
 
         with :? ResourceNotFoundException when createIfNotExists ->
             let provisionedThroughPut = defaultArg provisionedThroughPut (new ProvisionedThroughput(10L,10L))
-            let ctr = mkCreateTableRequest rd.KeySchema tableName provisionedThroughPut
+            let ctr = rd.KeySchema.CreateCreateTableRequest (tableName, provisionedThroughPut)
             let! ct = Async.CancellationToken
             let! response = client.CreateTableAsync(ctr, ct) |> Async.AwaitTaskCorrect
             if response.HttpStatusCode <> HttpStatusCode.OK then
