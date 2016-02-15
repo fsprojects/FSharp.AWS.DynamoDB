@@ -55,6 +55,14 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return items |> Array.map record.ExtractKey
     }
 
+    member __.ContainsKeyAsync(key : TableKey) = async {
+        let kav = record.ToAttributeValues(key)
+        let request = new GetItemRequest(tableName, kav)
+        let! ct = Async.CancellationToken
+        let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
+        return response.IsItemSet
+    }
+
     member __.GetItemAsync(key : TableKey) : Async<'TRecord> = async {
         let kav = record.ToAttributeValues(key)
         let request = new GetItemRequest(tableName, kav)
@@ -62,6 +70,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "GetItem request returned error %O" response.HttpStatusCode
+        elif not response.IsItemSet then
+            failwithf "Could not find item %O" key
 
         return record.OfAttributeValues response.Item
     }
