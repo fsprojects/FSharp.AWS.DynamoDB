@@ -26,7 +26,6 @@ type QueryExpr =
     | Not of QueryExpr
     | And of QueryExpr * QueryExpr
     | Or of QueryExpr * QueryExpr
-    | BooleanAttribute of attr:string
     | Compare of Comparator * Operand * Operand
     | Between of Operand * Operand * Operand
     | BeginsWith of attr:string * valId:string
@@ -49,7 +48,7 @@ type ConditionalExpression =
     {
         QueryExpr : QueryExpr
         Expression : string
-        Attributes : Map<string, string>
+        Attributes : Map<string, RecordProperty>
         Values : Map<string, FsAttributeValue>
     }
 with
@@ -57,6 +56,16 @@ with
         match __.QueryExpr with
         | False | True -> true
         | _ -> false
+
+    member __.DAttributes = 
+        __.Attributes
+        |> Seq.map (fun kv -> keyVal kv.Key kv.Value.Name)
+        |> cdict
+
+    member __.DValues = 
+        __.Values 
+        |> Seq.map (fun kv -> keyVal kv.Key (FsAttributeValue.ToAttributeValue kv.Value))
+        |> cdict
 
 let queryExprToString (qExpr : QueryExpr) =
     let sb = new System.Text.StringBuilder()
@@ -70,7 +79,6 @@ let queryExprToString (qExpr : QueryExpr) =
         | Not q -> ! "( NOT " ; aux q ; ! " )"
         | And (l,r) -> ! "( " ; aux l ; ! " AND " ; aux r ; ! " )"
         | Or (l,r) -> ! "( " ; aux l ; ! " OR " ; aux r ; ! " )"
-        | BooleanAttribute attr -> ! attr
         | Compare (EQ, l, r) -> writeCmp " = " l r
         | Compare (NEQ, l, r) -> writeCmp " <> " l r
         | Compare (LT, l, r) -> writeCmp " < " l r
@@ -88,9 +96,7 @@ let queryExprToString (qExpr : QueryExpr) =
 let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
     let invalidQuery() = invalidArg "expr" <| sprintf "Supplied expression is not a valid conditional."
     let values = new Dictionary<FsAttributeValue, string> ()
-    let getValueExpr (conv : FieldConverter) (expr : Expr) =
-        let o = evalRaw expr
-        let fav = conv.OfFieldUntyped o
+    let getValue (fav : FsAttributeValue) =
         let ok,found = values.TryGetValue fav
         if ok then found
         else
@@ -98,13 +104,18 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             values.Add(fav, name)
             name
 
-    let attributes = new Dictionary<string, string> ()
+    let getValueExpr (conv : FieldConverter) (expr : Expr) =
+        let o = evalRaw expr
+        let fav = conv.OfFieldUntyped o
+        getValue fav
+
+    let attributes = new Dictionary<string, string * RecordProperty> ()
     let getAttr (rp : RecordProperty) =
         let ok, found = attributes.TryGetValue rp.Name
-        if ok then found
+        if ok then fst found
         else
             let name = sprintf "#ATTR%d" attributes.Count
-            attributes.Add(rp.Name, name)
+            attributes.Add(rp.Name, (name, rp))
             name
 
     let (|RecordPropertyGet|_|) (e : Expr) =
@@ -116,6 +127,9 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
     let (|Operands|) (exprs : Expr list) =
         match exprs |> List.tryPick (|RecordPropertyGet|_|) with
         | Some rp ->
+            if rp.Converter.Representation = FieldRepresentation.Serializer then
+                invalidArg "expr" "cannot query serialized properties"
+
             let extractOperand (expr : Expr) =
                 match expr with
                 | e when e.IsClosed ->
@@ -145,7 +159,11 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
     let rec extractQuery (expr : Expr) =
         match expr with
         | e when e.IsClosed -> if evalRaw e then True else False
-        | SpecificCall <@ not @> (None, _, [body]) -> Not (extractQuery body)
+        | SpecificCall <@ not @> (None, _, [body]) -> 
+            match extractQuery body with
+            | Not q -> q
+            | q -> Not q
+
         | AndAlso(left, right) -> 
             match extractQuery left, extractQuery right with
             | False, _ -> False
@@ -164,7 +182,11 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
 
         | PipeLeft e
         | PipeRight e -> extractQuery e
-        | RecordPropertyGet rp -> BooleanAttribute(getAttr rp)
+
+        | RecordPropertyGet rp -> 
+            let attr = getAttr rp
+            let value = getValue (Bool true) 
+            Compare(EQ, Attribute(attr), Value(value))
 
         | Comparison <@ (=) @> (left, right) -> Compare(EQ, left, right)
         | Comparison <@ (<>) @> (left, right) -> Compare(NEQ, left, right)
@@ -189,6 +211,24 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             let valId = getValueExpr fconv elem
             Contains(attrId, Value valId)
 
+        | SpecificCall <@ fun (x:Set<int>) -> x.Contains 0 @> (Some(RecordPropertyGet rp), _, [elem]) when elem.IsClosed ->
+            let attrId = getAttr rp
+            let fconv = rp.PropertyInfo.PropertyType.GetGenericArguments().[0] |> FieldConverter.resolveUntyped
+            let valId = getValueExpr fconv elem
+            Contains(attrId, Value valId)
+
+        | SpecificCall <@ Map.containsKey @> (None, _, [elem; RecordPropertyGet rp]) when elem.IsClosed ->
+            let attrId = getAttr rp
+            let fconv = rp.PropertyInfo.PropertyType.GetGenericArguments().[0] |> FieldConverter.resolveUntyped
+            let valId = getValueExpr fconv elem
+            Contains(attrId, Value valId)
+
+        | SpecificCall <@ fun (x : Map<int,int>) -> x.ContainsKey 0 @> (Some(RecordPropertyGet rp), _, [elem]) when elem.IsClosed ->
+            let attrId = getAttr rp
+            let fconv = rp.PropertyInfo.PropertyType.GetGenericArguments().[0] |> FieldConverter.resolveUntyped
+            let valId = getValueExpr fconv elem
+            Contains(attrId, Value valId)
+
         | _ -> invalidQuery()
 
     match expr with
@@ -197,7 +237,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
         {
             QueryExpr = q
             Expression = queryExprToString q
-            Attributes = attributes |> Seq.map (fun kv -> kv.Value, kv.Key) |> Map.ofSeq
+            Attributes = attributes |> Seq.map (fun kv -> kv.Value) |> Map.ofSeq
             Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Map.ofSeq
         }
 

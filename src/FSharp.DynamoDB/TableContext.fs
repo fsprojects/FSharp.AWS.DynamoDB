@@ -12,6 +12,13 @@ open FSharp.DynamoDB.TableOps
 
 type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : string, record : RecordDescriptor<'TRecord>) =
 
+    let (|Conditional|_|) (cond : Expr<'TRecord -> bool> option) =
+        match cond with
+        | Some c -> 
+            let qc = record.ExtractConditional c
+            if qc.IsTautological then None else Some qc
+        | None -> None
+
     member __.Client = client
     member __.KeySchema = record.KeySchema
     member __.TableName = tableName
@@ -23,18 +30,20 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         
         new TableContext<'TRecord2>(client, tableName, rd)
 
-
-//    member __.ExtractConditional(cond : Expr<'TRecord -> bool>) =
-//        let rc = record.ExtractConditional cond
-//        rc.Attributes, rc.Values, rc.Expression, sprintf "%A" rc.QueryExpr
-
     member __.ExtractKey(item : 'TRecord) =
         record.ExtractKey item
 
-    member __.PutItemAsync(item : 'TRecord) : Async<TableKey> = async {
+    member __.PutItemAsync(item : 'TRecord, ?conditional : Expr<'TRecord -> bool>) : Async<TableKey> = async {
         let attrValues = record.ToAttributeValues(item)
         let request = new PutItemRequest(tableName, attrValues)
         request.ReturnValues <- ReturnValue.NONE
+        match conditional with
+        | Conditional qc ->
+            request.ExpressionAttributeNames <- qc.DAttributes
+            request.ExpressionAttributeValues <- qc.DValues
+            request.ConditionExpression <- qc.Expression
+        | _ -> ()
+
         let! ct = Async.CancellationToken
         let! response = client.PutItemAsync(request, ct) |> Async.AwaitTaskCorrect
         if response.HttpStatusCode <> HttpStatusCode.OK then
