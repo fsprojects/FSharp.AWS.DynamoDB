@@ -32,7 +32,7 @@ let extractKeyStructure (recordType : Type) (properties : RecordProperty[]) =
         | [||] -> invalidArg (string recordType) "Records carrying the RangeKeyConstant attribute must specify a RangeKey property."
         | [|rangeKeyP|] -> 
             let hkca = Option.get hkcaOpt
-            let converter = resolveConvUntyped hkca.HashKeyType
+            let converter = FieldConverter.resolveUntyped hkca.HashKeyType
             DefaultHashKey(hkca.Name, hkca.HashKey, converter, rangeKeyP)
 
         | _ -> invalidArg (string recordType) "Found more than one record fields carrying the RangeKey attribute."
@@ -46,7 +46,7 @@ let mkRecordProperty (propertyInfo : PropertyInfo) =
     let converter = 
         match tryGetAttribute<PropertySerializerAttribute> attributes with
         | Some serializer -> new SerializerConverter(propertyInfo, serializer) :> FieldConverter
-        | None -> resolveConvUntyped propertyInfo.PropertyType
+        | None -> FieldConverter.resolveUntyped propertyInfo.PropertyType
 
     let name =
         match attributes |> tryGetAttribute<CustomNameAttribute> with

@@ -1,8 +1,9 @@
-redirects: force
+redirects: on
 source https://www.nuget.org/api/v2
 
 nuget Unquote
 nuget AWSSDK.DynamoDBv2
+nuget FSharp.Core ~> 4.0
 nuget xunit ~> 2.0
 nuget xunit.extensions
 nuget xunit.runner.console

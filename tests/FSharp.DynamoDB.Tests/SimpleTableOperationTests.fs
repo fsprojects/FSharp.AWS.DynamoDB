@@ -24,7 +24,7 @@ type CompatibleRecord =
         [<RangeKey; CustomName("RangeKey")>]
         Id : string
 
-        Values : int list
+        Values : Set<int>
     }
 
 type ``Simple Table Operation Tests`` () =

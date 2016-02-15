@@ -5,10 +5,17 @@ open System.Collections.Generic
 open System.Reflection
 open System.Threading.Tasks
 
+open Microsoft.FSharp.Quotations
+open Microsoft.FSharp.Quotations.Patterns
+open Microsoft.FSharp.Quotations.DerivedPatterns
+open Microsoft.FSharp.Quotations.ExprShape
+
 [<AutoOpen>]
 module internal Utils =
 
     let inline rlist (ts : seq<'T>) = new ResizeArray<_>(ts)
+
+    let inline keyVal k v = new KeyValuePair<_,_>(k,v)
 
     let inline cdict (kvs : seq<KeyValuePair<'K,'V>>) = 
         let d = new Dictionary<'K, 'V>()
@@ -49,6 +56,37 @@ module internal Utils =
 
         member m.ContainsAttribute<'Attribute when 'Attribute :> System.Attribute> () : bool =
             m.GetCustomAttributes(true) |> Seq.map unbox<Attribute> |> containsAttribute
+
+
+    type Quotations.Expr with
+        member e.IsClosed = e.GetFreeVars() |> Seq.isEmpty
+        member e.Substitute(v : Var, sub : Expr) =
+            e.Substitute(fun w -> if v = w then Some sub else None)
+
+    let (|PipeLeft|_|) (e : Expr) =
+        match e with
+        | SpecificCall <@ (<|) @> (None, _, [func; arg]) ->
+            let rec unwind (body : Expr) =
+                match body with
+                | Let(x, value, body) -> unwind(body.Substitute(x, value))
+                | Lambda(v, body) -> Some <| body.Substitute(v, arg)
+                | _ -> None
+
+            unwind func
+        | _ -> None
+
+    let (|PipeRight|_|) (e : Expr) =
+        match e with
+        | SpecificCall <@ (|>) @> (None, _, [left ; right]) ->
+            let rec unwind (body : Expr) =
+                match body with
+                | Let(x, value, body) -> unwind(body.Substitute(x, value))
+                | Lambda(x, body) -> Some <| body.Substitute(x, left)
+                | _ -> None
+
+            unwind right
+
+        | _ -> None
 
     type Task with
         /// Gets the inner exception of the faulted task.

@@ -3,6 +3,8 @@
 open System.Collections.Generic
 open System.Net
 
+open Microsoft.FSharp.Quotations
+
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
@@ -20,6 +22,11 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
             invalidArg (string typeof<'TRecord2>) "incompatible key schema."
         
         new TableContext<'TRecord2>(client, tableName, rd)
+
+
+//    member __.ExtractConditional(cond : Expr<'TRecord -> bool>) =
+//        let rc = record.ExtractConditional cond
+//        rc.Attributes, rc.Values, rc.Expression, sprintf "%A" rc.QueryExpr
 
     member __.ExtractKey(item : 'TRecord) =
         record.ExtractKey item

@@ -4,15 +4,20 @@ open System
 open System.Collections.Generic
 open System.Collections.Concurrent
 
+open Microsoft.FSharp.Quotations
+
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB.FieldConverter
 open FSharp.DynamoDB.Common
 open FSharp.DynamoDB.RecordInfoBuilder
+open FSharp.DynamoDB.ConditionalExprs
 
 type internal RecordDescriptor<'Record> internal () =
     let recordInfo = mkRecordInfo typeof<'Record>
+    let exprCmp = new ExprEqualityComparer()
+    let conditionals = new ConcurrentDictionary<Expr, ConditionalExpression>(exprCmp)
 
     member __.KeySchema = recordInfo.KeySchema
     member __.Properties = recordInfo.Properties
@@ -52,6 +57,9 @@ type internal RecordDescriptor<'Record> internal () =
         | DefaultHashKey(_, hashKey, _, rkp) ->
             let rangeKey = getValue rkp
             TableKey.Combined(hashKey, rangeKey)
+
+    member __.ExtractConditional(expr : Expr<'Record -> bool>) : ConditionalExpression =
+        conditionals.GetOrAdd(expr, fun _ -> extractQueryExpr recordInfo expr)
 
     member __.ToAttributeValues(record : 'Record) =
         let dict = new Dictionary<string, AttributeValue> ()

@@ -145,7 +145,7 @@ module ``Record Generation Tests`` =
             [<HashKey>]HashKey : byte[]
             [<RangeKey>]RangeKey : float
 
-            Values : ResizeArray<byte []>
+            Values : System.Collections.Generic.HashSet<byte []>
             Map : System.Collections.Generic.Dictionary<int64, decimal>
             Set : System.Collections.Generic.HashSet<string> ref
 
@@ -183,7 +183,7 @@ module ``Record Generation Tests`` =
             GuidArray : System.Collections.Generic.HashSet<Guid>
             Nullable : Nullable<int64>
             Optional : string option
-            Bytess : byte[][]
+            Bytess : Set<byte[]>
             Ref : byte[] ref ref ref
         }
 

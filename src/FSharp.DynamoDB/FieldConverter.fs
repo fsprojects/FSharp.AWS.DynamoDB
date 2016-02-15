@@ -133,6 +133,8 @@ type FieldConverter() =
     abstract OfFieldUntyped : obj -> FsAttributeValue
     abstract ToFieldUntyped : FsAttributeValue -> obj
 
+    member __.IsScalar = isScalarRepr __.Representation
+
 [<AbstractClass>]
 type FieldConverter<'T>() =
     inherit FieldConverter()
@@ -262,7 +264,7 @@ type OptionConverter<'T>(tconv : FieldConverter<'T>) =
         | Undefined | Null -> None
         | _ -> Some(tconv.ToField a)
 
-let mkFSharpRefConverter (tconv : FieldConverter<'T>) =
+let mkFSharpRefConverter<'T> (tconv : FieldConverter<'T>) =
     match tconv with
     | :? NumRepresentableFieldConverter<'T> as tconv ->
         { new NumRepresentableFieldConverter<'T ref>() with
@@ -335,7 +337,7 @@ type SetConverter<'List, 'T when 'List :> seq<'T>> (ctor : seq<'T> -> 'List, tco
         | Set es -> es |> Seq.map tconv.ToField |> ctor
         | _ -> invalidCast a
 
-let mkSetConverter ctor (tconv : FieldConverter<'T>) : FieldConverter<'List> =
+let mkSetConverter<'List, 'T when 'List :> seq<'T>> ctor (tconv : FieldConverter<'T>) : FieldConverter<'List> =
     if tconv.IsOptionalType then UnSupportedField.Raise typeof<'List>
     match tconv with
     | :? NumRepresentableFieldConverter<'T> as tc -> NumSetConverter<'List, 'T>(ctor, tc) :> _
@@ -363,15 +365,16 @@ type MapConverter<'Map, 'Key, 'Value when 'Map :> seq<KeyValuePair<'Key, 'Value>
         | Map attrs -> attrs |> Seq.map (fun kv -> KeyValuePair(kconv.Parse kv.Key, vconv.ToField kv.Value)) |> ctor
         | _ -> invalidCast a
 
+type IConverterResolver =
+    abstract Resolve : Type -> FieldConverter
+    abstract Resolve<'T> : unit -> FieldConverter<'T>
 
-let rec resolveConv<'T> () = resolveConvUntyped typeof<'T> :?> FieldConverter<'T>
+let resolveFieldConverter (resolver : IConverterResolver) (t : Type) : FieldConverter =
+    let resolveSR (requestingType : Type) =
+        match resolver.Resolve<'T> () with
+        | :? StringRepresentableFieldConverter<'T> as sr -> sr
+        | _ -> UnSupportedField.Raise requestingType 
 
-and private resolveSRConv<'T, 'RequestingType> () = 
-    match resolveConv<'T> () with
-    | :? StringRepresentableFieldConverter<'T> as sr -> sr
-    | _ -> UnSupportedField.Raise typeof<'RequestingType>
-
-and resolveConvUntyped (t : Type) : FieldConverter =
     match getShape t with
     | :? ShapeBool -> new BoolConverter() :> _
     | :? ShapeByte -> mkNumericalConverter<byte> () :> _
@@ -395,25 +398,25 @@ and resolveConvUntyped (t : Type) : FieldConverter =
         s.Accept {
             new IEnumVisitor<FieldConverter> with
                 member __.VisitEnum<'E, 'U when 'E : enum<'U>> () =
-                    new EnumerationConverter<'E, 'U>(resolveSRConv<_,'E>()) :> _ }
+                    new EnumerationConverter<'E, 'U>(resolveSR typeof<'E>) :> _ }
 
     | ShapeNullable s ->
         s.Accept {
             new INullableVisitor<FieldConverter> with
                 member __.VisitNullable<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct> () = 
-                    new NullableConverter<'T>(resolveConv()) :> _ }
+                    new NullableConverter<'T>(resolver.Resolve()) :> _ }
 
     | ShapeFSharpRef s ->
         s.Accept {
             new IFSharpRefVisitor<FieldConverter> with
                 member __.VisitFSharpRef<'T> () =
-                    mkFSharpRefConverter (resolveConv<'T>()) :> _ }
+                    mkFSharpRefConverter<'T> (resolver.Resolve()) :> _ }
 
     | ShapeFSharpOption s ->
         s.Accept {
             new IFSharpOptionVisitor<FieldConverter> with
                 member __.VisitFSharpOption<'T> () =
-                    let tconv = resolveConv<'T>()
+                    let tconv = resolver.Resolve<'T>()
                     if tconv.IsOptionalType then UnSupportedField.Raise typeof<'T option>
                     new OptionConverter<'T>(tconv) :> _ }
 
@@ -424,7 +427,7 @@ and resolveConvUntyped (t : Type) : FieldConverter =
                     if typeof<'T> = typeof<byte []> then
                         BytesSetConverter<HashSet<byte []>>(HashSet) :> _
                     else
-                        mkSetConverter HashSet (resolveConv<'T>()) :> _ }
+                        mkSetConverter<_,'T> HashSet (resolver.Resolve()) :> _ }
 
     | ShapeFSharpSet s ->
         s.Accept {
@@ -433,13 +436,13 @@ and resolveConvUntyped (t : Type) : FieldConverter =
                     if typeof<'T> = typeof<byte []> then
                         BytesSetConverter<Set<byte []>>(Set.ofSeq) :> _
                     else
-                        mkSetConverter Set.ofSeq (resolveConv<'T>()) :> _ }
+                        mkSetConverter<_,'T> Set.ofSeq (resolver.Resolve()) :> _ }
 
     | ShapeDictionary s ->
         s.Accept {
             new IDictionaryVisitor<FieldConverter> with
                 member __.VisitDictionary<'K, 'V when 'K : equality> () =
-                    new MapConverter<Dictionary<'K, 'V>, 'K, 'V>(cdict, resolveSRConv<_,Dictionary<'K,'V>>(), resolveConv()) :> _ }
+                    new MapConverter<Dictionary<'K, 'V>, 'K, 'V>(cdict, resolveSR typeof<Dictionary<'K,'V>>, resolver.Resolve()) :> _ }
 
     | ShapeFSharpMap s ->
         s.Accept { 
@@ -448,14 +451,31 @@ and resolveConvUntyped (t : Type) : FieldConverter =
                     let mkMap (kvs : seq<KeyValuePair<'K,'V>>) =
                         kvs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
 
-                    new MapConverter<Map<'K,'V>, 'K, 'V>(mkMap, resolveSRConv<_,Map<'K,'V>>(), resolveConv()) :> _ }
+                    new MapConverter<Map<'K,'V>, 'K, 'V>(mkMap, resolveSR typeof<Map<'K,'V>>, resolver.Resolve()) :> _ }
 
     | _ -> UnSupportedField.Raise t
+
+type CachedResolver private () as self =
+    let cache = new System.Collections.Concurrent.ConcurrentDictionary<Type, FieldConverter>()
+    let resolve t = cache.GetOrAdd(t, resolveFieldConverter self)
+    static let instance = new CachedResolver()
+
+    static member Instance = instance :> IConverterResolver
+
+    interface IConverterResolver with
+        member __.Resolve(t : Type) = resolve t
+        member __.Resolve<'T> () = resolve typeof<'T> :?> FieldConverter<'T>
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module FieldConverter =
+
+    let resolveUntyped (t : Type) = CachedResolver.Instance.Resolve t
+    let resolve<'T> () = CachedResolver.Instance.Resolve<'T> ()
 
 
 type SerializerConverter(propertyInfo : PropertyInfo, serializer : PropertySerializerAttribute) =
     inherit FieldConverter()
-    let converter = resolveConvUntyped serializer.PickleType
+    let converter = FieldConverter.resolveUntyped serializer.PickleType
 
     override __.Type = propertyInfo.PropertyType
     override __.Representation = FieldRepresentation.Serializer
