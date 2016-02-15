@@ -32,6 +32,13 @@ type ``Simple Table Operation Tests`` () =
         let value' = table.GetItemAsync key |> run
         value' |> should equal value
 
+    [<Fact>]
+    let ``Batch Put Operation`` () =
+        let values = set [ for i in 1L .. 20L -> { Name = guid() ; Value = i } ]
+        let keys = table.PutItemsAsync values |> run
+        let values' = table.GetItemsAsync keys |> run |> Set.ofArray
+        values' |> should equal values
+
     interface IDisposable with
         member __.Dispose() =
             ignore <| client.DeleteTable(tableName)
