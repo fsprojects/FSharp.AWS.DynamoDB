@@ -44,7 +44,7 @@ type FsAttributeValue =
     | Strings of string[]
     | Numbers of string[]
     | Bytess of byte[][]
-    | List of FsAttributeValue[]
+    | Set of FsAttributeValue[]
     | Map of KeyValuePair<string, FsAttributeValue>[]
 with
     static member FromAttributeValue(av : AttributeValue) =
@@ -56,7 +56,7 @@ with
         elif av.SS.Count > 0 then Strings (Seq.toArray av.SS)
         elif av.NS.Count > 0 then Numbers (Seq.toArray av.NS)
         elif av.BS.Count > 0 then av.BS |> Seq.map (fun bs -> bs.ToArray()) |> Seq.toArray |> Bytess
-        elif av.IsLSet then av.L |> Seq.map FsAttributeValue.FromAttributeValue |> Seq.toArray |> List
+        elif av.IsLSet then av.L |> Seq.map FsAttributeValue.FromAttributeValue |> Seq.toArray |> Set
         elif av.IsMSet then 
             av.M 
             |> Seq.map (fun kv -> KeyValuePair(kv.Key, FsAttributeValue.FromAttributeValue kv.Value)) 
@@ -82,8 +82,8 @@ with
         | Numbers ns -> AttributeValue(NS = rlist ns)
         | Bytess (null | [||]) -> AttributeValue(NULL = true)
         | Bytess bss -> AttributeValue(BS = (bss |> Seq.map (fun bs -> new MemoryStream(bs)) |> rlist))
-        | List (null | [||]) -> AttributeValue(NULL = true)
-        | List attrs -> AttributeValue(L = (attrs |> Seq.map FsAttributeValue.ToAttributeValue |> rlist))
+        | Set (null | [||]) -> AttributeValue(NULL = true)
+        | Set attrs -> AttributeValue(L = (attrs |> Seq.map FsAttributeValue.ToAttributeValue |> rlist))
         | Map (null | [||]) -> AttributeValue(NULL = true)
         | Map attrs -> 
             AttributeValue(M =
@@ -289,8 +289,8 @@ let mkFSharpRefConverter (tconv : FieldConverter<'T>) =
             member __.OfField tref = tconv.OfField tref.Value
             member __.ToField a = tconv.ToField a |> ref }
 
-type BytesListConverter<'BSeq when 'BSeq :> seq<byte[]>>(ctor : seq<byte []> -> 'BSeq) =
-    inherit FieldConverter<'BSeq>()
+type BytesSetConverter<'BSet when 'BSet :> seq<byte[]>>(ctor : seq<byte []> -> 'BSet) =
+    inherit FieldConverter<'BSet>()
     override __.Representation = FieldRepresentation.Bytess
     override __.DefaultValue = ctor [||]
     override __.OfField bss = Bytess (Seq.toArray bss)
@@ -300,8 +300,8 @@ type BytesListConverter<'BSeq when 'BSeq :> seq<byte[]>>(ctor : seq<byte []> -> 
         | Bytess ns -> ctor ns
         | _ -> invalidCast a
 
-type NumListConverter<'List, 'T when 'List :> seq<'T>> (ctor : seq<'T> -> 'List, tconv : NumRepresentableFieldConverter<'T>) =
-    inherit FieldConverter<'List>()
+type NumSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, tconv : NumRepresentableFieldConverter<'T>) =
+    inherit FieldConverter<'Set>()
     override __.DefaultValue = ctor [||]
     override __.Representation = FieldRepresentation.Numbers
     override __.OfField set = set |> Seq.map tconv.UnParse |> Seq.toArray |> Numbers
@@ -311,8 +311,8 @@ type NumListConverter<'List, 'T when 'List :> seq<'T>> (ctor : seq<'T> -> 'List,
         | Numbers es -> es |> Seq.map tconv.Parse |> ctor
         | _ -> invalidCast a
 
-type StringListConverter<'List, 'T when 'List :> seq<'T>> (ctor : seq<'T> -> 'List, tconv : StringRepresentableFieldConverter<'T>) =
-    inherit FieldConverter<'List>()
+type StringSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, tconv : StringRepresentableFieldConverter<'T>) =
+    inherit FieldConverter<'Set>()
     override __.DefaultValue = ctor [||]
     override __.Representation = FieldRepresentation.Strings
     override __.OfField set = set |> Seq.map tconv.UnParse |> Seq.toArray |> Strings
@@ -322,25 +322,25 @@ type StringListConverter<'List, 'T when 'List :> seq<'T>> (ctor : seq<'T> -> 'Li
         | Strings es -> es |> Seq.map tconv.Parse |> ctor
         | _ -> invalidCast a
 
-type ListConverter<'List, 'T when 'List :> seq<'T>> (ctor : seq<'T> -> 'List, tconv : FieldConverter<'T>) =
+type SetConverter<'List, 'T when 'List :> seq<'T>> (ctor : seq<'T> -> 'List, tconv : FieldConverter<'T>) =
     inherit FieldConverter<'List>()
     override __.DefaultValue = ctor [||]
     override __.Representation = FieldRepresentation.List
     override __.OfField set = 
-        set |> Seq.map tconv.OfField |> Seq.toArray |> List
+        set |> Seq.map tconv.OfField |> Seq.toArray |> Set
 
     override __.ToField a =
         match a with
         | Null -> ctor [||]
-        | List es -> es |> Seq.map tconv.ToField |> ctor
+        | Set es -> es |> Seq.map tconv.ToField |> ctor
         | _ -> invalidCast a
 
-let mkListConverter ctor (tconv : FieldConverter<'T>) : FieldConverter<'List> =
+let mkSetConverter ctor (tconv : FieldConverter<'T>) : FieldConverter<'List> =
     if tconv.IsOptionalType then UnSupportedField.Raise typeof<'List>
     match tconv with
-    | :? NumRepresentableFieldConverter<'T> as tc -> NumListConverter<'List, 'T>(ctor, tc) :> _
-    | :? StringRepresentableFieldConverter<'T> as tc -> StringListConverter<'List, 'T>(ctor, tc) :> _
-    | _ -> new ListConverter<'List, 'T>(ctor, tconv) :> _
+    | :? NumRepresentableFieldConverter<'T> as tc -> NumSetConverter<'List, 'T>(ctor, tc) :> _
+    | :? StringRepresentableFieldConverter<'T> as tc -> StringSetConverter<'List, 'T>(ctor, tc) :> _
+    | _ -> new SetConverter<'List, 'T>(ctor, tconv) :> _
 
 type MapConverter<'Map, 'Key, 'Value when 'Map :> seq<KeyValuePair<'Key, 'Value>>>
                     (ctor : seq<KeyValuePair<'Key, 'Value>> -> 'Map, 
@@ -387,6 +387,7 @@ and resolveConvUntyped (t : Type) : FieldConverter =
     | :? ShapeDecimal -> mkNumericalConverter<decimal> () :> _
     | :? ShapeString -> new StringConverter() :> _
     | :? ShapeGuid -> new GuidConverter() :> _
+    | :? ShapeByteArray -> new BytesConverter() :> _
     | :? ShapeTimeSpan -> new TimeSpanConverter() :> _
     | :? ShapeDateTime -> UnSupportedField.Raise(t, "please use DateTimeOffset instead.")
     | :? ShapeDateTimeOffset -> new DateTimeOffsetConverter() :> _
@@ -416,52 +417,23 @@ and resolveConvUntyped (t : Type) : FieldConverter =
                     if tconv.IsOptionalType then UnSupportedField.Raise typeof<'T option>
                     new OptionConverter<'T>(tconv) :> _ }
 
-    | ShapeArray s ->
-        s.Accept { 
-            new IArrayVisitor<FieldConverter> with
-                member __.VisitArray<'T> () =
-                    if typeof<'T> = typeof<byte> then
-                        BytesConverter() :> _
-                    elif typeof<'T> = typeof<byte []> then
-                        BytesListConverter<byte [][]>(Array.ofSeq) :> _
-                    else
-                        mkListConverter Array.ofSeq (resolveConv<'T>()) :> _ }
-
-    | ShapeFSharpList s ->
-        s.Accept {
-            new IFSharpListVisitor<FieldConverter> with
-                member __.VisitFSharpList<'T> () =
-                    if typeof<'T> = typeof<byte []> then
-                        BytesListConverter<byte [] list>(List.ofSeq) :> _
-                    else
-                        mkListConverter List.ofSeq (resolveConv<'T>()) :> _ }
-
-    | ShapeResizeArray s ->
-        s.Accept {
-            new IResizeArrayVisitor<FieldConverter> with
-                member __.VisitResizeArray<'T> () =
-                    if typeof<'T> = typeof<byte []> then
-                        BytesListConverter<ResizeArray<byte []>>(rlist) :> _
-                    else
-                        mkListConverter rlist (resolveConv<'T>()) :> _ }
-
     | ShapeHashSet s ->
         s.Accept {
             new IHashSetVisitor<FieldConverter> with
                 member __.VisitHashSet<'T when 'T : equality> () =
                     if typeof<'T> = typeof<byte []> then
-                        BytesListConverter<HashSet<byte []>>(HashSet) :> _
+                        BytesSetConverter<HashSet<byte []>>(HashSet) :> _
                     else
-                        mkListConverter HashSet (resolveConv<'T>()) :> _ }
+                        mkSetConverter HashSet (resolveConv<'T>()) :> _ }
 
     | ShapeFSharpSet s ->
         s.Accept {
             new IFSharpSetVisitor<FieldConverter> with
                 member __.VisitFSharpSet<'T when 'T : comparison> () =
                     if typeof<'T> = typeof<byte []> then
-                        BytesListConverter<Set<byte []>>(Set.ofSeq) :> _
+                        BytesSetConverter<Set<byte []>>(Set.ofSeq) :> _
                     else
-                        mkListConverter Set.ofSeq (resolveConv<'T>()) :> _ }
+                        mkSetConverter Set.ofSeq (resolveConv<'T>()) :> _ }
 
     | ShapeDictionary s ->
         s.Accept {

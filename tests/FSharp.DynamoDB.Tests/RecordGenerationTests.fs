@@ -132,7 +132,7 @@ module ``Record Generation Tests`` =
             TimeSpan : TimeSpan
 
             DateTimeOffset : DateTimeOffset
-            Values : int []
+            Values : System.Collections.Generic.HashSet<int>
             Map : Map<DateTimeOffset, TimeSpan>
             Set : Set<TimeSpan>
 
@@ -179,8 +179,8 @@ module ``Record Generation Tests`` =
 
             Guid : Guid
             Enum : System.Reflection.BindingFlags
-            EnumArray : System.Reflection.BindingFlags []
-            GuidArray : Guid []
+            EnumArray : Set<System.Reflection.BindingFlags>
+            GuidArray : System.Collections.Generic.HashSet<Guid>
             Nullable : Nullable<int64>
             Optional : string option
             Bytess : byte[][]
@@ -224,7 +224,7 @@ module ``Record Generation Tests`` =
         |> shouldFailwith<_, ArgumentException>
 
 
-    type ``Record containing unsupported attribute type`` = { [<HashKey>]A1 : string ; [<RangeKey>] B1 : string ; C1 : (int * string) list }
+    type ``Record containing unsupported attribute type`` = { [<HashKey>]A1 : string ; [<RangeKey>] B1 : string ; C1 : string list }
 
     [<Fact>]
     let ``Record containing unsupported attribute type should fail`` () =

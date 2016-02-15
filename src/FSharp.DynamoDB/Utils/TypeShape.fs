@@ -169,6 +169,8 @@ and ShapeArray<'T>() =
     interface IShapeEnumerable with
         member __.Accept v = v.VisitEnumerable<'T> ()
 
+and ShapeByteArray() =
+    inherit ShapeArray<byte> ()
 
 and IArray2DVisitor<'R> =
     abstract VisitArray2D<'T> : unit -> 'R
@@ -682,6 +684,7 @@ module private TypeShapeImpl =
         elif t.IsArray then
             let et = t.GetElementType()
             match t.GetArrayRank() with
+            | 1 when et = typeof<byte> -> new ShapeByteArray() :> _
             | 1 -> activate1 typedefof<ShapeArray<_>> et
             | 2 -> activate1 typedefof<ShapeArray2D<_>> et
             | 3 -> activate1 typedefof<ShapeArray3D<_>> et
@@ -814,6 +817,7 @@ module TypeShapeModule =
     let (|ShapeResizeArray|_|) t = test<IShapeResizeArray> t
 
     let (|ShapeArray|_|) t = test<IShapeArray> t
+    let (|ShapeByteArray|_|) t = test<ShapeByteArray> t
     let (|ShapeArray2D|_|) t = test<IShapeArray2D> t
     let (|ShapeArray3D|_|) t = test<IShapeArray3D> t
     let (|ShapeArray4D|_|) t = test<IShapeArray4D> t
