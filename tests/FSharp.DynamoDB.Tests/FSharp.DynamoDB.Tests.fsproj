@@ -62,6 +62,7 @@
     <Compile Include="SimpleTableOperationTests.fs" />
     <None Include="paket.references" />
     <Content Include="App.config" />
+    <Content Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
