@@ -58,6 +58,35 @@ module internal Utils =
             m.GetCustomAttributes(true) |> Seq.map unbox<Attribute> |> containsAttribute
 
 
+    type MethodInfo with
+        /// Gets the underlying method definition
+        /// including the supplied declaring type and method type arguments
+        member m.GetUnderlyingMethodDefinition() : MethodInfo * Type[] * Type[] =
+            let dt = m.DeclaringType
+            if dt.IsGenericType then
+                let gt = dt.GetGenericTypeDefinition()
+                let gas = dt.GetGenericArguments()
+                let mas = m.GetGenericArguments()
+
+                let bindingFlags = 
+                    BindingFlags.Public ||| BindingFlags.NonPublic ||| 
+                    BindingFlags.Static ||| BindingFlags.Instance ||| 
+                    BindingFlags.FlattenHierarchy
+
+                let m = 
+                    gt.GetMethods(bindingFlags) 
+                    |> Array.find (fun m' -> m.Name = m'.Name && m.MetadataToken = m'.MetadataToken)
+
+                m, gas, mas
+
+            elif m.IsGenericMethod then
+                let mas = m.GetGenericArguments()
+                m.GetGenericMethodDefinition(), [||], mas
+
+            else
+                m, [||], [||]
+
+
     type Quotations.Expr with
         member e.IsClosed = e.GetFreeVars() |> Seq.isEmpty
         member e.Substitute(v : Var, sub : Expr) =
@@ -87,6 +116,24 @@ module internal Utils =
             unwind right
 
         | _ -> None
+
+    /// Variations of DerivedPatterns.SpecificCall which correctly
+    /// recognizes methods of generic types
+    /// See also https://github.com/fsharp/fsharp/issues/546
+    let (|SpecificCall2|_|) (pattern : Expr) =
+        match pattern with
+        | Lambdas(_, Call(_,mI,_)) | Call(_,mI,_) ->
+            let gm,_,_ = mI.GetUnderlyingMethodDefinition()
+
+            fun (input:Expr) ->
+                match input with
+                | Call(obj, mI', args) ->
+                    let gm',ta,ma = mI'.GetUnderlyingMethodDefinition()
+                    if gm = gm' then Some(obj, Array.toList ta, Array.toList ma, args)
+                    else None
+                | _ -> None
+
+        | _ -> invalidArg "pattern" "supplied pattern is not a method call"
 
     type Task with
         /// Gets the inner exception of the faulted task.

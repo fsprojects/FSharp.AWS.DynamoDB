@@ -52,11 +52,6 @@ type ConditionalExpression =
         Values : Map<string, FsAttributeValue>
     }
 with
-    member __.IsTautological =
-        match __.QueryExpr with
-        | False | True -> true
-        | _ -> false
-
     member __.DAttributes = 
         __.Attributes
         |> Seq.map (fun kv -> keyVal kv.Key kv.Value.Name)
@@ -74,8 +69,7 @@ let queryExprToString (qExpr : QueryExpr) =
     let inline writeCmp cmp l r = ! "( " ; writeOp l ; ! cmp ; writeOp r ; ! " )"
     let rec aux q =
         match q with
-        | False -> ! "false"
-        | True -> ! "true"
+        | False | True -> invalidOp "internal error: invalid query representation"
         | Not q -> ! "( NOT " ; aux q ; ! " )"
         | And (l,r) -> ! "( " ; aux l ; ! " AND " ; aux r ; ! " )"
         | Or (l,r) -> ! "( " ; aux l ; ! " OR " ; aux r ; ! " )"
@@ -195,45 +189,61 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
         | Comparison <@ (<=) @> (left, right) -> Compare(LE, left, right)
         | Comparison <@ (>=) @> (left, right) -> Compare(GE, left, right)
 
-        | SpecificCall <@ fun (x:string) -> x.StartsWith "" @> (Some (RecordPropertyGet rp), _, [value]) when value.IsClosed ->
+        | SpecificCall2 <@ fun (x:string) y -> x.StartsWith y @> (Some (RecordPropertyGet rp), _, _, [value]) when value.IsClosed ->
             let attrId = getAttr rp
             let valId = getValueExpr rp.Converter value
             BeginsWith(attrId, valId)
 
-        | SpecificCall <@ fun (x:string) -> x.Contains "" @> (Some (RecordPropertyGet rp), _, [value]) when value.IsClosed ->
+        | SpecificCall2 <@ fun (x:string) y -> x.Contains y @> (Some (RecordPropertyGet rp), _, _, [value]) when value.IsClosed ->
             let attrId = getAttr rp
             let valId = getValueExpr rp.Converter value
             Contains(attrId, Value valId)
 
-        | SpecificCall <@ Set.contains @> (None, _, [elem; RecordPropertyGet rp]) when elem.IsClosed ->
+        | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; RecordPropertyGet rp]) when elem.IsClosed ->
             let attrId = getAttr rp
             let fconv = rp.PropertyInfo.PropertyType.GetGenericArguments().[0] |> FieldConverter.resolveUntyped
             let valId = getValueExpr fconv elem
             Contains(attrId, Value valId)
 
-        | SpecificCall <@ fun (x:Set<int>) -> x.Contains 0 @> (Some(RecordPropertyGet rp), _, [elem]) when elem.IsClosed ->
+        | SpecificCall2 <@ fun (x:Set<_>) e -> x.Contains e @> (Some(RecordPropertyGet rp), _, _, [elem]) when elem.IsClosed ->
             let attrId = getAttr rp
             let fconv = rp.PropertyInfo.PropertyType.GetGenericArguments().[0] |> FieldConverter.resolveUntyped
             let valId = getValueExpr fconv elem
             Contains(attrId, Value valId)
 
-        | SpecificCall <@ Map.containsKey @> (None, _, [elem; RecordPropertyGet rp]) when elem.IsClosed ->
+        | SpecificCall2 <@ fun (x : HashSet<_>) y -> x.Contains y @> (Some(RecordPropertyGet rp), _, _, [elem]) when elem.IsClosed ->
             let attrId = getAttr rp
             let fconv = rp.PropertyInfo.PropertyType.GetGenericArguments().[0] |> FieldConverter.resolveUntyped
             let valId = getValueExpr fconv elem
             Contains(attrId, Value valId)
 
-        | SpecificCall <@ fun (x : Map<int,int>) -> x.ContainsKey 0 @> (Some(RecordPropertyGet rp), _, [elem]) when elem.IsClosed ->
+        | SpecificCall2 <@ Map.containsKey @> (None, _, _, [elem; RecordPropertyGet rp]) when elem.IsClosed ->
             let attrId = getAttr rp
             let fconv = rp.PropertyInfo.PropertyType.GetGenericArguments().[0] |> FieldConverter.resolveUntyped
             let valId = getValueExpr fconv elem
             Contains(attrId, Value valId)
+
+        | SpecificCall2 <@ fun (x : Map<_,_>) y -> x.ContainsKey y @> (Some(RecordPropertyGet rp), _, _, [elem]) when elem.IsClosed ->
+            let attrId = getAttr rp
+            let fconv = rp.PropertyInfo.PropertyType.GetGenericArguments().[0] |> FieldConverter.resolveUntyped
+            let valId = getValueExpr fconv elem
+            Contains(attrId, Value valId)
+
+        | SpecificCall2 <@ fun (x : Dictionary<_,_>) y -> x.ContainsKey y @> (Some(RecordPropertyGet rp), _, _, [elem]) when elem.IsClosed ->
+            let attrId = getAttr rp
+            let fconv = rp.PropertyInfo.PropertyType.GetGenericArguments().[0] |> FieldConverter.resolveUntyped
+            let valId = getValueExpr fconv elem
+            Contains(attrId, Value valId)
+
 
         | _ -> invalidQuery()
 
     match expr with
     | Lambda(x, body) when x.Type = typeof<'TRecord> -> 
-        let q = extractQuery body
+        match extractQuery body with
+        | False | True -> invalidArg "expr" "supplied query is tautological."
+        | q ->
+
         {
             QueryExpr = q
             Expression = queryExprToString q

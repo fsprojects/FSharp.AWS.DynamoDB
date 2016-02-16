@@ -12,13 +12,6 @@ open FSharp.DynamoDB.TableOps
 
 type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : string, record : RecordDescriptor<'TRecord>) =
 
-    let (|Conditional|_|) (cond : Expr<'TRecord -> bool> option) =
-        match cond with
-        | Some c -> 
-            let qc = record.ExtractConditional c
-            if qc.IsTautological then None else Some qc
-        | None -> None
-
     member __.Client = client
     member __.KeySchema = record.KeySchema
     member __.TableName = tableName
@@ -38,7 +31,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let request = new PutItemRequest(tableName, attrValues)
         request.ReturnValues <- ReturnValue.NONE
         match conditional with
-        | Conditional qc ->
+        | Some cond ->
+            let qc = record.ExtractConditional cond
             request.ExpressionAttributeNames <- qc.DAttributes
             request.ExpressionAttributeValues <- qc.DValues
             request.ConditionExpression <- qc.Expression
