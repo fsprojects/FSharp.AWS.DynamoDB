@@ -132,7 +132,7 @@ module ``Record Generation Tests`` =
             TimeSpan : TimeSpan
 
             DateTimeOffset : DateTimeOffset
-            Values : System.Collections.Generic.HashSet<int>
+            Values : int list
             Map : Map<DateTimeOffset, TimeSpan>
             Set : Set<TimeSpan>
 
@@ -145,7 +145,7 @@ module ``Record Generation Tests`` =
             [<HashKey>]HashKey : byte[]
             [<RangeKey>]RangeKey : float
 
-            Values : System.Collections.Generic.HashSet<byte []>
+            Values : byte [][]
             Map : System.Collections.Generic.Dictionary<int64, decimal>
             Set : System.Collections.Generic.HashSet<string> ref
 
@@ -179,7 +179,7 @@ module ``Record Generation Tests`` =
 
             Guid : Guid
             Enum : System.Reflection.BindingFlags
-            EnumArray : Set<System.Reflection.BindingFlags>
+            EnumArray : System.Reflection.BindingFlags []
             GuidArray : System.Collections.Generic.HashSet<Guid>
             Nullable : Nullable<int64>
             Optional : string option
