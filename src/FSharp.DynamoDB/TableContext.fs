@@ -26,11 +26,11 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.ExtractKey(item : 'TRecord) =
         record.ExtractKey item
 
-    member __.PutItemAsync(item : 'TRecord, ?conditional : Expr<'TRecord -> bool>) : Async<TableKey> = async {
+    member __.PutItemAsync(item : 'TRecord, ?precondition : Expr<'TRecord -> bool>) : Async<TableKey> = async {
         let attrValues = record.ToAttributeValues(item)
         let request = new PutItemRequest(tableName, attrValues)
         request.ReturnValues <- ReturnValue.NONE
-        match conditional with
+        match precondition with
         | Some cond ->
             let qc = record.ExtractConditional cond
             request.ExpressionAttributeNames <- qc.DAttributes
@@ -63,6 +63,33 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
             failwithf "PutItem request returned error %O" response.HttpStatusCode
 
         return items |> Array.map record.ExtractKey
+    }
+
+    member __.UpdateItemAsync(key : TableKey, updater : Expr<'TRecord -> 'TRecord>, 
+                                                ?precondition : Expr<'TRecord -> bool>) : Async<'TRecord> = async {
+        let kav = record.ToAttributeValues(key)
+        let updateExpr = record.ExtractUpdater updater
+        let request = new UpdateItemRequest()
+        request.Key <- kav
+        request.TableName <- tableName
+        request.UpdateExpression <- updateExpr.Expression
+        request.ExpressionAttributeNames <- updateExpr.DAttributes
+        request.ExpressionAttributeValues <- updateExpr.DValues
+        request.ReturnValues <- ReturnValue.ALL_NEW
+        match precondition with
+        | Some cond ->
+            let qc = record.ExtractConditional cond
+            request.ExpressionAttributeNames <- qc.DAttributes
+            request.ExpressionAttributeValues <- qc.DValues
+            request.ConditionExpression <- qc.Expression
+        | _ -> ()
+
+        let! ct = Async.CancellationToken
+        let! response = client.UpdateItemAsync(request, ct) |> Async.AwaitTaskCorrect
+        if response.HttpStatusCode <> HttpStatusCode.OK then
+            failwithf "PutItem request returned error %O" response.HttpStatusCode
+
+        return record.OfAttributeValues response.Attributes
     }
 
     member __.ContainsKeyAsync(key : TableKey) = async {

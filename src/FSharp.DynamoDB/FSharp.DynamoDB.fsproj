@@ -52,6 +52,7 @@
     <Compile Include="FieldConverter.fs" />
     <Compile Include="Common.fs" />
     <Compile Include="ConditionalExpr.fs" />
+    <Compile Include="UpdateExpr.fs" />
     <Compile Include="TableOps.fs" />
     <Compile Include="RecordInfoBuilder.fs" />
     <Compile Include="RecordDescriptor.fs" />

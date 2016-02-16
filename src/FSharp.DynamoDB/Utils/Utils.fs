@@ -92,31 +92,6 @@ module internal Utils =
         member e.Substitute(v : Var, sub : Expr) =
             e.Substitute(fun w -> if v = w then Some sub else None)
 
-    let (|PipeLeft|_|) (e : Expr) =
-        match e with
-        | SpecificCall <@ (<|) @> (None, _, [func; arg]) ->
-            let rec unwind (body : Expr) =
-                match body with
-                | Let(x, value, body) -> unwind(body.Substitute(x, value))
-                | Lambda(v, body) -> Some <| body.Substitute(v, arg)
-                | _ -> None
-
-            unwind func
-        | _ -> None
-
-    let (|PipeRight|_|) (e : Expr) =
-        match e with
-        | SpecificCall <@ (|>) @> (None, _, [left ; right]) ->
-            let rec unwind (body : Expr) =
-                match body with
-                | Let(x, value, body) -> unwind(body.Substitute(x, value))
-                | Lambda(x, body) -> Some <| body.Substitute(x, left)
-                | _ -> None
-
-            unwind right
-
-        | _ -> None
-
     /// Variations of DerivedPatterns.SpecificCall which correctly
     /// recognizes methods of generic types
     /// See also https://github.com/fsharp/fsharp/issues/546
@@ -134,6 +109,32 @@ module internal Utils =
                 | _ -> None
 
         | _ -> invalidArg "pattern" "supplied pattern is not a method call"
+
+    let (|PipeLeft|_|) (e : Expr) =
+        match e with
+        | SpecificCall2 <@ (<|) @> (None, _, _, [func; arg]) ->
+            let rec unwind (body : Expr) =
+                match body with
+                | Let(x, value, body) -> unwind(body.Substitute(x, value))
+                | Lambda(v, body) -> Some <| body.Substitute(v, arg)
+                | _ -> None
+
+            unwind func
+        | _ -> None
+
+    let (|PipeRight|_|) (e : Expr) =
+        match e with
+        | SpecificCall2 <@ (|>) @> (None, _, _, [left ; right]) ->
+            let rec unwind (body : Expr) =
+                match body with
+                | Let(x, value, body) -> unwind(body.Substitute(x, value))
+                | Lambda(x, body) -> Some <| body.Substitute(x, left)
+                | _ -> None
+
+            unwind right
+
+        | _ -> None
+
 
     type Task with
         /// Gets the inner exception of the faulted task.

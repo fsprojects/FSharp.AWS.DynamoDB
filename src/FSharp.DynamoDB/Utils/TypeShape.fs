@@ -113,14 +113,29 @@ and ShapeEnum<'Enum, 'Underlying when 'Enum : enum<'Underlying>>() =
 and IEnumerableVisitor<'R> =
     abstract VisitEnumerable<'T> : unit -> 'R
 
+and IShapeEnumerable =
+    abstract Accept : IEnumerableVisitor<'R> -> 'R
+
+and ShapeEnumerable<'T>() =
+    inherit TypeShape<seq<'T>> ()
+    override __.Accept(v : ITypeShapeVisitor<'R>) = v.VisitEnumerable<'T> ()
+    interface IShapeEnumerable with
+        member __.Accept v = v.VisitEnumerable<'T> ()
+
 and ICollectionVisitor<'R> =
     abstract VisitCollection<'T> : unit -> 'R
 
 and IShapeCollection =
     abstract Accept : ICollectionVisitor<'R> -> 'R
 
-and IShapeEnumerable =
-    abstract Accept : IEnumerableVisitor<'R> -> 'R
+and ShapeCollection<'T>() =
+    inherit TypeShape<ICollection<'T>>()
+    override __.Accept(v : ITypeShapeVisitor<'R>) = v.VisitCollection<'T> ()
+    interface IShapeCollection with
+        member __.Accept v = v.VisitCollection<'T> ()
+
+    interface IShapeEnumerable with
+        member __.Accept v = v.VisitEnumerable<'T> ()
 
 /////////////// Nullable
 
@@ -578,6 +593,8 @@ and ITypeShapeVisitor<'R> =
 
     inherit INullableVisitor<'R>
     inherit IEnumVisitor<'R>
+    inherit IEnumerableVisitor<'R>
+    inherit ICollectionVisitor<'R>
     inherit IKeyValuePairVisitor<'R>
     inherit IDictionaryVisitor<'R>
     inherit IHashSetVisitor<'R>
@@ -651,6 +668,15 @@ module private TypeShapeImpl =
         || t.IsImport
         || t.IsMarshalByRef
         || t = canon
+
+    /// correctly resolves if type is assignable to interface
+    let rec private isAssignableFrom (interfaceTy : Type) (ty : Type) =
+        let proj (t : Type) = t.Assembly, t.Namespace, t.Name, t.MetadataToken
+        if ty.GetInterfaces() |> Array.exists(fun if0 -> proj if0 = proj interfaceTy) then true
+        else
+            match ty.BaseType with
+            | null -> false
+            | bt -> isAssignableFrom interfaceTy bt
         
     /// use reflection to bootstrap a shape instance
     let resolveTypeShape (aux : (Type -> TypeShape option) option) (t : Type) : TypeShape =
@@ -764,6 +790,10 @@ module private TypeShapeImpl =
                 activate typedefof<ShapeFSharpSet<_>> gas
             elif gt = typedefof<KeyValuePair<_,_>> then
                 activate typedefof<ShapeKeyValuePair<_,_>> gas
+            elif isAssignableFrom typedefof<ICollection<_>> gt then
+                activate typedefof<ShapeCollection<_>> gas
+            elif isAssignableFrom typedefof<IEnumerable<_>> gt then
+                activate typedefof<ShapeEnumerable<_>> gas
             else
                 activate1 typedefof<ShapeUnknown<_>> t
         else 

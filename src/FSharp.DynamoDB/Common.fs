@@ -10,7 +10,7 @@ open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB.FieldConverter
 
-[<NoEquality; NoComparison>]
+[<CustomEquality; NoComparison>]
 type RecordProperty =
     {
         Name : string
@@ -23,6 +23,11 @@ with
     member rp.TryGetAttribute<'Attribute when 'Attribute :> Attribute> () = tryGetAttribute<'Attribute> rp.Attributes
     member rp.GetAttributes<'Attribute when 'Attribute :> Attribute> () = getAttributes<'Attribute> rp.Attributes
     member rp.ContainsAttribute<'Attribute when 'Attribute :> Attribute> () = containsAttribute<'Attribute> rp.Attributes
+
+    override r.Equals o =
+        match o with :? RecordProperty as r' -> r.PropertyInfo = r'.PropertyInfo | _ -> false
+
+    override r.GetHashCode() = hash r.PropertyInfo
 
 
 type KeyStructure =

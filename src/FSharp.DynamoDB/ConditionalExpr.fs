@@ -34,7 +34,7 @@ type QueryExpr =
 
 and Comparator =
     | EQ
-    | NEQ
+    | NE
     | LT
     | GT
     | LE
@@ -66,19 +66,22 @@ let queryExprToString (qExpr : QueryExpr) =
     let sb = new System.Text.StringBuilder()
     let inline (!) (p:string) = sb.Append p |> ignore
     let inline writeOp o = ! (match o with Value id -> id | Attribute id -> id)
-    let inline writeCmp cmp l r = ! "( " ; writeOp l ; ! cmp ; writeOp r ; ! " )"
+    let inline writeCmp cmp =
+        match cmp with
+        | EQ -> ! " = "
+        | NE -> ! " <> "
+        | LT -> ! " < "
+        | GT -> ! " > "
+        | GE -> ! " >= "
+        | LE -> ! " <= "
+
     let rec aux q =
         match q with
         | False | True -> invalidOp "internal error: invalid query representation"
         | Not q -> ! "( NOT " ; aux q ; ! " )"
         | And (l,r) -> ! "( " ; aux l ; ! " AND " ; aux r ; ! " )"
         | Or (l,r) -> ! "( " ; aux l ; ! " OR " ; aux r ; ! " )"
-        | Compare (EQ, l, r) -> writeCmp " = " l r
-        | Compare (NEQ, l, r) -> writeCmp " <> " l r
-        | Compare (LT, l, r) -> writeCmp " < " l r
-        | Compare (GT, l, r) -> writeCmp " > " l r
-        | Compare (LE, l, r) -> writeCmp " <= " l r
-        | Compare (GE, l, r) -> writeCmp " >= " l r
+        | Compare (cmp, l, r) -> ! "( " ; writeOp l ; writeCmp cmp ; writeOp r ; ! " )"
         | Between (v,l,u) -> ! "( " ; writeOp v ; ! " BETWEEN " ; writeOp l ; ! " AND " ; writeOp u ; ! " )"
         | BeginsWith (attr, valId) -> ! "( begins_with ( " ; ! attr ; ! ", " ; ! valId ; !" ))"
         | Contains (attr, op) -> ! "( contains ( " ; !attr ; !", " ; writeOp op ; !" ))"
@@ -183,7 +186,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             Compare(EQ, Attribute(attr), Value(value))
 
         | Comparison <@ (=) @> (left, right) -> Compare(EQ, left, right)
-        | Comparison <@ (<>) @> (left, right) -> Compare(NEQ, left, right)
+        | Comparison <@ (<>) @> (left, right) -> Compare(NE, left, right)
         | Comparison <@ (<) @> (left, right) -> Compare(LT, left, right)
         | Comparison <@ (>) @> (left, right) -> Compare(GT, left, right)
         | Comparison <@ (<=) @> (left, right) -> Compare(LE, left, right)
@@ -237,6 +240,8 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
 
 
         | _ -> invalidQuery()
+
+    if not expr.IsClosed then invalidArg "expr" "supplied query is not a closed expression."
 
     match expr with
     | Lambda(x, body) when x.Type = typeof<'TRecord> -> 

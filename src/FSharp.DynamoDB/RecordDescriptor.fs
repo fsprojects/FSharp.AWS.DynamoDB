@@ -13,11 +13,13 @@ open FSharp.DynamoDB.FieldConverter
 open FSharp.DynamoDB.Common
 open FSharp.DynamoDB.RecordInfoBuilder
 open FSharp.DynamoDB.ConditionalExprs
+open FSharp.DynamoDB.UpdateExprs
 
 type internal RecordDescriptor<'Record> internal () =
     let recordInfo = mkRecordInfo typeof<'Record>
     let exprCmp = new ExprEqualityComparer()
     let conditionals = new ConcurrentDictionary<Expr, ConditionalExpression>(exprCmp)
+    let updaters = new ConcurrentDictionary<Expr, UpdateExpression>(exprCmp)
 
     member __.KeySchema = recordInfo.KeySchema
     member __.Properties = recordInfo.Properties
@@ -60,6 +62,9 @@ type internal RecordDescriptor<'Record> internal () =
 
     member __.ExtractConditional(expr : Expr<'Record -> bool>) : ConditionalExpression =
         conditionals.GetOrAdd(expr, fun _ -> extractQueryExpr recordInfo expr)
+
+    member __.ExtractUpdater(expr : Expr<'Record -> 'Record>) : UpdateExpression =
+        updaters.GetOrAdd(expr, fun _ -> extractUpdateExpr recordInfo expr)
 
     member __.ToAttributeValues(record : 'Record) =
         let dict = new Dictionary<string, AttributeValue> ()
