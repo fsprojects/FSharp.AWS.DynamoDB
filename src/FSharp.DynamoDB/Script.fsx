@@ -31,7 +31,7 @@ let value = { HashKey = "1" ; Value = 40 ; Value2 = [1;1] ; Values = Set.empty }
 let key = table.PutItemAsync(value) |> Async.RunSynchronously
 
 table.GetItemAsync key |> Async.RunSynchronously
-//table.PutItemAsync({ value with Value = true}, <@ fun r -> r.Values.ContainsKey 42 |> not @>) |> Async.RunSynchronously
+table.PutItemAsync({ value with Value = 0}, <@ fun r -> r.HashKey = "1" && r.Values.Count < 10 @>) |> Async.RunSynchronously
 
 table.UpdateItemAsync(key, <@ fun r -> { r with Values = r.Values + set [42] } @>) |> Async.RunSynchronously
 

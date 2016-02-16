@@ -57,7 +57,6 @@ module internal Utils =
         member m.ContainsAttribute<'Attribute when 'Attribute :> System.Attribute> () : bool =
             m.GetCustomAttributes(true) |> Seq.map unbox<Attribute> |> containsAttribute
 
-
     type MethodInfo with
         /// Gets the underlying method definition
         /// including the supplied declaring type and method type arguments
@@ -86,6 +85,23 @@ module internal Utils =
             else
                 m, [||], [||]
 
+    type PropertyInfo with
+        member p.GetUnderlyingProperty() : PropertyInfo * Type[] =
+            let dt = p.DeclaringType
+            if dt.IsGenericType then
+                let gt = dt.GetGenericTypeDefinition()
+                let gas = dt.GetGenericArguments()
+
+                let bindingFlags = 
+                    BindingFlags.Public ||| BindingFlags.NonPublic ||| 
+                    BindingFlags.Static ||| BindingFlags.Instance ||| 
+                    BindingFlags.FlattenHierarchy
+
+                let gp = gt.GetProperty(p.Name, bindingFlags)
+
+                gp, gas
+            else
+                p, [||]
 
     type Quotations.Expr with
         member e.IsClosed = e.GetFreeVars() |> Seq.isEmpty
@@ -109,6 +125,21 @@ module internal Utils =
                 | _ -> None
 
         | _ -> invalidArg "pattern" "supplied pattern is not a method call"
+
+    let (|SpecificProperty|_|) (pattern : Expr) =
+        match pattern with
+        | Lambdas(_, PropertyGet(_,pI,_)) | PropertyGet(_,pI,_) ->
+            let gp,_ = pI.GetUnderlyingProperty()
+
+            fun (input:Expr) ->
+                match input with
+                | PropertyGet(obj,pI',args) ->
+                    let gp',ta = pI'.GetUnderlyingProperty()
+                    if gp' = gp then Some(obj, Array.toList ta, args)
+                    else None
+                | _ -> None
+
+        | _ -> invalidArg "pattern" "supplied pattern is not a property getter"
 
     let (|PipeLeft|_|) (e : Expr) =
         match e with
