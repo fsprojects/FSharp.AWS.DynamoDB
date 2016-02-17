@@ -33,7 +33,7 @@ type CustomNameAttribute(name : string) =
     member __.Name = name
 
 [<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Class)>]
-type AllowDefaultValueAttribute() =
+type NoDefaultValueAttribute() =
     inherit System.Attribute()
 
 [<AbstractClass; AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Property)>]
