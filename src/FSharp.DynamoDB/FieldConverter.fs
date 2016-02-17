@@ -21,12 +21,11 @@ type FieldRepresentation =
 
 type ConverterType =
     | Value         = 01
-    | Optional      = 02
+    | Wrapper       = 02
     | Record        = 03
     | Serialized    = 04
 
 type FsAttributeValue =
-    | Undefined
     | Null
     | Bool of bool
     | String of string
@@ -54,11 +53,10 @@ with
             |> Seq.toArray
             |> Map
 
-        else Undefined
+        else invalidArg "av" "undefined attribute value"
 
     static member ToAttributeValue(fsav : FsAttributeValue) =
         match fsav with
-        | Undefined -> invalidArg "fsav" "undefined attribute value."
         | Null -> AttributeValue(NULL = true)
         | Bool b -> AttributeValue(BOOL = b)
         | String null -> AttributeValue(NULL = true)
@@ -82,6 +80,8 @@ with
                 |> Seq.map (fun kv -> KeyValuePair(kv.Key, FsAttributeValue.ToAttributeValue kv.Value)) 
                 |> cdict))
 
+type RestObject = Dictionary<string, AttributeValue>
+
 [<AbstractClass>]
 type FieldConverter() =
     abstract Type : Type
@@ -89,8 +89,8 @@ type FieldConverter() =
     abstract ConverterType  : ConverterType
 
     abstract DefaultValueUntyped : obj
-    abstract OfFieldUntyped : obj -> FsAttributeValue
-    abstract ToFieldUntyped : FsAttributeValue -> obj
+    abstract OfFieldUntyped : obj -> AttributeValue
+    abstract ToFieldUntyped : AttributeValue -> obj
 
     member __.IsScalar = 
         match __.Representation with
@@ -100,16 +100,13 @@ type FieldConverter() =
         | FieldRepresentation.Bool -> true
         | _ -> false
 
-    member __.IsOptional = __.ConverterType = ConverterType.Optional
-    member __.IsSerialized = __.ConverterType = ConverterType.Serialized
-
 [<AbstractClass>]
 type FieldConverter<'T>() =
     inherit FieldConverter()
 
     abstract DefaultValue : 'T
-    abstract OfField : 'T -> FsAttributeValue
-    abstract ToField : FsAttributeValue -> 'T
+    abstract OfField : 'T -> AttributeValue
+    abstract ToField : AttributeValue -> 'T
 
     override __.Type = typeof<'T>
     override __.DefaultValueUntyped = __.DefaultValue :> obj

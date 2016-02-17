@@ -9,6 +9,7 @@ open System.Reflection
 open Microsoft.FSharp.Reflection
 
 open Amazon.Util
+open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
 open FSharp.DynamoDB.FieldConverter
@@ -22,7 +23,7 @@ type RecordProperty =
         NoDefaultValue : bool
     }
 with
-    static member FromPropertyInfo(prop : PropertyInfo, resolver : IFieldConverterResolver) =
+    static member FromPropertyInfo (resolver : IFieldConverterResolver) (prop : PropertyInfo) =
         let attributes = prop.GetAttributes()
         let converter = 
             match tryGetAttribute<PropertySerializerAttribute> attributes with
@@ -43,62 +44,51 @@ with
             NoDefaultValue = noDefaultValue
         }
 
-type RecordConverter<'T>(ctor : obj[] -> 'T) =
+type RecordConverter<'T>(ctor : obj[] -> 'T, properties : RecordProperty []) =
     inherit FieldConverter<'T> ()
 
-    abstract Properties : RecordProperty []
-
-    member __.OfRecord (value : 'T) : KeyValuePair<string, FsAttributeValue>[] =
-        let props = __.Properties
-        let values = new ResizeArray<_>()
-        for prop in props do
+    member __.Properties = properties
+    member __.OfRecord (value : 'T) : RestObject =
+        let values = new RestObject()
+        for prop in properties do
             let field = prop.PropertyInfo.GetValue value
-            match prop.Converter.OfFieldUntyped field with
-            | Undefined -> ()
-            | av -> values.Add <| KeyValuePair(prop.Name, av)
+            let av = prop.Converter.OfFieldUntyped field
+            values.Add(prop.Name, av)
 
-        values.ToArray()
+        values
 
-    member __.ToRecord (attrs : KeyValuePair<string, FsAttributeValue>[]) =
-        let dict = cdict attrs
-        let props = __.Properties
-        let values = Array.zeroCreate<obj> props.Length
-        for i = 0 to props.Length - 1 do
-            let prop = props.[i]
+    member __.ToRecord (ro : RestObject) : 'T =
+        let values = Array.zeroCreate<obj> properties.Length
+        for i = 0 to properties.Length - 1 do
+            let prop = properties.[i]
             let notFound() = raise <| new KeyNotFoundException(sprintf "attribute %A not found." prop.Name)
-            let ok, av = dict.TryGetValue prop.Name
-            if ok then
-                match av with
-                | Undefined when prop.NoDefaultValue -> notFound()
-                | Undefined -> values.[i] <- prop.Converter.DefaultValueUntyped
-                | av -> values.[i] <- prop.Converter.ToFieldUntyped av
+            let ok, av = ro.TryGetValue prop.Name
+            if ok then values.[i] <- prop.Converter.ToFieldUntyped av
+            elif prop.NoDefaultValue then notFound()
+            else values.[i] <- prop.Converter.DefaultValueUntyped
 
+        ctor values
 
-//    let ctor = FSharpValue.PreComputeRecordConstructorInfo(typeof<'T>, true)
-//    let properties = 
-//        FSharpType.GetRecordFields(typeof<'T>, true) 
-//        |> Array.map (fun p -> RecordProperty.Define(p, resolver))
-//
-//    override __.WriteRecord value =
-//        let dict = new Dictionary<_,_>()
-//        for prop in properties do
-//            let field = prop.PropertyInfo.GetValue(value)
-//            let av = prop.Converter.WriteUntyped field
-//            dict.Add(prop.Name, av)
-//
-//        { Map = dict }
-//
-//    override __.ReadRecord ro =
-//        let dict = ro.Map
-//        let values = Array.zeroCreate<obj> properties.Length
-//        for i = 0 to properties.Length - 1 do
-//            let prop = properties.[i]
-//            let ok, av' = dict.TryGetValue prop.Name
-//            if ok then
-//                values.[i] <- prop.Converter.ReadUntyped av'
-//            elif prop.AllowDefaultValue then
-//                values.[i] <- prop.Converter.DefaultValueUntyped
-//            else
-//                raise <| new KeyNotFoundException(sprintf "attribute %A not found." prop.Name)
-//
-//        ctor.Invoke values :?> 'T
+    override __.ConverterType = ConverterType.Record
+    override __.Representation = FieldRepresentation.Map
+    override __.DefaultValue = invalidOp <| sprintf "default values not supported for records."
+
+    override __.OfField (record : 'T) =
+        let ro = __.OfRecord record in AttributeValue(M = ro)
+
+    override __.ToField a =
+        if a.IsMSet then __.ToRecord a.M
+        else invalidCast a
+
+let mkTupleConverter<'T> (resolver : IFieldConverterResolver) =
+    let ctor, rest = FSharpValue.PreComputeTupleConstructorInfo(typeof<'T>)
+    if Option.isSome rest then invalidArg (string typeof<'T>) "Tuples of arity > 7 not supported"
+    let properties = typeof<'T>.GetProperties() |> Array.map (RecordProperty.FromPropertyInfo resolver)
+    let mkRecord values = ctor.Invoke values :?> 'T
+    new RecordConverter<'T>(mkRecord, properties)
+
+let mkFSharpRecordConverter<'T> (resolver : IFieldConverterResolver) =
+    let ctor = FSharpValue.PreComputeRecordConstructorInfo(typeof<'T>, true)
+    let properties = FSharpType.GetRecordFields(typeof<'T>, true) |> Array.map (RecordProperty.FromPropertyInfo resolver)
+    let mkRecord values = ctor.Invoke values :?> 'T
+    new RecordConverter<'T>(mkRecord, properties)

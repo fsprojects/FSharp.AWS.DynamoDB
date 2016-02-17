@@ -20,13 +20,13 @@ type Test =
         [<HashKey>]
         HashKey : string
         Value : int
-        Value2 : int list
+        Value2 : int option
         Values : Set<int>
     }
 
 let table = TableContext.GetTableContext<Test>(ddb, "test", createIfNotExists = true) |> Async.RunSynchronously
 
-let value = { HashKey = "1" ; Value = 40 ; Value2 = [1;1] ; Values = Set.empty }
+let value = { HashKey = "1" ; Value = 40 ; Value2 = None ; Values = Set.empty }
 
 let key = table.PutItemAsync(value) |> Async.RunSynchronously
 

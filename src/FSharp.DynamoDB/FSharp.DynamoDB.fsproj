@@ -49,7 +49,6 @@
     <Compile Include="Utils\TypeShape.fs" />
     <Compile Include="Utils\ExprEqualityComparer.fs" />
     <Compile Include="Types.fs" />
-    <Compile Include="TypeConverter.fs" />
     <Compile Include="FieldConverter.fs" />
     <Compile Include="ValueConverters.fs" />
     <Compile Include="RecordConverter.fs" />

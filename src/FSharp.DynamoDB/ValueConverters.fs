@@ -9,12 +9,44 @@ open System.Reflection
 open Microsoft.FSharp.Core.LanguagePrimitives
 
 open Amazon.Util
+open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
 open FSharp.DynamoDB.FieldConverter
 
-let inline invalidCast (fsa:FsAttributeValue) : 'T = 
-    raise <| new InvalidCastException(sprintf "could not convert value %A to type '%O'" fsa typeof<'T>)
+type AttributeValue with
+    member inline av.IsSSSet = av.SS.Count > 0
+    member inline av.IsNSSet = av.NS.Count > 0
+    member inline av.IsBSSet = av.BS.Count > 0
+
+    member av.Print() =
+        if av.NULL then "{ NULL = true }"
+        elif av.IsBOOLSet then sprintf "{ BOOL = %b }" av.BOOL
+        elif av.S <> null then sprintf "{ S = %s }" av.S
+        elif av.N <> null then sprintf "{ N = %s }" av.N
+        elif av.B <> null then sprintf "{ N = %A }" (av.B.ToArray())
+        elif av.SS.Count > 0 then sprintf "{ SS = %A }" (Seq.toArray av.SS)
+        elif av.NS.Count > 0 then sprintf "{ SN = %A }" (Seq.toArray av.NS)
+        elif av.BS.Count > 0 then 
+            av.BS 
+            |> Seq.map (fun bs -> bs.ToArray()) 
+            |> Seq.toArray
+            |> sprintf "{ BS = %A }"
+
+        elif av.IsLSet then 
+            av.L |> Seq.map (fun av -> av.Print()) |> Seq.toArray |> sprintf "{ L = %A }"
+
+        elif av.IsMSet then 
+            av.M 
+            |> Seq.map (fun kv -> (kv.Key, kv.Value.Print())) 
+            |> Seq.toArray
+            |> sprintf "{ M = %A }"
+
+        else
+            "{ }"
+
+let inline invalidCast (av:AttributeValue) : 'T = 
+    raise <| new InvalidCastException(sprintf "could not convert value %A to type '%O'" (av.Print()) typeof<'T>)
 
 type UnSupportedField =
     static member Raise(fieldType : Type, ?reason : string) =
@@ -41,11 +73,10 @@ type BoolConverter() =
     override __.ConverterType = ConverterType.Value
 
     override __.DefaultValue = false
-    override __.OfField b = Bool b
+    override __.OfField b = AttributeValue(BOOL = b)
     override __.ToField a =
-        match a with 
-        | Bool b -> b
-        | _ -> invalidCast a
+        if a.IsBOOLSet then a.BOOL
+        else invalidCast a
 
     override __.Parse s = Boolean.Parse s
     override __.UnParse s = string s
@@ -56,15 +87,33 @@ type StringConverter() =
     override __.ConverterType = ConverterType.Value
 
     override __.DefaultValue = null
-    override __.OfField s = String s
+    override __.OfField s =
+        if isNull s then AttributeValue(NULL = true)
+        else AttributeValue(s)
+
     override __.ToField a =
-        match a with
-        | Null -> null
-        | String s -> s
-        | _ -> invalidCast a
+        if a.NULL then null
+        elif not <| isNull a.S then a.S
+        else invalidCast a
 
     override __.Parse s = s
     override __.UnParse s = s
+
+let inline mkNumericalConverter< ^N when ^N : (static member Parse : string -> ^N)> () =
+    let inline parseNum x = ( ^N : (static member Parse : string -> ^N) x)
+    { new NumRepresentableFieldConverter< ^N>() with
+        member __.Representation = FieldRepresentation.Number
+        member __.ConverterType = ConverterType.Value
+
+        member __.Parse s = parseNum s
+        member __.UnParse e = string e
+
+        member __.DefaultValue = Unchecked.defaultof< ^N>
+        member __.OfField num = AttributeValue(N = string num)
+        member __.ToField a = 
+            if not <| isNull a.N then parseNum a.N 
+            else invalidCast a
+    }
 
 type BytesConverter() =
     inherit FieldConverter<byte[]> ()
@@ -72,12 +121,15 @@ type BytesConverter() =
     override __.ConverterType = ConverterType.Value
 
     override __.DefaultValue = null
-    override __.OfField bs = Bytes bs
+    override __.OfField bs = 
+        if isNull bs then AttributeValue(NULL = true)
+        else AttributeValue(B = new MemoryStream(bs))
+
     override __.ToField a = 
-        match a with 
-        | Null -> null
-        | Bytes bs -> bs
-        | _ -> invalidCast a
+        if a.NULL then null
+        elif not <| isNull a.B then a.B.ToArray()
+        else
+            invalidCast a
 
 type GuidConverter() =
     inherit StringRepresentableFieldConverter<Guid> ()
@@ -85,11 +137,10 @@ type GuidConverter() =
     override __.ConverterType = ConverterType.Value
 
     override __.DefaultValue = Guid.Empty
-    override __.OfField g = String(string g)
+    override __.OfField g = AttributeValue(string g)
     override __.ToField a =
-        match a with
-        | String s -> Guid.Parse s
-        | _ -> invalidCast a
+        if not <| isNull a.S then Guid.Parse a.S
+        else invalidCast a
 
     override __.Parse s = Guid.Parse s
     override __.UnParse g = string g
@@ -106,8 +157,10 @@ type DateTimeOffsetConverter() =
     override __.Parse s = parse s
     override __.UnParse d = unparse d
 
-    override __.OfField d = String(unparse d)
-    override __.ToField a = match a with String s -> parse s | _ -> invalidCast a
+    override __.OfField d = AttributeValue(unparse d)
+    override __.ToField a = 
+        if not <| isNull a.S then parse a.S 
+        else invalidCast a
 
 type TimeSpanConverter() =
     inherit NumRepresentableFieldConverter<TimeSpan> ()
@@ -117,22 +170,10 @@ type TimeSpanConverter() =
     override __.Parse s = TimeSpan.FromTicks(int64 s)
     override __.UnParse t = string t.Ticks
     override __.DefaultValue = TimeSpan.Zero
-    override __.OfField t = Number(string t.Ticks)
-    override __.ToField a = match a with Number n -> TimeSpan.FromTicks(int64 n) | _ -> invalidCast a
-
-let inline mkNumericalConverter< ^N when ^N : (static member Parse : string -> ^N)> () =
-    let inline parseNum x = ( ^N : (static member Parse : string -> ^N) x)
-    { new NumRepresentableFieldConverter< ^N>() with
-        member __.Representation = FieldRepresentation.Number
-        member __.ConverterType = ConverterType.Value
-
-        member __.Parse s = parseNum s
-        member __.UnParse e = string e
-
-        member __.DefaultValue = Unchecked.defaultof< ^N>
-        member __.OfField num = Number(string num)
-        member __.ToField a = match a with Number n -> parseNum n | _ -> invalidCast a
-    }
+    override __.OfField t = AttributeValue(N = string t.Ticks)
+    override __.ToField a = 
+        if not <| isNull a.N then TimeSpan.FromTicks(int64 a.N) 
+        else invalidCast a
 
 type EnumerationConverter<'E, 'U when 'E : enum<'U>>(uconv : StringRepresentableFieldConverter<'U>) =
     inherit NumRepresentableFieldConverter<'E> ()
@@ -140,7 +181,7 @@ type EnumerationConverter<'E, 'U when 'E : enum<'U>>(uconv : StringRepresentable
     override __.ConverterType = ConverterType.Value
 
     override __.DefaultValue = Unchecked.defaultof<'E>
-    override __.OfField e = let u = EnumToValue<'E,'U> e in Number(u.ToString())
+    override __.OfField e = let u = EnumToValue<'E,'U> e in uconv.OfField u
     override __.ToField a = EnumOfValue<'U, 'E>(uconv.ToField a)
     override __.Parse s = uconv.Parse s |> EnumOfValue<'U, 'E>
     override __.UnParse e = EnumToValue<'E, 'U> e |> uconv.UnParse
@@ -148,24 +189,18 @@ type EnumerationConverter<'E, 'U when 'E : enum<'U>>(uconv : StringRepresentable
 type NullableConverter<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct>(tconv : FieldConverter<'T>) =
     inherit FieldConverter<Nullable<'T>> ()
     override __.Representation = tconv.Representation
-    override __.ConverterType = ConverterType.Optional
+    override __.ConverterType = ConverterType.Wrapper
     override __.DefaultValue = Nullable<'T>()
-    override __.OfField n = if n.HasValue then tconv.OfField n.Value else Undefined
-    override __.ToField a =
-        match a with
-        | Undefined | Null -> new Nullable<'T>()
-        | a -> new Nullable<'T>(tconv.ToField a)
+    override __.OfField n = if n.HasValue then tconv.OfField n.Value else AttributeValue(NULL = true)
+    override __.ToField a = if a.NULL then Nullable<'T> () else new Nullable<'T>(tconv.ToField a)
 
 type OptionConverter<'T>(tconv : FieldConverter<'T>) =
     inherit FieldConverter<'T option> ()
     override __.Representation = tconv.Representation
-    override __.ConverterType = ConverterType.Optional
+    override __.ConverterType = ConverterType.Wrapper
     override __.DefaultValue = None
-    override __.OfField topt = match topt with None -> Undefined | Some t -> tconv.OfField t
-    override __.ToField a =
-        match a with
-        | Undefined | Null -> None
-        | _ -> Some(tconv.ToField a)
+    override __.OfField topt = match topt with None -> AttributeValue(NULL = true) | Some t -> tconv.OfField t
+    override __.ToField a = if a.NULL then None else Some(tconv.ToField a)
 
 let mkFSharpRefConverter<'T> (tconv : FieldConverter<'T>) =
     match tconv with
@@ -204,51 +239,60 @@ type ListConverter<'List, 'T when 'List :> seq<'T>>(ctor : seq<'T> -> 'List, tco
     override __.Representation = FieldRepresentation.List
     override __.ConverterType = ConverterType.Value
     override __.DefaultValue = ctor [||]
-    override __.OfField list = list |> Seq.map tconv.OfFieldUntyped |> Seq.toArray |> List
+    override __.OfField list = 
+        if isNull list then AttributeValue(NULL = true)
+        else 
+            AttributeValue(L = (list |> Seq.map tconv.OfField |> rlist))
+
     override __.ToField a =
-        match a with
-        | Null -> ctor [||]
-        | List ts -> ts |> Seq.map tconv.ToField |> ctor
-        | _ -> invalidCast a
+        if a.NULL then ctor [||]
+        elif a.IsLSet then a.L |> Seq.map tconv.ToField |> ctor
+        else invalidCast a
 
 type BytesSetConverter<'BSet when 'BSet :> seq<byte[]>>(ctor : seq<byte []> -> 'BSet) =
     inherit FieldConverter<'BSet>()
     override __.Representation = FieldRepresentation.BytesSet
     override __.ConverterType = ConverterType.Value
     override __.DefaultValue = ctor [||]
-    override __.OfField bss = BytesSet (Seq.toArray bss)
+    override __.OfField bss = 
+        if isNull bss then AttributeValue(NULL = true)
+        else AttributeValue (BS = (bss |> Seq.map (fun bs -> new MemoryStream(bs)) |> rlist))
+
     override __.ToField a =
-        match a with
-        | Null -> ctor [||]
-        | BytesSet ns -> ctor ns
-        | _ -> invalidCast a
+        if a.NULL then ctor [||]
+        elif a.IsBSSet then a.BS |> Seq.map (fun ms -> ms.ToArray()) |> ctor
+        else invalidCast a
 
 type NumSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, tconv : NumRepresentableFieldConverter<'T>) =
     inherit FieldConverter<'Set>()
     override __.DefaultValue = ctor [||]
     override __.Representation = FieldRepresentation.NumberSet
     override __.ConverterType = ConverterType.Value
-    override __.OfField set = set |> Seq.map tconv.UnParse |> Seq.toArray |> NumberSet
+    override __.OfField set = 
+        if isNull set then AttributeValue(NULL = true)
+        else
+            AttributeValue(NS = (set |> Seq.map tconv.UnParse |> rlist))
+
     override __.ToField a =
-        match a with
-        | Null -> ctor [||]
-        | NumberSet es -> es |> Seq.map tconv.Parse |> ctor
-        | _ -> invalidCast a
+        if a.NULL then ctor [||]
+        elif a.IsNSSet then a.NS |> Seq.map tconv.Parse |> ctor
+        else invalidCast a
 
 type StringSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, tconv : StringRepresentableFieldConverter<'T>) =
     inherit FieldConverter<'Set>()
     override __.DefaultValue = ctor [||]
     override __.Representation = FieldRepresentation.StringSet
     override __.ConverterType = ConverterType.Value
-    override __.OfField set = set |> Seq.map tconv.UnParse |> Seq.toArray |> StringSet
+    override __.OfField set = 
+        if isNull set then AttributeValue(NULL = true)
+        else AttributeValue(SS = (set |> Seq.map tconv.UnParse |> rlist))
+
     override __.ToField a =
-        match a with
-        | Null -> ctor [||]
-        | StringSet es -> es |> Seq.map tconv.Parse |> ctor
-        | _ -> invalidCast a
+        if a.NULL then ctor [||]
+        elif a.IsSSSet then a.SS |> Seq.map tconv.Parse |> ctor
+        else invalidCast a
 
 let mkSetConverter<'List, 'T when 'List :> seq<'T>> ctor (tconv : FieldConverter<'T>) : FieldConverter<'List> =
-    if tconv.IsOptional then UnSupportedField.Raise typeof<'List>
     match tconv with
     | :? NumRepresentableFieldConverter<'T> as tc -> NumSetConverter<'List, 'T>(ctor, tc) :> _
     | :? StringRepresentableFieldConverter<'T> as tc -> StringSetConverter<'List, 'T>(ctor, tc) :> _
@@ -260,21 +304,19 @@ type MapConverter<'Map, 'Key, 'Value when 'Map :> seq<KeyValuePair<'Key, 'Value>
                         vconv : FieldConverter<'Value>) =
 
     inherit FieldConverter<'Map>()
-    do if vconv.IsOptional then UnSupportedField.Raise typeof<'Map>
     override __.Representation = FieldRepresentation.Map
     override __.ConverterType = ConverterType.Value
     override __.DefaultValue = ctor [||]
-    override __.OfField map = 
-        map 
-        |> Seq.map (fun kv -> KeyValuePair(kconv.UnParse kv.Key, vconv.OfField kv.Value)) 
-        |> Seq.toArray
-        |> Map
+    override __.OfField map =
+        if isNull map then AttributeValue(NULL = true)
+        else
+            let m = map |> Seq.map (fun kv -> keyVal (kconv.UnParse kv.Key) (vconv.OfField kv.Value)) |> cdict
+            AttributeValue(M = m)
 
     override __.ToField a =
-        match a with
-        | Null -> ctor [||]
-        | Map attrs -> attrs |> Seq.map (fun kv -> KeyValuePair(kconv.Parse kv.Key, vconv.ToField kv.Value)) |> ctor
-        | _ -> invalidCast a
+        if a.NULL then ctor [||]
+        elif a.IsMSet then a.M |> Seq.map (fun kv -> keyVal (kconv.Parse kv.Key) (vconv.ToField kv.Value)) |> ctor
+        else invalidCast a
 
 type SerializerConverter(propertyInfo : PropertyInfo, serializer : PropertySerializerAttribute, resolver : IFieldConverterResolver) =
     inherit FieldConverter()
