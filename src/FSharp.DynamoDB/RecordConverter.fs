@@ -60,8 +60,18 @@ type RecordConverter<'T>(ctor : obj[] -> 'T) =
         values.ToArray()
 
     member __.ToRecord (attrs : KeyValuePair<string, FsAttributeValue>[]) =
+        let dict = cdict attrs
         let props = __.Properties
-        let values = Array.
+        let values = Array.zeroCreate<obj> props.Length
+        for i = 0 to props.Length - 1 do
+            let prop = props.[i]
+            let notFound() = raise <| new KeyNotFoundException(sprintf "attribute %A not found." prop.Name)
+            let ok, av = dict.TryGetValue prop.Name
+            if ok then
+                match av with
+                | Undefined when prop.NoDefaultValue -> notFound()
+                | Undefined -> values.[i] <- prop.Converter.DefaultValueUntyped
+                | av -> values.[i] <- prop.Converter.ToFieldUntyped av
 
 
 //    let ctor = FSharpValue.PreComputeRecordConstructorInfo(typeof<'T>, true)
