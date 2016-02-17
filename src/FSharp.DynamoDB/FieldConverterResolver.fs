@@ -7,12 +7,13 @@ open System.Collections.Concurrent
 open System.IO
 open System.Reflection
 
-open Microsoft.FSharp.Core.LanguagePrimitives
+open Microsoft.FSharp.Reflection
 
 open FSharp.DynamoDB
 open FSharp.DynamoDB.TypeShape
 open FSharp.DynamoDB.FieldConverter
 open FSharp.DynamoDB.FieldConverter.ValueConverters
+open FSharp.DynamoDB.FieldConverter.RecordConverter
 
 [<AutoOpen>]
 module private ResolverImpl =
@@ -65,7 +66,6 @@ module private ResolverImpl =
                 new IFSharpOptionVisitor<FieldConverter> with
                     member __.VisitFSharpOption<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        if tconv.IsOptional then UnSupportedField.Raise typeof<'T option>
                         new OptionConverter<'T>(tconv) :> _ }
 
         | ShapeArray s ->
@@ -73,7 +73,6 @@ module private ResolverImpl =
                 new IArrayVisitor<FieldConverter> with
                     member __.VisitArray<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        if tconv.IsOptional then UnSupportedField.Raise typeof<'T option>
                         new ListConverter<'T [], 'T>(Seq.toArray, tconv) :> _ }
 
         | ShapeFSharpList s ->
@@ -81,7 +80,6 @@ module private ResolverImpl =
                 new IFSharpListVisitor<FieldConverter> with
                     member __.VisitFSharpList<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        if tconv.IsOptional then UnSupportedField.Raise typeof<'T option>
                         new ListConverter<'T list, 'T>(List.ofSeq, tconv) :> _ }
 
         | ShapeResizeArray s ->
@@ -89,7 +87,6 @@ module private ResolverImpl =
                 new IResizeArrayVisitor<FieldConverter> with
                     member __.VisitResizeArray<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        if tconv.IsOptional then UnSupportedField.Raise typeof<'T option>
                         new ListConverter<ResizeArray<'T>, 'T>(rlist, tconv) :> _ }
 
         | ShapeHashSet s ->
@@ -130,7 +127,6 @@ module private ResolverImpl =
                 new ICollectionVisitor<FieldConverter> with
                     member __.VisitCollection<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        if tconv.IsOptional then UnSupportedField.Raise typeof<'T option>
                         new ListConverter<ICollection<'T>, 'T>(Seq.toArray >> unbox, tconv) :> _ }
 
         | ShapeEnumerable s ->
@@ -138,8 +134,17 @@ module private ResolverImpl =
                 new IEnumerableVisitor<FieldConverter> with
                     member __.VisitEnumerable<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        if tconv.IsOptional then UnSupportedField.Raise typeof<'T option>
                         new ListConverter<seq<'T>, 'T>(Seq.toArray >> unbox, tconv) :> _ }
+
+        | ShapeTuple as s ->
+            s.Accept {
+                new IFunc<FieldConverter> with
+                    member __.Invoke<'T> () = mkTupleConverter<'T> resolver :> _ }
+
+        | s when FSharpType.IsRecord(t, true) ->
+            s.Accept {
+                new IFunc<FieldConverter> with
+                    member __.Invoke<'T>() = mkFSharpRecordConverter<'T> resolver :> _   }
 
         | _ -> UnSupportedField.Raise t
 

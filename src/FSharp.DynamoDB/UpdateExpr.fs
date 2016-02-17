@@ -102,7 +102,7 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
 
     let getValueExpr (conv : FieldConverter) (expr : Expr) =
         let o = evalRaw expr
-        let fav = conv.OfFieldUntyped o
+        let fav = conv.OfFieldUntyped o |> FsAttributeValue.FromAttributeValue
         getValue fav
 
     let attributes = new Dictionary<string, string * RecordProperty> ()

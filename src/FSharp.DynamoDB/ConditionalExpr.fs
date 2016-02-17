@@ -106,7 +106,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
 
         let getValueExpr (conv : FieldConverter) (expr : Expr) =
             let o = evalRaw expr
-            let fav = conv.OfFieldUntyped o
+            let fav = conv.OfFieldUntyped o |> FsAttributeValue.FromAttributeValue
             getValue fav
 
         let attributes = new Dictionary<string, string * RecordProperty> ()
@@ -161,7 +161,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             match expr with
             | SpecificCall pat (None, _, args) ->
                 let rp = args |> List.tryPick (|RecordPropertyGet|_|)
-                if rp |> Option.exists (fun rp -> rp.Converter.Representation = FieldRepresentation.Serializer) then
+                if rp |> Option.exists (fun rp -> rp.Converter.ConverterType = ConverterType.Serialized) then
                     invalidArg "expr" "cannot query serialized properties"
 
                 args |> List.map (extractOperand rp) |> Some

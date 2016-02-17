@@ -12,13 +12,14 @@ type TableKeySchema with
     static member OfKeyStructure(ks : KeyStructure) =
         let mkTableKeySchema h r = { HashKey = h ; RangeKey = r }
         let mkKeySchema (name : string) (conv : FieldConverter) =
+            if conv.ConverterType <> ConverterType.Value then
+                invalidArg name <| "DynamoDB Key attributes do not support serialization attributes."
+
             let keyType =
                 match conv.Representation with
                 | FieldRepresentation.String -> ScalarAttributeType.S
                 | FieldRepresentation.Number -> ScalarAttributeType.N
                 | FieldRepresentation.Bytes -> ScalarAttributeType.B
-                | FieldRepresentation.Serializer ->
-                    invalidArg name <| "DynamoDB Key attributes do not support serialization attributes."
                 | _ -> invalidArg name <| sprintf "Unsupported type '%O' for DynamoDB Key attribute." conv.Type
 
             { AttributeName = name ; KeyType = keyType }
