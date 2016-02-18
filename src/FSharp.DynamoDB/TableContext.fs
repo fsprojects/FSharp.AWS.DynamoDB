@@ -8,7 +8,7 @@ open Microsoft.FSharp.Quotations
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.TableOps
+open FSharp.DynamoDB.RecordSchema
 
 type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : string, record : RecordDescriptor<'TRecord>) =
 
@@ -116,7 +116,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.GetItemsAsync(keys : seq<TableKey>, ?consistentRead : bool) : Async<'TRecord[]> = async {
         let consistentRead = defaultArg consistentRead false
         let kna = new KeysAndAttributes()
-        kna.AttributesToGet.AddRange(record.Properties |> Seq.map (fun p -> p.Name))
+        kna.AttributesToGet.AddRange(record.Info.Properties |> Seq.map (fun p -> p.Name))
         kna.Keys.AddRange(keys |> Seq.map record.ToAttributeValues)
         kna.ConsistentRead <- consistentRead
         let request = new BatchGetItemRequest()

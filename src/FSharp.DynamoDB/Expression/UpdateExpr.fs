@@ -14,9 +14,9 @@ open Swensen.Unquote
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.Common
-open FSharp.DynamoDB.TypeShape
+open FSharp.DynamoDB.DynamoUtils
 open FSharp.DynamoDB.FieldConverter
+open FSharp.DynamoDB.FieldConverter.RecordConverter
 
 type AttrId = string
 
@@ -38,7 +38,7 @@ type UpdateExpression =
     {
         UpdateExprs : UpdateExpr list
         Expression : string
-        Attributes : Map<string, RecordProperty>
+        Attributes : Map<string, RecordPropertyInfo>
         Values     : Map<string, FsAttributeValue>
     }
 with
@@ -105,8 +105,8 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
         let fav = conv.OfFieldUntyped o |> FsAttributeValue.FromAttributeValue
         getValue fav
 
-    let attributes = new Dictionary<string, string * RecordProperty> ()
-    let getAttr (rp : RecordProperty) =
+    let attributes = new Dictionary<string, string * RecordPropertyInfo> ()
+    let getAttr (rp : RecordPropertyInfo) =
         let ok, found = attributes.TryGetValue rp.Name
         if ok then fst found
         else
@@ -165,7 +165,7 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
 
             | _ -> extractOperand expr |> Operand
 
-        let rec extractUpdateExpr (rp : RecordProperty) (expr : Expr) =
+        let rec extractUpdateExpr (rp : RecordPropertyInfo) (expr : Expr) =
             match expr with
             | PipeRight e | PipeLeft e -> extractUpdateExpr rp e
             | SpecificCall2 <@ Set.add @> (None, _, _, [elem; RecordPropertyGet rp']) when rp = rp' ->

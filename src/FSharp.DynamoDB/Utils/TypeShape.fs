@@ -18,7 +18,7 @@ and [<AbstractClass>] TypeShape<'T> internal () =
     inherit TypeShape()
     override __.Type = typeof<'T>
     member __.TypeCode = Type.GetTypeCode typeof<'T>
-    override __.Accept<'R> (func : IFunc<'R>) = func.Invoke<'R> ()
+    override __.Accept<'R> (func : IFunc<'R>) = func.Invoke<'T> ()
 
 and ShapeUnknown<'T> internal () =
     inherit TypeShape<'T>()

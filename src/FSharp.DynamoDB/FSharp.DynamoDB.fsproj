@@ -45,19 +45,18 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="Types.fs" />
     <Compile Include="Utils\Utils.fs" />
     <Compile Include="Utils\TypeShape.fs" />
-    <Compile Include="Utils\ExprEqualityComparer.fs" />
-    <Compile Include="Types.fs" />
-    <Compile Include="FieldConverter.fs" />
-    <Compile Include="ValueConverters.fs" />
-    <Compile Include="RecordConverter.fs" />
-    <Compile Include="FieldConverterResolver.fs" />
-    <Compile Include="Common.fs" />
-    <Compile Include="ConditionalExpr.fs" />
-    <Compile Include="UpdateExpr.fs" />
-    <Compile Include="TableOps.fs" />
-    <Compile Include="RecordInfoBuilder.fs" />
+    <Compile Include="Utils\DynamoUtils.fs" />
+    <Compile Include="FieldConverter\FieldConverter.fs" />
+    <Compile Include="FieldConverter\ValueConverters.fs" />
+    <Compile Include="FieldConverter\RecordConverter.fs" />
+    <Compile Include="FieldConverter\FieldConverterResolver.fs" />
+    <Compile Include="Expression\ExprEqualityComparer.fs" />
+    <Compile Include="Expression\ConditionalExpr.fs" />
+    <Compile Include="Expression\UpdateExpr.fs" />
+    <Compile Include="RecordSchema.fs" />
     <Compile Include="RecordDescriptor.fs" />
     <Compile Include="TableContext.fs" />
     <None Include="Script.fsx" />

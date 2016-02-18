@@ -12,60 +12,11 @@ open Amazon.Util
 open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
+open FSharp.DynamoDB.DynamoUtils
 open FSharp.DynamoDB.FieldConverter
-
-type AttributeValue with
-    member inline av.IsSSSet = av.SS.Count > 0
-    member inline av.IsNSSet = av.NS.Count > 0
-    member inline av.IsBSSet = av.BS.Count > 0
-
-    member av.Print() =
-        if av.NULL then "{ NULL = true }"
-        elif av.IsBOOLSet then sprintf "{ BOOL = %b }" av.BOOL
-        elif av.S <> null then sprintf "{ S = %s }" av.S
-        elif av.N <> null then sprintf "{ N = %s }" av.N
-        elif av.B <> null then sprintf "{ N = %A }" (av.B.ToArray())
-        elif av.SS.Count > 0 then sprintf "{ SS = %A }" (Seq.toArray av.SS)
-        elif av.NS.Count > 0 then sprintf "{ SN = %A }" (Seq.toArray av.NS)
-        elif av.BS.Count > 0 then 
-            av.BS 
-            |> Seq.map (fun bs -> bs.ToArray()) 
-            |> Seq.toArray
-            |> sprintf "{ BS = %A }"
-
-        elif av.IsLSet then 
-            av.L |> Seq.map (fun av -> av.Print()) |> Seq.toArray |> sprintf "{ L = %A }"
-
-        elif av.IsMSet then 
-            av.M 
-            |> Seq.map (fun kv -> (kv.Key, kv.Value.Print())) 
-            |> Seq.toArray
-            |> sprintf "{ M = %A }"
-
-        else
-            "{ }"
 
 let inline invalidCast (av:AttributeValue) : 'T = 
     raise <| new InvalidCastException(sprintf "could not convert value %A to type '%O'" (av.Print()) typeof<'T>)
-
-type UnSupportedField =
-    static member Raise(fieldType : Type, ?reason : string) =
-        let message = 
-            match reason with
-            | None -> sprintf "unsupported record field type '%O'" fieldType
-            | Some r -> sprintf "unsupported record field type '%O': %s" fieldType r
-
-        raise <| new ArgumentException(message)
-
-[<AbstractClass>]
-type StringRepresentableFieldConverter<'T>() =
-    inherit FieldConverter<'T>()
-    abstract Parse : string -> 'T
-    abstract UnParse : 'T -> string
-
-[<AbstractClass>]
-type NumRepresentableFieldConverter<'T>() =
-    inherit StringRepresentableFieldConverter<'T> ()
 
 type BoolConverter() =
     inherit StringRepresentableFieldConverter<bool>()
@@ -175,7 +126,7 @@ type TimeSpanConverter() =
         if not <| isNull a.N then TimeSpan.FromTicks(int64 a.N) 
         else invalidCast a
 
-type EnumerationConverter<'E, 'U when 'E : enum<'U>>(uconv : StringRepresentableFieldConverter<'U>) =
+type EnumerationConverter<'E, 'U when 'E : enum<'U>>(uconv : NumRepresentableFieldConverter<'U>) =
     inherit NumRepresentableFieldConverter<'E> ()
     override __.Representation = FieldRepresentation.Number
     override __.ConverterType = ConverterType.Value

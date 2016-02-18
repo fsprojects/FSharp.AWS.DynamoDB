@@ -14,9 +14,10 @@ open Swensen.Unquote
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.Common
 open FSharp.DynamoDB.TypeShape
+open FSharp.DynamoDB.DynamoUtils
 open FSharp.DynamoDB.FieldConverter
+open FSharp.DynamoDB.FieldConverter.RecordConverter
 
 // http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html#ConditionExpressionReference
 
@@ -48,7 +49,7 @@ type ConditionalExpression =
     {
         QueryExpr : QueryExpr
         Expression : string
-        Attributes : Map<string, RecordProperty>
+        Attributes : Map<string, RecordPropertyInfo>
         Values : Map<string, FsAttributeValue>
     }
 with
@@ -109,8 +110,8 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             let fav = conv.OfFieldUntyped o |> FsAttributeValue.FromAttributeValue
             getValue fav
 
-        let attributes = new Dictionary<string, string * RecordProperty> ()
-        let getAttr (rp : RecordProperty) =
+        let attributes = new Dictionary<string, string * RecordPropertyInfo> ()
+        let getAttr (rp : RecordPropertyInfo) =
             let ok, found = attributes.TryGetValue rp.Name
             if ok then fst found
             else
@@ -124,7 +125,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 recordInfo.Properties |> Array.tryFind(fun rp -> rp.PropertyInfo = p)
             | _ -> None
 
-        let extractOperand (rp : RecordProperty option) (expr : Expr) =
+        let extractOperand (rp : RecordPropertyInfo option) (expr : Expr) =
             match expr with
             | _ when expr.IsClosed ->
                 let conv = match rp with Some rp -> rp.Converter | None -> FieldConverter.resolveUntyped expr.Type

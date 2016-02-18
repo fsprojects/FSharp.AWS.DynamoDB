@@ -24,6 +24,11 @@ module private ResolverImpl =
             | :? StringRepresentableFieldConverter<'T> as sr -> sr
             | _ -> UnSupportedField.Raise requestingType 
 
+        let resolveNR (requestingType : Type) =
+            match resolver.Resolve<'T> () with
+            | :? NumRepresentableFieldConverter<'T> as nr -> nr
+            | _ -> UnSupportedField.Raise requestingType 
+
         match getShape t with
         | :? ShapeBool -> new BoolConverter() :> _
         | :? ShapeByte -> mkNumericalConverter<byte> () :> _
@@ -47,7 +52,7 @@ module private ResolverImpl =
             s.Accept {
                 new IEnumVisitor<FieldConverter> with
                     member __.VisitEnum<'E, 'U when 'E : enum<'U>> () =
-                        new EnumerationConverter<'E, 'U>(resolveSR typeof<'E>) :> _ }
+                        new EnumerationConverter<'E, 'U>(resolveNR typeof<'E>) :> _ }
 
         | ShapeNullable s ->
             s.Accept {
@@ -149,11 +154,18 @@ module private ResolverImpl =
         | _ -> UnSupportedField.Raise t
 
     type CachedResolver private () as self =
-        let cache = new System.Collections.Concurrent.ConcurrentDictionary<Type, FieldConverter>()
-        let resolve t = cache.GetOrAdd(t, resolveFieldConverter self)
-        static let instance = new CachedResolver()
+        static let globalCache = new ConcurrentDictionary<Type, FieldConverter>()
+        let stack = new Stack<Type>()
+        let resolve t = 
+            if stack.Contains t then
+                UnSupportedField.Raise(t, "recursive types not supported.")
+                
+            stack.Push t
+            let conv = globalCache.GetOrAdd(t, resolveFieldConverter self)
+            let _ = stack.Pop()
+            conv
 
-        static member Instance = instance :> IFieldConverterResolver
+        static member Create() = new CachedResolver() :> IFieldConverterResolver
 
         interface IFieldConverterResolver with
             member __.Resolve(t : Type) = resolve t
@@ -162,6 +174,5 @@ module private ResolverImpl =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module FieldConverter =
 
-    let resolver = CachedResolver.Instance
-    let resolveUntyped (t : Type) = CachedResolver.Instance.Resolve t
-    let resolve<'T> () = CachedResolver.Instance.Resolve<'T> ()
+    let resolveUntyped (t : Type) = CachedResolver.Create().Resolve t
+    let resolve<'T> () = CachedResolver.Create().Resolve<'T> ()

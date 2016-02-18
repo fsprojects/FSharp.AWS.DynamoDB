@@ -1,29 +1,9 @@
-﻿namespace FSharp.DynamoDB.FieldConverter
+﻿module internal FSharp.DynamoDB.DynamoUtils
 
-open System
 open System.IO
 open System.Collections.Generic
 
 open Amazon.DynamoDBv2.Model
-
-open FSharp.DynamoDB
-
-type FieldRepresentation =
-    | Number        = 01
-    | String        = 02
-    | Bool          = 03
-    | Bytes         = 04
-    | StringSet     = 05
-    | NumberSet     = 06
-    | BytesSet      = 07
-    | List          = 08
-    | Map           = 09
-
-type ConverterType =
-    | Value         = 01
-    | Wrapper       = 02
-    | Record        = 03
-    | Serialized    = 04
 
 type FsAttributeValue =
     | Null
@@ -80,39 +60,34 @@ with
                 |> Seq.map (fun kv -> KeyValuePair(kv.Key, FsAttributeValue.ToAttributeValue kv.Value)) 
                 |> cdict))
 
-type RestObject = Dictionary<string, AttributeValue>
 
-[<AbstractClass>]
-type FieldConverter() =
-    abstract Type : Type
-    abstract Representation : FieldRepresentation
-    abstract ConverterType  : ConverterType
+type AttributeValue with
+    member inline av.IsSSSet = av.SS.Count > 0
+    member inline av.IsNSSet = av.NS.Count > 0
+    member inline av.IsBSSet = av.BS.Count > 0
 
-    abstract DefaultValueUntyped : obj
-    abstract OfFieldUntyped : obj -> AttributeValue
-    abstract ToFieldUntyped : AttributeValue -> obj
+    member av.Print() =
+        if av.NULL then "{ NULL = true }"
+        elif av.IsBOOLSet then sprintf "{ BOOL = %b }" av.BOOL
+        elif av.S <> null then sprintf "{ S = %s }" av.S
+        elif av.N <> null then sprintf "{ N = %s }" av.N
+        elif av.B <> null then sprintf "{ N = %A }" (av.B.ToArray())
+        elif av.SS.Count > 0 then sprintf "{ SS = %A }" (Seq.toArray av.SS)
+        elif av.NS.Count > 0 then sprintf "{ SN = %A }" (Seq.toArray av.NS)
+        elif av.BS.Count > 0 then 
+            av.BS 
+            |> Seq.map (fun bs -> bs.ToArray()) 
+            |> Seq.toArray
+            |> sprintf "{ BS = %A }"
 
-    member __.IsScalar = 
-        match __.Representation with
-        | FieldRepresentation.Number
-        | FieldRepresentation.String
-        | FieldRepresentation.Bytes
-        | FieldRepresentation.Bool -> true
-        | _ -> false
+        elif av.IsLSet then 
+            av.L |> Seq.map (fun av -> av.Print()) |> Seq.toArray |> sprintf "{ L = %A }"
 
-[<AbstractClass>]
-type FieldConverter<'T>() =
-    inherit FieldConverter()
+        elif av.IsMSet then 
+            av.M 
+            |> Seq.map (fun kv -> (kv.Key, kv.Value.Print())) 
+            |> Seq.toArray
+            |> sprintf "{ M = %A }"
 
-    abstract DefaultValue : 'T
-    abstract OfField : 'T -> AttributeValue
-    abstract ToField : AttributeValue -> 'T
-
-    override __.Type = typeof<'T>
-    override __.DefaultValueUntyped = __.DefaultValue :> obj
-    override __.OfFieldUntyped o = __.OfField(o :?> 'T)
-    override __.ToFieldUntyped av = __.ToField av :> obj
-
-type IFieldConverterResolver =
-    abstract Resolve : Type -> FieldConverter
-    abstract Resolve<'T> : unit -> FieldConverter<'T>
+        else
+            "{ }"

@@ -15,14 +15,40 @@ open FSharp.DynamoDB
 open FSharp.DynamoDB.FieldConverter
 open FSharp.DynamoDB.FieldConverter.ValueConverters
 
-type RecordProperty =
+[<CustomEquality; NoComparison>]
+type RecordInfo =
+    {
+        Type : Type
+        ConstructorInfo : ConstructorInfo
+        Properties : RecordPropertyInfo []
+    }
+with
+    override r.Equals o =
+        match o with :? RecordInfo as r' -> r.Type = r'.Type | _ -> false
+
+    override r.GetHashCode() = hash r.Type
+
+and [<CustomEquality; NoComparison>] 
+  RecordPropertyInfo =
     {
         Name : string
         PropertyInfo : PropertyInfo
         Converter : FieldConverter
         NoDefaultValue : bool
+        NestedRecord : RecordInfo option
+        Attributes : Attribute[]
     }
 with
+    member rp.TryGetAttribute<'Attribute when 'Attribute :> Attribute> () = tryGetAttribute<'Attribute> rp.Attributes
+    member rp.GetAttributes<'Attribute when 'Attribute :> Attribute> () = getAttributes<'Attribute> rp.Attributes
+    member rp.ContainsAttribute<'Attribute when 'Attribute :> Attribute> () = containsAttribute<'Attribute> rp.Attributes
+    member rp.IsNestedRecord = Option.isSome rp.NestedRecord
+
+    override r.Equals o =
+        match o with :? RecordPropertyInfo as r' -> r.PropertyInfo = r'.PropertyInfo | _ -> false
+
+    override r.GetHashCode() = hash r.PropertyInfo
+
     static member FromPropertyInfo (resolver : IFieldConverterResolver) (prop : PropertyInfo) =
         let attributes = prop.GetAttributes()
         let converter = 
@@ -41,13 +67,20 @@ with
             Name = name
             PropertyInfo = prop
             Converter = converter
+            NestedRecord = match box converter with :? IRecordConverter as rc -> Some rc.RecordInfo | _ -> None
             NoDefaultValue = noDefaultValue
+            Attributes = attributes
         }
 
-type RecordConverter<'T>(ctor : obj[] -> 'T, properties : RecordProperty []) =
+and private IRecordConverter =
+    abstract RecordInfo : RecordInfo
+
+type RecordConverter<'T>(ctorInfo : ConstructorInfo, properties : RecordPropertyInfo []) =
     inherit FieldConverter<'T> ()
 
-    member __.Properties = properties
+    let recordInfo = { Type = typeof<'T> ; Properties = properties ; ConstructorInfo = ctorInfo }
+
+    member __.RecordInfo = recordInfo
     member __.OfRecord (value : 'T) : RestObject =
         let values = new RestObject()
         for prop in properties do
@@ -67,7 +100,10 @@ type RecordConverter<'T>(ctor : obj[] -> 'T, properties : RecordProperty []) =
             elif prop.NoDefaultValue then notFound()
             else values.[i] <- prop.Converter.DefaultValueUntyped
 
-        ctor values
+        ctorInfo.Invoke values :?> 'T
+
+    interface IRecordConverter with
+        member __.RecordInfo = recordInfo
 
     override __.ConverterType = ConverterType.Record
     override __.Representation = FieldRepresentation.Map
@@ -83,12 +119,11 @@ type RecordConverter<'T>(ctor : obj[] -> 'T, properties : RecordProperty []) =
 let mkTupleConverter<'T> (resolver : IFieldConverterResolver) =
     let ctor, rest = FSharpValue.PreComputeTupleConstructorInfo(typeof<'T>)
     if Option.isSome rest then invalidArg (string typeof<'T>) "Tuples of arity > 7 not supported"
-    let properties = typeof<'T>.GetProperties() |> Array.map (RecordProperty.FromPropertyInfo resolver)
-    let mkRecord values = ctor.Invoke values :?> 'T
-    new RecordConverter<'T>(mkRecord, properties)
+    let properties = typeof<'T>.GetProperties() |> Array.map (RecordPropertyInfo.FromPropertyInfo resolver)
+    new RecordConverter<'T>(ctor, properties)
 
 let mkFSharpRecordConverter<'T> (resolver : IFieldConverterResolver) =
     let ctor = FSharpValue.PreComputeRecordConstructorInfo(typeof<'T>, true)
-    let properties = FSharpType.GetRecordFields(typeof<'T>, true) |> Array.map (RecordProperty.FromPropertyInfo resolver)
+    let properties = FSharpType.GetRecordFields(typeof<'T>, true) |> Array.map (RecordPropertyInfo.FromPropertyInfo resolver)
     let mkRecord values = ctor.Invoke values :?> 'T
-    new RecordConverter<'T>(mkRecord, properties)
+    new RecordConverter<'T>(ctor, properties)
