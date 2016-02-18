@@ -28,6 +28,7 @@ type QueryExpr =
     | Between of Operand * Operand * Operand
     | BeginsWith of attr:string * valId:string
     | Contains of attr:string * Operand
+    | Attribute_Exists of attr:string
 
 and Comparator =
     | EQ
@@ -83,6 +84,7 @@ let queryExprToString (qExpr : QueryExpr) =
         | Between (v,l,u) -> ! "( " ; writeOp v ; ! " BETWEEN " ; writeOp l ; ! " AND " ; writeOp u ; ! " )"
         | BeginsWith (attr, valId) -> ! "( begins_with ( " ; ! attr ; ! ", " ; ! valId ; !" ))"
         | Contains (attr, op) -> ! "( contains ( " ; !attr ; !", " ; writeOp op ; !" ))"
+        | Attribute_Exists attr -> ! "( attribute_exists ( " ; !attr ; ! "))"
 
     aux qExpr
     sb.ToString()
@@ -131,33 +133,30 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 | SpecificCall2 <@ snd @> (None, _, _, [e]) -> extractProps (Choice2Of2 2 :: props) e
                 | _ -> None
 
-            let checkProperty isLast (rp : RecordPropertyInfo) =
+            let checkProperty (rp : RecordPropertyInfo) =
                 if rp.Converter.ConverterType = ConverterType.Serialized then
                     invalidArg "expr" "cannot perform queries on serialized properties."
-
-                if isLast && rp.Converter.ConverterType = ConverterType.Record then
-                    invalidArg "expr" "cannot perform queries on record values."
 
             let rec resolveRecordProps acc (ctx : RecordInfo option) curr =
                 match curr with
                 | [] -> Some(List.head acc, List.rev acc)
                 | Choice1Of2 p :: tail ->
                     let rp = ctx.Value.Properties |> Array.find (fun rp -> rp.PropertyInfo = p)
-                    checkProperty (List.isEmpty tail) rp
+                    checkProperty rp
                     resolveRecordProps (rp :: acc) rp.NestedRecord tail
 
                 | Choice2Of2 i :: tail -> 
                     let rp = ctx.Value.Properties.[i-1]
-                    checkProperty (List.isEmpty tail) rp
+                    checkProperty rp
                     resolveRecordProps (rp :: acc) rp.NestedRecord tail
 
             extractProps [] e |> Option.bind (resolveRecordProps [] (Some recordInfo))
                 
 
-        let extractOperand (rp : RecordPropertyInfo option) (expr : Expr) =
+        let extractOperand (conv : FieldConverter option) (expr : Expr) =
             match expr with
             | _ when expr.IsClosed ->
-                let conv = match rp with Some rp -> rp.Converter | None -> FieldConverter.resolveUntyped expr.Type
+                let conv = match conv with Some c -> c | None -> FieldConverter.resolveUntyped expr.Type
                 let id = getValueExpr conv expr
                 Value id
 
@@ -173,7 +172,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 let id = getAttr path
                 SizeOf id
 
-            | SpecificProperty <@ List.length @> (None, _, [RecordPropertyGet (_,path)]) ->
+            | SpecificCall2 <@ List.length @> (None, _, _, [RecordPropertyGet (_,path)]) ->
                 let id = getAttr path
                 SizeOf id
 
@@ -181,7 +180,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 let id = getAttr path
                 SizeOf id
 
-            | SpecificProperty <@ Set.count @> (None, _, [RecordPropertyGet (_,path)]) ->
+            | SpecificCall2 <@ Set.count @> (None, _, _, [RecordPropertyGet (_,path)]) ->
                 let id = getAttr path
                 SizeOf id
 
@@ -193,7 +192,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 let id = getAttr path
                 SizeOf id
 
-            | SpecificProperty <@ Array.length @> (None, _, [RecordPropertyGet (_,path)]) ->
+            | SpecificCall2 <@ Array.length @> (None, _, _, [RecordPropertyGet (_,path)]) ->
                 let id = getAttr path
                 SizeOf id
 
@@ -202,8 +201,8 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
         let (|Comparison|_|) (pat : Expr) (expr : Expr) =
             match expr with
             | SpecificCall pat (None, _, args) ->
-                let rp = args |> List.tryPick (|RecordPropertyGet|_|) |> Option.map fst
-                args |> List.map (extractOperand rp) |> Some
+                let conv = args |> List.tryPick (|RecordPropertyGet|_|) |> Option.map (fun (rp,_) -> rp.Converter)
+                args |> List.map (extractOperand conv) |> Some
 
             | _ -> None
 
@@ -253,38 +252,44 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
 
             | SpecificCall2 <@ fun (x:string) y -> x.Contains y @> (Some (RecordPropertyGet (rp, path)), _, _, [value]) when value.IsClosed ->
                 let attrId = getAttr path
-                let valId = extractOperand (Some rp) value
+                let valId = extractOperand None value
                 Contains(attrId, valId)
 
             | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; RecordPropertyGet (rp,path)]) when elem.IsClosed ->
                 let attrId = getAttr path
-                let valId = extractOperand (Some rp) elem
+                let valId = extractOperand (Some (getEconv rp.Converter)) elem
                 Contains(attrId, valId)
 
             | SpecificCall2 <@ fun (x:Set<_>) e -> x.Contains e @> (Some(RecordPropertyGet (rp,path)), _, _, [elem]) when elem.IsClosed ->
                 let attrId = getAttr path
-                let valId = extractOperand (Some rp) elem
+                let valId = extractOperand (Some (getEconv rp.Converter)) elem
                 Contains(attrId, valId)
 
             | SpecificCall2 <@ fun (x : HashSet<_>) y -> x.Contains y @> (Some(RecordPropertyGet (rp,path)), _, _, [elem]) when elem.IsClosed ->
                 let attrId = getAttr path
-                let valId = extractOperand (Some rp) elem
+                let valId = extractOperand (Some (getEconv rp.Converter)) elem
                 Contains(attrId, valId)
 
-            | SpecificCall2 <@ Map.containsKey @> (None, _, _, [elem; RecordPropertyGet (rp,path)]) when elem.IsClosed ->
-                let attrId = getAttr path
-                let valId = extractOperand (Some rp) elem
-                Contains(attrId, valId)
+            | SpecificCall2 <@ Map.containsKey @> (None, _, _, [key; RecordPropertyGet (_,path)]) when key.IsClosed ->
+                let key = evalRaw key
+                if not <| isValidFieldName key then
+                    invalidArg key "map key must be alphanumeric not starting with a digit"
+                let path = sprintf "%s.%s" (getAttr path) key
+                Attribute_Exists path
 
-            | SpecificCall2 <@ fun (x : Map<_,_>) y -> x.ContainsKey y @> (Some(RecordPropertyGet (rp,path)), _, _, [elem]) when elem.IsClosed ->
-                let attrId = getAttr path
-                let valId = extractOperand (Some rp) elem
-                Contains(attrId, valId)
+            | SpecificCall2 <@ fun (x : Map<_,_>) y -> x.ContainsKey y @> (Some(RecordPropertyGet (_,path)), _, _, [key]) when key.IsClosed ->
+                let key = evalRaw key
+                if not <| isValidFieldName key then
+                    invalidArg key "map key must be alphanumeric not starting with a digit"
+                let path = sprintf "%s.%s" (getAttr path) key
+                Attribute_Exists path
 
-            | SpecificCall2 <@ fun (x : Dictionary<_,_>) y -> x.ContainsKey y @> (Some(RecordPropertyGet (rp,path)), _, _, [elem]) when elem.IsClosed ->
-                let attrId = getAttr path
-                let valId = extractOperand (Some rp) elem
-                Contains(attrId, valId)
+            | SpecificCall2 <@ fun (x : Dictionary<_,_>) y -> x.ContainsKey y @> (Some(RecordPropertyGet (rp,path)), _, _, [key]) when key.IsClosed ->
+                let key = evalRaw key
+                if not <| isValidFieldName key then
+                    invalidArg key "map key must be alphanumeric not starting with a digit"
+                let path = sprintf "%s.%s" (getAttr path) key
+                Attribute_Exists path
 
             | _ -> invalidQuery()
 

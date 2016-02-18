@@ -68,6 +68,9 @@ type StringRepresentableFieldConverter<'T>() =
 type NumRepresentableFieldConverter<'T>() =
     inherit StringRepresentableFieldConverter<'T> ()
 
+type ICollectionConverter =
+    abstract ElementConverter : FieldConverter
+
 type IFieldConverterResolver =
     abstract Resolve : Type -> FieldConverter
     abstract Resolve<'T> : unit -> FieldConverter<'T>
@@ -78,6 +81,8 @@ module internal FieldConveterUtils =
     let inline invalidCast (av:AttributeValue) : 'T = 
         let msg = sprintf "could not convert value %A to type '%O'" (av.Print()) typeof<'T>
         raise <| new InvalidCastException(msg)
+
+    let getEconv (conv : FieldConverter) = (unbox<ICollectionConverter> conv).ElementConverter
 
     type UnSupportedField =
         static member Raise(fieldType : Type, ?reason : string) =

@@ -17,9 +17,10 @@ open FSharp.DynamoDB
 open FSharp.DynamoDB.FieldConverter
 
 let private fieldNameRegex = new Regex("^[0-9a-zA-Z]+", RegexOptions.Compiled)
-let validateFieldName (name : string) =
-    if not <| fieldNameRegex.IsMatch name || Char.IsDigit name.[0] then
-        invalidArg name "invalid record field name; must be alphanumeric and should not begin with a number."
+let isValidFieldName (name : string) =
+    fieldNameRegex.IsMatch name && not <| Char.IsDigit name.[0] 
+
+//        
     
 
 [<CustomEquality; NoComparison>]
@@ -70,7 +71,8 @@ with
             | Some cn -> cn.Name
             | None -> prop.Name
 
-        validateFieldName name
+        if not <| isValidFieldName name then
+            invalidArg name "invalid record field name; must be alphanumeric and should not begin with a number."
 
         {
             Name = name

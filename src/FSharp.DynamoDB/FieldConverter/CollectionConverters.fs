@@ -27,6 +27,9 @@ type ListConverter<'List, 'T when 'List :> seq<'T>>(ctor : seq<'T> -> 'List, isE
         elif a.IsLSet then a.L |> Seq.map tconv.ToField |> ctor
         else invalidCast a
 
+    interface ICollectionConverter with
+        member __.ElementConverter = tconv :> _
+
 type BytesSetConverter<'BSet when 'BSet :> seq<byte[]>>(ctor : seq<byte []> -> 'BSet, isEmpty : 'BSet -> bool) =
     inherit FieldConverter<'BSet>()
     override __.Representation = FieldRepresentation.BytesSet
@@ -40,6 +43,9 @@ type BytesSetConverter<'BSet when 'BSet :> seq<byte[]>>(ctor : seq<byte []> -> '
         if a.NULL then ctor [||]
         elif a.IsBSSet then a.BS |> Seq.map (fun ms -> ms.ToArray()) |> ctor
         else invalidCast a
+
+    interface ICollectionConverter with
+        member __.ElementConverter = new BytesConverter() :> _
 
 type NumSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, isEmpty : 'Set -> bool, tconv : NumRepresentableFieldConverter<'T>) =
     inherit FieldConverter<'Set>()
@@ -56,6 +62,9 @@ type NumSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, isE
         elif a.IsNSSet then a.NS |> Seq.map tconv.Parse |> ctor
         else invalidCast a
 
+    interface ICollectionConverter with
+        member __.ElementConverter = tconv :> _
+
 type StringSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, isEmpty : 'Set -> bool, tconv : StringRepresentableFieldConverter<'T>) =
     inherit FieldConverter<'Set>()
     override __.DefaultValue = ctor [||]
@@ -69,6 +78,9 @@ type StringSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, 
         if a.NULL then ctor [||]
         elif a.IsSSSet then a.SS |> Seq.map tconv.Parse |> ctor
         else invalidCast a
+
+    interface ICollectionConverter with
+        member __.ElementConverter = tconv :> _
 
 let mkSetConverter<'Set, 'T when 'Set :> seq<'T>> ctor isEmpty (tconv : FieldConverter<'T>) : FieldConverter<'Set> =
     match tconv with
@@ -94,3 +106,6 @@ type MapConverter<'Map, 'Value when 'Map :> seq<KeyValuePair<string, 'Value>>>
         if a.NULL then ctor [||]
         elif a.IsMSet then a.M |> Seq.map (fun kv -> keyVal kv.Key (vconv.ToField kv.Value)) |> ctor
         else invalidCast a
+
+    interface ICollectionConverter with
+        member __.ElementConverter = vconv :> _

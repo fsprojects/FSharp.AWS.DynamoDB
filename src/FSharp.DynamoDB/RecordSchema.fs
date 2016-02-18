@@ -67,7 +67,9 @@ with
             | [||] -> invalidArg (string recordInfo.Type) "Records carrying the RangeKeyConstant attribute must specify a RangeKey property."
             | [|rangeKeyP|] -> 
                 let hkca = Option.get hkcaOpt
-                validateFieldName hkca.Name
+                if not <| isValidFieldName hkca.Name then
+                    invalidArg hkca.Name "invalid hashkey name; must be alphanumeric and should not begin with a number."
+
                 if recordInfo.Properties |> Array.exists(fun p -> p.Name = hkca.Name) then
                     invalidArg (string recordInfo.Type) "Default HashKey attribute contains conflicting name."
 
