@@ -141,7 +141,15 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 let id = getAttr rp'
                 SizeOf id
 
+            | SpecificProperty <@ List.length @> (None, _, [RecordPropertyGet rp']) ->
+                let id = getAttr rp'
+                SizeOf id
+
             | SpecificProperty <@ fun (s : Set<_>) -> s.Count @> (Some (RecordPropertyGet rp'), _, []) ->
+                let id = getAttr rp'
+                SizeOf id
+
+            | SpecificProperty <@ Set.count @> (None, _, [RecordPropertyGet rp']) ->
                 let id = getAttr rp'
                 SizeOf id
 
@@ -150,6 +158,10 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 SizeOf id
 
             | SpecificProperty <@ fun (a : _ []) -> a.Length @> (Some (RecordPropertyGet rp'), _, []) ->
+                let id = getAttr rp'
+                SizeOf id
+
+            | SpecificProperty <@ Array.length @> (None, _, [RecordPropertyGet rp']) ->
                 let id = getAttr rp'
                 SizeOf id
 
