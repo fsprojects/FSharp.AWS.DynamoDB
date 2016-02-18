@@ -29,12 +29,12 @@ type Test =
 
 let table = TableContext.GetTableContext<Test>(ddb, "test", createIfNotExists = true) |> Async.RunSynchronously
 
-let value = { HashKey = "1" ; Value = 40 ; Value2 = None ; Values = { A = "τεστ" ; B = System.Reflection.BindingFlags.Instance } }
+let value = { HashKey = "1" ; Value = 40 ; Value2 = None ; Values = { A = "foo" ; B = System.Reflection.BindingFlags.Instance } }
 
 let key = table.PutItemAsync(value) |> Async.RunSynchronously
 
 table.GetItemAsync key |> Async.RunSynchronously
-table.PutItemAsync({ value with Value2 = None}, <@ fun r -> r.Values.A = "τεστ" @>) |> Async.RunSynchronously
+table.PutItemAsync({ value with Value2 = None}, <@ fun r -> r.Values.A = "foo" && r.Values.B = System.Reflection.BindingFlags. @>) |> Async.RunSynchronously
 
 table.UpdateItemAsync(key, <@ fun r -> { r with Values = r.Values + set [42] } @>) |> Async.RunSynchronously
 

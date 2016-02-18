@@ -49,6 +49,14 @@ module internal Utils =
     let containsAttribute<'Attribute when 'Attribute :> System.Attribute> (attrs : seq<Attribute>) : bool =
         attrs |> Seq.exists(fun a -> a :? 'Attribute)
 
+    [<RequireQualifiedAccess>]
+    module List =
+        let rec last (ts : 'T list) =
+            match ts with
+            | [] -> invalidArg "ts" "list is empty"
+            | t :: [] -> t
+            | _ :: tail -> last tail
+
     type MemberInfo with
         member m.TryGetAttribute<'Attribute when 'Attribute :> System.Attribute> () : 'Attribute option =
             m.GetCustomAttributes(true) |> Seq.map unbox<Attribute> |> tryGetAttribute

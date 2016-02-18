@@ -2,6 +2,7 @@
 module internal FSharp.DynamoDB.FieldConverter.RecordConverter
 
 open System
+open System.Text.RegularExpressions
 open System.Collections
 open System.Collections.Generic
 open System.IO
@@ -14,6 +15,12 @@ open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
 open FSharp.DynamoDB.FieldConverter
+
+let private fieldNameRegex = new Regex("^[0-9a-zA-Z]+", RegexOptions.Compiled)
+let validateFieldName (name : string) =
+    if not <| fieldNameRegex.IsMatch name || Char.IsDigit name.[0] then
+        invalidArg name "invalid record field name; must be alphanumeric and should not begin with a number."
+    
 
 [<CustomEquality; NoComparison>]
 type RecordInfo =
@@ -35,6 +42,8 @@ and [<CustomEquality; NoComparison>]
         PropertyInfo : PropertyInfo
         Converter : FieldConverter
         NoDefaultValue : bool
+        IsHashKey : bool
+        IsRangeKey : bool
         NestedRecord : RecordInfo option
         Attributes : Attribute[]
     }
@@ -61,14 +70,16 @@ with
             | Some cn -> cn.Name
             | None -> prop.Name
 
-        let noDefaultValue = containsAttribute<NoDefaultValueAttribute> attributes
+        validateFieldName name
 
         {
             Name = name
             PropertyInfo = prop
             Converter = converter
+            IsHashKey = containsAttribute<HashKeyAttribute> attributes
+            IsRangeKey = containsAttribute<RangeKeyAttribute> attributes
+            NoDefaultValue = containsAttribute<NoDefaultValueAttribute> attributes
             NestedRecord = match box converter with :? IRecordConverter as rc -> Some rc.RecordInfo | _ -> None
-            NoDefaultValue = noDefaultValue
             Attributes = attributes
         }
 

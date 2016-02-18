@@ -52,21 +52,22 @@ with
     static member FromRecordInfo (recordInfo : RecordInfo) =
         let hkcaOpt = recordInfo.Type.TryGetAttribute<HashKeyConstantAttribute> ()
 
-        match recordInfo.Properties |> Array.filter (fun p -> p.ContainsAttribute<HashKeyAttribute>()) with
+        match recordInfo.Properties |> Array.filter (fun p -> p.IsHashKey) with
         | [|hashKeyP|] when Option.isSome hkcaOpt ->
             invalidArg (string recordInfo.Type) "Cannot attach HashKey attribute to records containing RangeKeyConstant attribute."
 
         | [|hashKeyP|] ->
-            match recordInfo.Properties |> Array.filter (fun p -> p.ContainsAttribute<RangeKeyAttribute>()) with
+            match recordInfo.Properties |> Array.filter (fun p -> p.IsRangeKey) with
             | [||] -> HashKeyOnly hashKeyP
             | [|rangeKeyP|] -> Combined(hashKeyP, rangeKeyP)
             | _ -> invalidArg (string recordInfo.Type) "Found more than one record fields carrying the RangeKey attribute."
 
         | [||] when Option.isSome hkcaOpt ->
-            match recordInfo.Properties |> Array.filter (fun p -> p.ContainsAttribute<RangeKeyAttribute>()) with
+            match recordInfo.Properties |> Array.filter (fun p -> p.IsRangeKey) with
             | [||] -> invalidArg (string recordInfo.Type) "Records carrying the RangeKeyConstant attribute must specify a RangeKey property."
             | [|rangeKeyP|] -> 
                 let hkca = Option.get hkcaOpt
+                validateFieldName hkca.Name
                 if recordInfo.Properties |> Array.exists(fun p -> p.Name = hkca.Name) then
                     invalidArg (string recordInfo.Type) "Default HashKey attribute contains conflicting name."
 

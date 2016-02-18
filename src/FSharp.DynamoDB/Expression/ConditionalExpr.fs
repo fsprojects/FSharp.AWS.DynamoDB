@@ -107,20 +107,52 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             let fav = conv.OfFieldUntyped o |> FsAttributeValue.FromAttributeValue
             getValue fav
 
-        let attributes = new Dictionary<string, string * RecordPropertyInfo> ()
-        let getAttr (rp : RecordPropertyInfo) =
-            let ok, found = attributes.TryGetValue rp.Name
-            if ok then fst found
-            else
-                let name = sprintf "#ATTR%d" attributes.Count
-                attributes.Add(rp.Name, (name, rp))
-                name
+        let attributes = new Dictionary<RecordPropertyInfo, string> ()
+        let getAttr (rp : RecordPropertyInfo list) =
+            let ok, found = attributes.TryGetValue (List.head rp)
+            let name =
+                if ok then found
+                else
+                    let name = sprintf "#ATTR%d" attributes.Count
+                    attributes.Add(List.head rp, name)
+                    name
+
+            seq {
+                yield name
+                for p in List.tail rp -> p.Name 
+            } |> String.concat "."
 
         let (|RecordPropertyGet|_|) (e : Expr) =
-            match e with
-            | PropertyGet(Some (Var r'), p, []) when r = r' ->
-                recordInfo.Properties |> Array.tryFind(fun rp -> rp.PropertyInfo = p)
-            | _ -> None
+            let rec extractProps props e =
+                match e with
+                | PropertyGet(Some (Var r'), p, []) when r = r' -> Some (Choice1Of2 p :: props)
+                | PropertyGet(Some e, p, []) -> extractProps (Choice1Of2 p :: props) e
+                | SpecificCall2 <@ fst @> (None, _, _, [e]) -> extractProps (Choice2Of2 1 :: props) e
+                | SpecificCall2 <@ snd @> (None, _, _, [e]) -> extractProps (Choice2Of2 2 :: props) e
+                | _ -> None
+
+            let checkProperty isLast (rp : RecordPropertyInfo) =
+                if rp.Converter.ConverterType = ConverterType.Serialized then
+                    invalidArg "expr" "cannot perform queries on serialized properties."
+
+                if isLast && rp.Converter.ConverterType = ConverterType.Record then
+                    invalidArg "expr" "cannot perform queries on record values."
+
+            let rec resolveRecordProps acc (ctx : RecordInfo option) curr =
+                match curr with
+                | [] -> Some(List.head acc, List.rev acc)
+                | Choice1Of2 p :: tail ->
+                    let rp = ctx.Value.Properties |> Array.find (fun rp -> rp.PropertyInfo = p)
+                    checkProperty (List.isEmpty tail) rp
+                    resolveRecordProps (rp :: acc) rp.NestedRecord tail
+
+                | Choice2Of2 i :: tail -> 
+                    let rp = ctx.Value.Properties.[i-1]
+                    checkProperty (List.isEmpty tail) rp
+                    resolveRecordProps (rp :: acc) rp.NestedRecord tail
+
+            extractProps [] e |> Option.bind (resolveRecordProps [] (Some recordInfo))
+                
 
         let extractOperand (rp : RecordPropertyInfo option) (expr : Expr) =
             match expr with
@@ -129,40 +161,40 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 let id = getValueExpr conv expr
                 Value id
 
-            | RecordPropertyGet rp' ->
-                let id = getAttr rp'
+            | RecordPropertyGet (_,path) ->
+                let id = getAttr path
                 Attribute id
 
-            | SpecificProperty <@ fun (s : string) -> s.Length @> (Some (RecordPropertyGet rp'), _, []) ->
-                let id = getAttr rp'
+            | SpecificProperty <@ fun (s : string) -> s.Length @> (Some (RecordPropertyGet (_,path)), _, []) ->
+                let id = getAttr path
                 SizeOf id
 
-            | SpecificProperty <@ fun (l : _ list) -> l.Length @> (Some (RecordPropertyGet rp'), _, []) ->
-                let id = getAttr rp'
+            | SpecificProperty <@ fun (l : _ list) -> l.Length @> (Some (RecordPropertyGet (_,path)), _, []) ->
+                let id = getAttr path
                 SizeOf id
 
-            | SpecificProperty <@ List.length @> (None, _, [RecordPropertyGet rp']) ->
-                let id = getAttr rp'
+            | SpecificProperty <@ List.length @> (None, _, [RecordPropertyGet (_,path)]) ->
+                let id = getAttr path
                 SizeOf id
 
-            | SpecificProperty <@ fun (s : Set<_>) -> s.Count @> (Some (RecordPropertyGet rp'), _, []) ->
-                let id = getAttr rp'
+            | SpecificProperty <@ fun (s : Set<_>) -> s.Count @> (Some (RecordPropertyGet (_,path)), _, []) ->
+                let id = getAttr path
                 SizeOf id
 
-            | SpecificProperty <@ Set.count @> (None, _, [RecordPropertyGet rp']) ->
-                let id = getAttr rp'
+            | SpecificProperty <@ Set.count @> (None, _, [RecordPropertyGet (_,path)]) ->
+                let id = getAttr path
                 SizeOf id
 
-            | SpecificProperty <@ fun (m : Map<_,_>) -> m.Count @> (Some (RecordPropertyGet rp'), _, []) ->
-                let id = getAttr rp'
+            | SpecificProperty <@ fun (m : Map<_,_>) -> m.Count @> (Some (RecordPropertyGet (_,path)), _, []) ->
+                let id = getAttr path
                 SizeOf id
 
-            | SpecificProperty <@ fun (a : _ []) -> a.Length @> (Some (RecordPropertyGet rp'), _, []) ->
-                let id = getAttr rp'
+            | SpecificProperty <@ fun (a : _ []) -> a.Length @> (Some (RecordPropertyGet (_,path)), _, []) ->
+                let id = getAttr path
                 SizeOf id
 
-            | SpecificProperty <@ Array.length @> (None, _, [RecordPropertyGet rp']) ->
-                let id = getAttr rp'
+            | SpecificProperty <@ Array.length @> (None, _, [RecordPropertyGet (_,path)]) ->
+                let id = getAttr path
                 SizeOf id
 
             | _ -> invalidQuery()
@@ -170,10 +202,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
         let (|Comparison|_|) (pat : Expr) (expr : Expr) =
             match expr with
             | SpecificCall pat (None, _, args) ->
-                let rp = args |> List.tryPick (|RecordPropertyGet|_|)
-                if rp |> Option.exists (fun rp -> rp.Converter.ConverterType = ConverterType.Serialized) then
-                    invalidArg "expr" "cannot query serialized properties"
-
+                let rp = args |> List.tryPick (|RecordPropertyGet|_|) |> Option.map fst
                 args |> List.map (extractOperand rp) |> Some
 
             | _ -> None
@@ -205,7 +234,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             | PipeLeft e
             | PipeRight e -> extractQuery e
 
-            | RecordPropertyGet rp -> 
+            | RecordPropertyGet (_,rp) -> 
                 let attr = getAttr rp |> Attribute
                 let value = getValue (Bool true) |> Value
                 Compare(EQ, attr, value)
@@ -217,43 +246,43 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             | Comparison <@ (<=) @> [left; right] -> Compare(LE, left, right)
             | Comparison <@ (>=) @> [left; right] -> Compare(GE, left, right)
 
-            | SpecificCall2 <@ fun (x:string) y -> x.StartsWith y @> (Some (RecordPropertyGet rp), _, _, [value]) when value.IsClosed ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ fun (x:string) y -> x.StartsWith y @> (Some (RecordPropertyGet (rp,path)), _, _, [value]) when value.IsClosed ->
+                let attrId = getAttr path
                 let valId = getValueExpr rp.Converter value
                 BeginsWith(attrId, valId)
 
-            | SpecificCall2 <@ fun (x:string) y -> x.Contains y @> (Some (RecordPropertyGet rp), _, _, [value]) when value.IsClosed ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ fun (x:string) y -> x.Contains y @> (Some (RecordPropertyGet (rp, path)), _, _, [value]) when value.IsClosed ->
+                let attrId = getAttr path
                 let valId = extractOperand (Some rp) value
                 Contains(attrId, valId)
 
-            | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; RecordPropertyGet rp]) when elem.IsClosed ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; RecordPropertyGet (rp,path)]) when elem.IsClosed ->
+                let attrId = getAttr path
                 let valId = extractOperand (Some rp) elem
                 Contains(attrId, valId)
 
-            | SpecificCall2 <@ fun (x:Set<_>) e -> x.Contains e @> (Some(RecordPropertyGet rp), _, _, [elem]) when elem.IsClosed ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ fun (x:Set<_>) e -> x.Contains e @> (Some(RecordPropertyGet (rp,path)), _, _, [elem]) when elem.IsClosed ->
+                let attrId = getAttr path
                 let valId = extractOperand (Some rp) elem
                 Contains(attrId, valId)
 
-            | SpecificCall2 <@ fun (x : HashSet<_>) y -> x.Contains y @> (Some(RecordPropertyGet rp), _, _, [elem]) when elem.IsClosed ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ fun (x : HashSet<_>) y -> x.Contains y @> (Some(RecordPropertyGet (rp,path)), _, _, [elem]) when elem.IsClosed ->
+                let attrId = getAttr path
                 let valId = extractOperand (Some rp) elem
                 Contains(attrId, valId)
 
-            | SpecificCall2 <@ Map.containsKey @> (None, _, _, [elem; RecordPropertyGet rp]) when elem.IsClosed ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ Map.containsKey @> (None, _, _, [elem; RecordPropertyGet (rp,path)]) when elem.IsClosed ->
+                let attrId = getAttr path
                 let valId = extractOperand (Some rp) elem
                 Contains(attrId, valId)
 
-            | SpecificCall2 <@ fun (x : Map<_,_>) y -> x.ContainsKey y @> (Some(RecordPropertyGet rp), _, _, [elem]) when elem.IsClosed ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ fun (x : Map<_,_>) y -> x.ContainsKey y @> (Some(RecordPropertyGet (rp,path)), _, _, [elem]) when elem.IsClosed ->
+                let attrId = getAttr path
                 let valId = extractOperand (Some rp) elem
                 Contains(attrId, valId)
 
-            | SpecificCall2 <@ fun (x : Dictionary<_,_>) y -> x.ContainsKey y @> (Some(RecordPropertyGet rp), _, _, [elem]) when elem.IsClosed ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ fun (x : Dictionary<_,_>) y -> x.ContainsKey y @> (Some(RecordPropertyGet (rp,path)), _, _, [elem]) when elem.IsClosed ->
+                let attrId = getAttr path
                 let valId = extractOperand (Some rp) elem
                 Contains(attrId, valId)
 
@@ -266,7 +295,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
         {
             QueryExpr = q
             Expression = queryExprToString q
-            Attributes = attributes |> Seq.map (fun kv -> kv.Value) |> Map.ofSeq
+            Attributes = attributes |> Seq.map (fun kv -> kv.Value, kv.Key) |> Map.ofSeq
             Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Map.ofSeq
         }
 
