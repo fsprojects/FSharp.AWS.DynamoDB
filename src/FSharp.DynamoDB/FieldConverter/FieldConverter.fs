@@ -72,11 +72,18 @@ type IFieldConverterResolver =
     abstract Resolve : Type -> FieldConverter
     abstract Resolve<'T> : unit -> FieldConverter<'T>
 
-type UnSupportedField =
-    static member Raise(fieldType : Type, ?reason : string) =
-        let message = 
-            match reason with
-            | None -> sprintf "unsupported record field type '%O'" fieldType
-            | Some r -> sprintf "unsupported record field type '%O': %s" fieldType r
+[<AutoOpen>]
+module internal FieldConveterUtils =
 
-        raise <| new ArgumentException(message)
+    let inline invalidCast (av:AttributeValue) : 'T = 
+        let msg = sprintf "could not convert value %A to type '%O'" (av.Print()) typeof<'T>
+        raise <| new InvalidCastException(msg)
+
+    type UnSupportedField =
+        static member Raise(fieldType : Type, ?reason : string) =
+            let message = 
+                match reason with
+                | None -> sprintf "unsupported record field type '%O'" fieldType
+                | Some r -> sprintf "unsupported record field type '%O': %s" fieldType r
+
+            raise <| new ArgumentException(message)

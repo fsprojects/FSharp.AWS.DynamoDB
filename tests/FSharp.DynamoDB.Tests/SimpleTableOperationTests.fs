@@ -16,6 +16,10 @@ type SimpleRecord =
         RangeKey : string
 
         Value : int64
+
+        Tuple : int64 * int64
+
+        Map : Map<string, int64>
     }
 
 [<HashKeyConstant("HashKey", "compatible")>]
@@ -32,7 +36,13 @@ type ``Simple Table Operation Tests`` () =
     let client = getDynamoDBAccount()
     let tableName = getRandomTableName()
 
-    let mkItem() = { HashKey = guid() ; RangeKey = guid() ; Value = int64 <| Random().Next() }
+    let rand = let r = Random() in fun () -> int64 <| r.Next()
+    let mkItem() = 
+        { 
+            HashKey = guid() ; RangeKey = guid() ; 
+            Value = rand() ; Tuple = rand(), rand() ;
+            Map = seq { for i in 0L .. rand() % 5L -> guid(), rand() } |> Map.ofSeq 
+        }
 
     let run = Async.RunSynchronously
 

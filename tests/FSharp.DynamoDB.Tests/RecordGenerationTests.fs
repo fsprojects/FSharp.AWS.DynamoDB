@@ -131,14 +131,18 @@ module ``Record Generation Tests`` =
 
             TimeSpan : TimeSpan
 
+            Tuple : int * string * System.Reflection.BindingFlags option
+
             DateTimeOffset : DateTimeOffset
             Values : int list
-            Map : Map<DateTimeOffset, TimeSpan>
+            Map : Map<string, TimeSpan>
             Set : Set<TimeSpan>
 
             [<BinaryFormatter>]
             BlobValue : (int * string) [][]
         }
+
+    type NestedRecord = { A : int ; B : string }
 
     type ``Complex Record B`` = 
         { 
@@ -146,8 +150,10 @@ module ``Record Generation Tests`` =
             [<RangeKey>]RangeKey : float
 
             Values : byte [][]
-            Map : System.Collections.Generic.Dictionary<int64, decimal>
+            Map : System.Collections.Generic.Dictionary<string, decimal>
             Set : System.Collections.Generic.HashSet<string> ref
+
+            Nested : NestedRecord
 
             [<BinaryFormatter>]
             BlobValue : (int * string) [][]
@@ -170,6 +176,8 @@ module ``Record Generation Tests`` =
             Single : single
             Double : double
             Decimal : decimal
+
+            Nested : NestedRecord * NestedRecord
         }
 
     type ``Complex Record D`` =

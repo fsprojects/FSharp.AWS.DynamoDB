@@ -7,7 +7,6 @@ open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB.FieldConverter
-open FSharp.DynamoDB.FieldConverter.RecordConverter
 
 type KeyStructure =
     | HashKeyOnly of hashKeyProperty:RecordPropertyInfo

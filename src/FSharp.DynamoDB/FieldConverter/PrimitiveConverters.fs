@@ -1,4 +1,5 @@
-﻿module internal FSharp.DynamoDB.FieldConverter.ValueConverters
+﻿[<AutoOpen>]
+module internal FSharp.DynamoDB.FieldConverter.PrimitiveConverters
 
 open System
 open System.Collections
@@ -12,11 +13,6 @@ open Amazon.Util
 open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
-open FSharp.DynamoDB.DynamoUtils
-open FSharp.DynamoDB.FieldConverter
-
-let inline invalidCast (av:AttributeValue) : 'T = 
-    raise <| new InvalidCastException(sprintf "could not convert value %A to type '%O'" (av.Print()) typeof<'T>)
 
 type BoolConverter() =
     inherit StringRepresentableFieldConverter<bool>()
@@ -185,89 +181,6 @@ let mkFSharpRefConverter<'T> (tconv : FieldConverter<'T>) =
             member __.OfField tref = tconv.OfField tref.Value
             member __.ToField a = tconv.ToField a |> ref }
 
-type ListConverter<'List, 'T when 'List :> seq<'T>>(ctor : seq<'T> -> 'List, tconv : FieldConverter<'T>) =
-    inherit FieldConverter<'List>()
-    override __.Representation = FieldRepresentation.List
-    override __.ConverterType = ConverterType.Value
-    override __.DefaultValue = ctor [||]
-    override __.OfField list = 
-        if isNull list then AttributeValue(NULL = true)
-        else 
-            AttributeValue(L = (list |> Seq.map tconv.OfField |> rlist))
-
-    override __.ToField a =
-        if a.NULL then ctor [||]
-        elif a.IsLSet then a.L |> Seq.map tconv.ToField |> ctor
-        else invalidCast a
-
-type BytesSetConverter<'BSet when 'BSet :> seq<byte[]>>(ctor : seq<byte []> -> 'BSet) =
-    inherit FieldConverter<'BSet>()
-    override __.Representation = FieldRepresentation.BytesSet
-    override __.ConverterType = ConverterType.Value
-    override __.DefaultValue = ctor [||]
-    override __.OfField bss = 
-        if isNull bss then AttributeValue(NULL = true)
-        else AttributeValue (BS = (bss |> Seq.map (fun bs -> new MemoryStream(bs)) |> rlist))
-
-    override __.ToField a =
-        if a.NULL then ctor [||]
-        elif a.IsBSSet then a.BS |> Seq.map (fun ms -> ms.ToArray()) |> ctor
-        else invalidCast a
-
-type NumSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, tconv : NumRepresentableFieldConverter<'T>) =
-    inherit FieldConverter<'Set>()
-    override __.DefaultValue = ctor [||]
-    override __.Representation = FieldRepresentation.NumberSet
-    override __.ConverterType = ConverterType.Value
-    override __.OfField set = 
-        if isNull set then AttributeValue(NULL = true)
-        else
-            AttributeValue(NS = (set |> Seq.map tconv.UnParse |> rlist))
-
-    override __.ToField a =
-        if a.NULL then ctor [||]
-        elif a.IsNSSet then a.NS |> Seq.map tconv.Parse |> ctor
-        else invalidCast a
-
-type StringSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, tconv : StringRepresentableFieldConverter<'T>) =
-    inherit FieldConverter<'Set>()
-    override __.DefaultValue = ctor [||]
-    override __.Representation = FieldRepresentation.StringSet
-    override __.ConverterType = ConverterType.Value
-    override __.OfField set = 
-        if isNull set then AttributeValue(NULL = true)
-        else AttributeValue(SS = (set |> Seq.map tconv.UnParse |> rlist))
-
-    override __.ToField a =
-        if a.NULL then ctor [||]
-        elif a.IsSSSet then a.SS |> Seq.map tconv.Parse |> ctor
-        else invalidCast a
-
-let mkSetConverter<'List, 'T when 'List :> seq<'T>> ctor (tconv : FieldConverter<'T>) : FieldConverter<'List> =
-    match tconv with
-    | :? NumRepresentableFieldConverter<'T> as tc -> NumSetConverter<'List, 'T>(ctor, tc) :> _
-    | :? StringRepresentableFieldConverter<'T> as tc -> StringSetConverter<'List, 'T>(ctor, tc) :> _
-    | _ -> UnSupportedField.Raise typeof<'List>
-
-type MapConverter<'Map, 'Key, 'Value when 'Map :> seq<KeyValuePair<'Key, 'Value>>>
-                    (ctor : seq<KeyValuePair<'Key, 'Value>> -> 'Map, 
-                        kconv : StringRepresentableFieldConverter<'Key>,
-                        vconv : FieldConverter<'Value>) =
-
-    inherit FieldConverter<'Map>()
-    override __.Representation = FieldRepresentation.Map
-    override __.ConverterType = ConverterType.Value
-    override __.DefaultValue = ctor [||]
-    override __.OfField map =
-        if isNull map then AttributeValue(NULL = true)
-        else
-            let m = map |> Seq.map (fun kv -> keyVal (kconv.UnParse kv.Key) (vconv.OfField kv.Value)) |> cdict
-            AttributeValue(M = m)
-
-    override __.ToField a =
-        if a.NULL then ctor [||]
-        elif a.IsMSet then a.M |> Seq.map (fun kv -> keyVal (kconv.Parse kv.Key) (vconv.ToField kv.Value)) |> ctor
-        else invalidCast a
 
 type SerializerConverter(propertyInfo : PropertyInfo, serializer : PropertySerializerAttribute, resolver : IFieldConverterResolver) =
     inherit FieldConverter()

@@ -1,4 +1,5 @@
-﻿module internal FSharp.DynamoDB.FieldConverter.RecordConverter
+﻿[<AutoOpen>]
+module internal FSharp.DynamoDB.FieldConverter.RecordConverter
 
 open System
 open System.Collections
@@ -13,7 +14,6 @@ open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
 open FSharp.DynamoDB.FieldConverter
-open FSharp.DynamoDB.FieldConverter.ValueConverters
 
 [<CustomEquality; NoComparison>]
 type RecordInfo =

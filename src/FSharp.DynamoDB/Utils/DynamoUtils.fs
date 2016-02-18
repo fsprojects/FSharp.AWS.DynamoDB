@@ -1,4 +1,5 @@
-﻿module internal FSharp.DynamoDB.DynamoUtils
+﻿[<AutoOpen>]
+module internal FSharp.DynamoDB.DynamoUtils
 
 open System.IO
 open System.Collections.Generic

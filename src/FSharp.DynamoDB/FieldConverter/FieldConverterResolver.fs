@@ -11,24 +11,11 @@ open Microsoft.FSharp.Reflection
 
 open FSharp.DynamoDB
 open FSharp.DynamoDB.TypeShape
-open FSharp.DynamoDB.FieldConverter
-open FSharp.DynamoDB.FieldConverter.ValueConverters
-open FSharp.DynamoDB.FieldConverter.RecordConverter
 
 [<AutoOpen>]
 module private ResolverImpl =
 
     let resolveFieldConverter (resolver : IFieldConverterResolver) (t : Type) : FieldConverter =
-        let resolveSR (requestingType : Type) =
-            match resolver.Resolve<'T> () with
-            | :? StringRepresentableFieldConverter<'T> as sr -> sr
-            | _ -> UnSupportedField.Raise requestingType 
-
-        let resolveNR (requestingType : Type) =
-            match resolver.Resolve<'T> () with
-            | :? NumRepresentableFieldConverter<'T> as nr -> nr
-            | _ -> UnSupportedField.Raise requestingType 
-
         match getShape t with
         | :? ShapeBool -> new BoolConverter() :> _
         | :? ShapeByte -> mkNumericalConverter<byte> () :> _
@@ -52,7 +39,8 @@ module private ResolverImpl =
             s.Accept {
                 new IEnumVisitor<FieldConverter> with
                     member __.VisitEnum<'E, 'U when 'E : enum<'U>> () =
-                        new EnumerationConverter<'E, 'U>(resolveNR typeof<'E>) :> _ }
+                        let uconv = resolver.Resolve<'U>() :?> NumRepresentableFieldConverter<'U>
+                        new EnumerationConverter<'E, 'U>(uconv) :> _ }
 
         | ShapeNullable s ->
             s.Accept {
@@ -78,68 +66,74 @@ module private ResolverImpl =
                 new IArrayVisitor<FieldConverter> with
                     member __.VisitArray<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        new ListConverter<'T [], 'T>(Seq.toArray, tconv) :> _ }
+                        new ListConverter<'T [], 'T>(Seq.toArray, Array.isEmpty, tconv) :> _ }
 
         | ShapeFSharpList s ->
             s.Accept {
                 new IFSharpListVisitor<FieldConverter> with
                     member __.VisitFSharpList<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        new ListConverter<'T list, 'T>(List.ofSeq, tconv) :> _ }
+                        new ListConverter<'T list, 'T>(List.ofSeq, List.isEmpty, tconv) :> _ }
 
         | ShapeResizeArray s ->
             s.Accept {
                 new IResizeArrayVisitor<FieldConverter> with
                     member __.VisitResizeArray<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        new ListConverter<ResizeArray<'T>, 'T>(rlist, tconv) :> _ }
+                        new ListConverter<ResizeArray<'T>, 'T>(rlist, (fun r -> r.Count = 0), tconv) :> _ }
 
         | ShapeHashSet s ->
             s.Accept {
                 new IHashSetVisitor<FieldConverter> with
                     member __.VisitHashSet<'T when 'T : equality> () =
                         if typeof<'T> = typeof<byte []> then
-                            BytesSetConverter<HashSet<byte []>>(HashSet) :> _
+                            BytesSetConverter<HashSet<byte []>>(HashSet, (fun r -> r.Count = 0)) :> _
                         else
-                            mkSetConverter<_,'T> HashSet (resolver.Resolve()) :> _ }
+                            mkSetConverter<_,'T> HashSet (fun r -> r.Count = 0) (resolver.Resolve()) :> _ }
 
         | ShapeFSharpSet s ->
             s.Accept {
                 new IFSharpSetVisitor<FieldConverter> with
                     member __.VisitFSharpSet<'T when 'T : comparison> () =
                         if typeof<'T> = typeof<byte []> then
-                            BytesSetConverter<Set<byte []>>(Set.ofSeq) :> _
+                            BytesSetConverter<Set<byte []>>(Set.ofSeq, Set.isEmpty) :> _
                         else
-                            mkSetConverter<_,'T> Set.ofSeq (resolver.Resolve()) :> _ }
+                            mkSetConverter<_,'T> Set.ofSeq Set.isEmpty (resolver.Resolve()) :> _ }
 
         | ShapeDictionary s ->
             s.Accept {
                 new IDictionaryVisitor<FieldConverter> with
                     member __.VisitDictionary<'K, 'V when 'K : equality> () =
-                        new MapConverter<Dictionary<'K, 'V>, 'K, 'V>(cdict, resolveSR typeof<Dictionary<'K,'V>>, resolver.Resolve()) :> _ }
+                        if typeof<'K> <> typeof<string> then
+                            UnSupportedField.Raise(t, "Dictionary types must have key of type string.")
+
+                        new MapConverter<Dictionary<string, 'V>, 'V>(cdict, (fun d -> d.Count = 0), resolver.Resolve()) :> _ }
 
         | ShapeFSharpMap s ->
             s.Accept { 
                 new IFSharpMapVisitor<FieldConverter> with
                     member __.VisitFSharpMap<'K, 'V when 'K : comparison> () =
-                        let mkMap (kvs : seq<KeyValuePair<'K,'V>>) =
+                        if typeof<'K> <> typeof<string> then
+                            UnSupportedField.Raise(t, "Map types must have key of type string.")
+
+                        let mkMap (kvs : seq<KeyValuePair<string,'V>>) =
                             kvs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
 
-                        new MapConverter<Map<'K,'V>, 'K, 'V>(mkMap, resolveSR typeof<Map<'K,'V>>, resolver.Resolve()) :> _ }
+                        new MapConverter<Map<string,'V>, 'V>(mkMap, Map.isEmpty, resolver.Resolve()) :> _ }
 
         | ShapeCollection s ->
             s.Accept {
                 new ICollectionVisitor<FieldConverter> with
                     member __.VisitCollection<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        new ListConverter<ICollection<'T>, 'T>(Seq.toArray >> unbox, tconv) :> _ }
+                        new ListConverter<ICollection<'T>, 'T>(Seq.toArray >> unbox, (fun c -> c.Count = 0), tconv) :> _ }
 
         | ShapeEnumerable s ->
             s.Accept {
                 new IEnumerableVisitor<FieldConverter> with
                     member __.VisitEnumerable<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        new ListConverter<seq<'T>, 'T>(Seq.toArray >> unbox, tconv) :> _ }
+                        new ListConverter<seq<'T>, 'T>(Seq.toArray >> unbox, Seq.isEmpty, tconv) :> _ }
 
         | ShapeTuple as s ->
             s.Accept {

@@ -1,4 +1,4 @@
-﻿module internal FSharp.DynamoDB.ConditionalExprs
+﻿module internal FSharp.DynamoDB.ConditionalExpr
 
 open System
 open System.Collections.Generic
@@ -14,10 +14,7 @@ open Swensen.Unquote
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.TypeShape
-open FSharp.DynamoDB.DynamoUtils
 open FSharp.DynamoDB.FieldConverter
-open FSharp.DynamoDB.FieldConverter.RecordConverter
 
 // http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html#ConditionExpressionReference
 

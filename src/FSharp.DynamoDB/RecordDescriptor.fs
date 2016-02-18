@@ -10,10 +10,9 @@ open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB.FieldConverter
-open FSharp.DynamoDB.FieldConverter.RecordConverter
 open FSharp.DynamoDB.RecordSchema
-open FSharp.DynamoDB.ConditionalExprs
-open FSharp.DynamoDB.UpdateExprs
+open FSharp.DynamoDB.ConditionalExpr
+open FSharp.DynamoDB.UpdateExpr
 
 type internal RecordDescriptor<'Record> internal () =
     let converter = FieldConverter.resolve<'Record>() :?> RecordConverter<'Record>

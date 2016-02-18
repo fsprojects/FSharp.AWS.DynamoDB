@@ -1,4 +1,4 @@
-﻿module internal FSharp.DynamoDB.UpdateExprs
+﻿module internal FSharp.DynamoDB.UpdateExpr
 
 open System
 open System.Collections.Generic
@@ -14,9 +14,7 @@ open Swensen.Unquote
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.DynamoUtils
 open FSharp.DynamoDB.FieldConverter
-open FSharp.DynamoDB.FieldConverter.RecordConverter
 
 type AttrId = string
 
