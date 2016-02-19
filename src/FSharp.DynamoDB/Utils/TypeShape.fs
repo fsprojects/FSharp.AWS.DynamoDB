@@ -672,14 +672,15 @@ module private TypeShapeImpl =
     /// correctly resolves if type is assignable to interface
     let rec private isAssignableFrom (interfaceTy : Type) (ty : Type) =
         let proj (t : Type) = t.Assembly, t.Namespace, t.Name, t.MetadataToken
-        if ty.GetInterfaces() |> Array.exists(fun if0 -> proj if0 = proj interfaceTy) then true
+        if interfaceTy = ty then true
+        elif ty.GetInterfaces() |> Array.exists(fun if0 -> proj if0 = proj interfaceTy) then true
         else
             match ty.BaseType with
             | null -> false
             | bt -> isAssignableFrom interfaceTy bt
         
     /// use reflection to bootstrap a shape instance
-    let resolveTypeShape (aux : (Type -> TypeShape option) option) (t : Type) : TypeShape =
+    let resolveTypeShape (t : Type) : TypeShape =
         if t.IsGenericTypeDefinition then raise <| UnsupportedShape t
         elif t.IsGenericParameter then raise <| UnsupportedShape t
         elif isIntrinsicType t then raise <| UnsupportedShape t
@@ -730,41 +731,6 @@ module private TypeShapeImpl =
             | 8 -> activate typedefof<ShapeTuple<_,_,_,_,_,_,_,_>> gas
             | _ -> raise <| UnsupportedShape t
 
-        elif FSharpType.IsUnion(t, true) then
-            if t.IsGenericType then
-                let gt = t.GetGenericTypeDefinition()
-                let gas = t.GetGenericArguments()
-                if gt = typedefof<_ list> then 
-                    activate typedefof<ShapeFSharpList<_>> gas
-                elif gt = typedefof<_ option> then 
-                    activate typedefof<ShapeFSharpOption<_>> gas
-                elif 
-                    gt.Name.StartsWith "FSharpChoice" && 
-                    gt.Namespace = "Microsoft.FSharp.Core" && 
-                    gt.Assembly = typeof<int option>.Assembly 
-                then
-                    match gas.Length with
-                    | 2 -> activate typedefof<ShapeFSharpChoice<_,_>> gas
-                    | 3 -> activate typedefof<ShapeFSharpChoice<_,_,_>> gas
-                    | 4 -> activate typedefof<ShapeFSharpChoice<_,_,_,_>> gas
-                    | 5 -> activate typedefof<ShapeFSharpChoice<_,_,_,_,_>> gas
-                    | 6 -> activate typedefof<ShapeFSharpChoice<_,_,_,_,_,_>> gas
-                    | 7 -> activate typedefof<ShapeFSharpChoice<_,_,_,_,_,_,_>> gas
-                    | _ -> raise <| UnsupportedShape t
-
-                else
-                    activate1 typedefof<ShapeUnknown<_>> t
-
-            else
-                activate1 typedefof<ShapeUnknown<_>> t
-
-        elif FSharpType.IsRecord(t, true) then
-            if t.IsGenericType && t.GetGenericTypeDefinition () = typedefof<_ ref> then
-                let gas = t.GetGenericArguments()
-                activate typedefof<ShapeFSharpRef<_>> gas
-            else
-                activate1 typedefof<ShapeUnknown<_>> t
-
         elif FSharpType.IsExceptionRepresentation(t, true) then
             activate1 typedefof<ShapeFSharpException<_>> t
 
@@ -776,7 +742,27 @@ module private TypeShapeImpl =
             let gt = t.GetGenericTypeDefinition()
             let gas = t.GetGenericArguments()
 
-            if gt = typedefof<System.Nullable<_>> then
+            if gt = typedefof<_ list> then 
+                activate typedefof<ShapeFSharpList<_>> gas
+            elif gt = typedefof<_ option> then 
+                activate typedefof<ShapeFSharpOption<_>> gas
+            elif 
+                gt.Name.StartsWith "FSharpChoice" && 
+                gt.Namespace = "Microsoft.FSharp.Core" && 
+                gt.Assembly = typeof<int option>.Assembly 
+            then
+                match gas.Length with
+                | 2 -> activate typedefof<ShapeFSharpChoice<_,_>> gas
+                | 3 -> activate typedefof<ShapeFSharpChoice<_,_,_>> gas
+                | 4 -> activate typedefof<ShapeFSharpChoice<_,_,_,_>> gas
+                | 5 -> activate typedefof<ShapeFSharpChoice<_,_,_,_,_>> gas
+                | 6 -> activate typedefof<ShapeFSharpChoice<_,_,_,_,_,_>> gas
+                | 7 -> activate typedefof<ShapeFSharpChoice<_,_,_,_,_,_,_>> gas
+                | _ -> raise <| UnsupportedShape t
+
+            elif gt = typedefof<_ ref> then
+                activate typedefof<ShapeFSharpRef<_>> gas
+            elif gt = typedefof<System.Nullable<_>> then
                 activate typedefof<ShapeNullable<_>> gas
             elif gt = typedefof<System.Collections.Generic.Dictionary<_,_>> then
                 activate typedefof<ShapeDictionary<_,_>> gas
@@ -797,13 +783,11 @@ module private TypeShapeImpl =
             else
                 activate1 typedefof<ShapeUnknown<_>> t
         else 
-            match aux |> Option.bind (fun f -> f t) with
-            | Some ts -> ts
-            | None -> activate1 typedefof<ShapeUnknown<_>> t
+            activate1 typedefof<ShapeUnknown<_>> t
 
 
     let dict = new System.Collections.Concurrent.ConcurrentDictionary<Type, TypeShape>()
-    let resolveTypeShapeCached(t : Type) = dict.GetOrAdd(t, resolveTypeShape None)
+    let resolveTypeShapeCached(t : Type) = dict.GetOrAdd(t, resolveTypeShape)
 
 [<AutoOpen>]
 module TypeShapeModule =

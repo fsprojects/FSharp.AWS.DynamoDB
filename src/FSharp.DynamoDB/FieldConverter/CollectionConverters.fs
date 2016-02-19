@@ -109,3 +109,17 @@ type MapConverter<'Map, 'Value when 'Map :> seq<KeyValuePair<string, 'Value>>>
 
     interface ICollectionConverter with
         member __.ElementConverter = vconv :> _
+
+open FSharp.DynamoDB.TypeShape
+let convertToSet (setType : Type) (value:obj) =
+    match getShape(setType) with
+    | ShapeFSharpSet s ->
+        s.Accept { 
+            new IFSharpSetVisitor<IEnumerable> with
+                member __.VisitFSharpSet<'T when 'T : comparison> () =
+                    match value with
+                    | :? 'T as t -> set [t] :> _
+                    | _ -> set (value :?> seq<'T>) :> _
+        }
+
+    | _ -> invalidArg "setType" "not a set type"

@@ -15,34 +15,34 @@ open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB.FieldConverter
-
-type AttrId = string
+open FSharp.DynamoDB.ExprCommon
 
 type Operand =
-    | Attribute of id:string
-    | Value of id:string
+    | Attribute of AttributePath
+    | Value of FsAttributeValue
 
 type UpdateValue =
     | Operand of Operand
     | Op_Addition of Operand * Operand
     | Op_Subtraction of Operand * Operand
+    | List_Append of Operand * Operand
 
 and UpdateExpr =
-    | Set of attrId:string * UpdateValue
-    | Add of attrId:string * op:Operand
-    | Delete of attrId:string * op:Operand
+    | Set of AttributePath * UpdateValue
+    | Remove of AttributePath
+    | Add of AttributePath * Operand
+    | Delete of AttributePath * Operand
 
 type UpdateExpression =
     {
         UpdateExprs : UpdateExpr list
         Expression : string
-        Attributes : Map<string, RecordPropertyInfo>
+        Attributes : Map<string, string>
         Values     : Map<string, FsAttributeValue>
     }
 with
     member __.DAttributes = 
         __.Attributes
-        |> Seq.map (fun kv -> keyVal kv.Key kv.Value.Name)
         |> cdict
 
     member __.DValues = 
@@ -50,13 +50,15 @@ with
         |> Seq.map (fun kv -> keyVal kv.Key (FsAttributeValue.ToAttributeValue kv.Value))
         |> cdict
 
-let updateExprToString(uexprs : UpdateExpr list) =
-    let opStr op = match op with Attribute id -> id | Value id -> id
+
+let updateExprsToString (getAttrId : AttributePath -> string) (getValueId : FsAttributeValue -> string) (uexprs : UpdateExpr list) =
+    let opStr op = match op with Attribute id -> getAttrId id | Value id -> getValueId id
     let valStr value = 
         match value with 
         | Operand op -> opStr op 
         | Op_Addition(l, r) -> sprintf "%s + %s" (opStr l) (opStr r)
         | Op_Subtraction(l, r) -> sprintf "%s - %s" (opStr l) (opStr r)
+        | List_Append(l,r) -> sprintf "(list_append(%s, %s))" (opStr l) (opStr r)
 
     let sb = new System.Text.StringBuilder()
     let append (s:string) = sb.Append s |> ignore
@@ -65,22 +67,29 @@ let updateExprToString(uexprs : UpdateExpr list) =
     | [] -> () 
     | (id, v) :: tail -> 
         toggle()
-        sprintf "SET %s = %s" id (valStr v) |> append
-        for id,v in tail do sprintf ", %s = %s" id (valStr v) |> append
+        sprintf "SET %s = %s" (getAttrId id) (valStr v) |> append
+        for id,v in tail do sprintf ", %s = %s" (getAttrId id) (valStr v) |> append
 
     match uexprs |> List.choose (function Add(id, v) -> Some(id,v) | _ -> None) with
     | [] -> ()
     | (id, o) :: tail ->
         toggle()
-        sprintf "ADD %s %s" id (opStr o) |> append
-        for id, o in tail do sprintf ", %s %s" id (opStr o) |> append
+        sprintf "ADD %s %s" (getAttrId id) (opStr o) |> append
+        for id, o in tail do sprintf ", %s %s" (getAttrId id) (opStr o) |> append
 
     match uexprs |> List.choose (function Delete(id, v) -> Some(id,v) | _ -> None) with
     | [] -> ()
     | (id, o) :: tail ->
         toggle()
-        sprintf "REMOVE %s %s" id (opStr o) |> append
-        for id, o in tail do sprintf ", %s %s" id (opStr o) |> append
+        sprintf "DELETE %s %s" (getAttrId id) (opStr o) |> append
+        for id, o in tail do sprintf ", %s %s" (getAttrId id) (opStr o) |> append
+
+    match uexprs |> List.choose (function Remove id -> Some id | _ -> None) with
+    | [] -> ()
+    | id :: tail ->
+        toggle()
+        sprintf "REMOVE %s" (getAttrId id) |> append
+        for id in tail do sprintf ", %s" (getAttrId id) |> append
 
     sb.ToString()
         
@@ -89,28 +98,8 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
     if not expr.IsClosed then invalidArg "expr" "supplied update expression contains free variables."
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
-    let values = new Dictionary<FsAttributeValue, string> ()
-    let getValue (fav : FsAttributeValue) =
-        let ok,found = values.TryGetValue fav
-        if ok then found
-        else
-            let name = sprintf ":val%d" values.Count
-            values.Add(fav, name)
-            name
-
-    let getValueExpr (conv : FieldConverter) (expr : Expr) =
-        let o = evalRaw expr
-        let fav = conv.OfFieldUntyped o |> FsAttributeValue.FromAttributeValue
-        getValue fav
-
-    let attributes = new Dictionary<string, string * RecordPropertyInfo> ()
-    let getAttr (rp : RecordPropertyInfo) =
-        let ok, found = attributes.TryGetValue rp.Name
-        if ok then fst found
-        else
-            let name = sprintf "#ATTR%d" attributes.Count
-            attributes.Add(rp.Name, (name, rp))
-            name
+    let getValue (conv : FieldConverter) (expr : Expr) =
+        expr |> evalRaw |> conv.OfFieldUntyped |> FsAttributeValue.FromAttributeValue
 
     match expr with
     | Lambda(r,body) ->
@@ -131,19 +120,16 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
 
         let updateExprs = assignments |> List.mapi tryExtractValueExpr |> List.choose id
 
-        let (|RecordPropertyGet|_|) (e : Expr) =
-            match e with
-            | PropertyGet(Some (Var r'), p, []) when r = r' ->
-                recordInfo.Properties |> Array.tryFind(fun rp -> rp.PropertyInfo = p)
-            | _ -> None
+        let (|AttributeGet|_|) (e : Expr) = AttributePath.Extract r recordInfo e
 
         let rec extractOperand (expr : Expr) =
             match expr with
             | _ when expr.IsClosed ->
                 let conv = FieldConverter.resolveUntyped expr.Type
-                let id = getValueExpr conv expr in Value id
+                let av = getValue conv expr in Value av
+
             | PipeRight e | PipeLeft e -> extractOperand e
-            | RecordPropertyGet rp -> let id = getAttr rp in Attribute id
+            | AttributeGet attr -> Attribute attr
             | _ -> invalidExpr()
 
         let rec extractUpdateValue (expr : Expr) =
@@ -161,72 +147,92 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
                 let l, r = extractOperand left, extractOperand right
                 Op_Subtraction(l, r)
 
+            | SpecificCall2 <@ Array.append @> (None, _, _, [left; right]) ->
+                let l, r = extractOperand left, extractOperand right
+                List_Append(l ,r)
+
+            | SpecificCall2 <@ (@) @> (None, _, _, [left; right]) ->
+                let l, r = extractOperand left, extractOperand right
+                List_Append(l ,r)
+
+            | SpecificCall2 <@ List.append @> (None, _, _, [left; right]) ->
+                let l, r = extractOperand left, extractOperand right
+                List_Append(l ,r)
+
             | _ -> extractOperand expr |> Operand
 
-        let rec extractUpdateExpr (rp : RecordPropertyInfo) (expr : Expr) =
+        let rec extractUpdateExpr (parent : AttributePath) (expr : Expr) =
             match expr with
-            | PipeRight e | PipeLeft e -> extractUpdateExpr rp e
-            | SpecificCall2 <@ Set.add @> (None, _, _, [elem; RecordPropertyGet rp']) when rp = rp' ->
-                let attrId = getAttr rp
+            | PipeRight e | PipeLeft e -> extractUpdateExpr parent e
+            | SpecificCall2 <@ Set.add @> (None, _, _, [elem; AttributeGet attr]) when parent = attr ->
                 let op = extractOperand elem
-                Add(attrId, op)
+                Add(attr, op)
 
-            | SpecificCall2 <@ fun (s : Set<_>) e -> s.Add e @> (Some (RecordPropertyGet rp'), _, _, [elem]) when rp = rp' ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ fun (s : Set<_>) e -> s.Add e @> (Some (AttributeGet attr), _, _, [elem]) when attr = parent ->
                 let op = extractOperand elem
-                Add(attrId, op)
+                Add(attr, op)
 
-            | SpecificCall2 <@ Set.remove @> (None, _, _, [elem ; RecordPropertyGet rp']) when rp = rp' ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ Set.remove @> (None, _, _, [elem ; AttributeGet attr]) when attr = parent ->
                 let op = extractOperand elem
-                Delete(attrId, op)
+                Delete(attr, op)
 
-            | SpecificCall2 <@ fun (s : Set<_>) e -> s.Remove e @> (Some (RecordPropertyGet rp'), _, _, [elem]) when rp = rp' ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ fun (s : Set<_>) e -> s.Remove e @> (Some (AttributeGet attr), _, _, [elem]) when attr = parent ->
                 let op = extractOperand elem
-                Delete(attrId, op)
+                Delete(attr, op)
 
-            | SpecificCall2 <@ Set.addSeq @> (None, _, _, [elems ; RecordPropertyGet rp']) when rp = rp' ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ Set.addSeq @> (None, _, _, [elems ; AttributeGet attr]) when attr = parent ->
                 let op = extractOperand elems
-                Delete(attrId, op)                
+                Add(attr, op)
 
-            | SpecificCall2 <@ fun (s : Set<_>) (ts : seq<_>) -> s.Add ts @> (Some (RecordPropertyGet rp'), _, _, [ts]) when rp = rp' ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ fun (s : Set<_>) (ts : seq<_>) -> s.Add ts @> (Some (AttributeGet attr), _, _, [ts]) when attr = parent ->
                 let op = extractOperand ts
-                Delete(attrId, op)
+                Add(attr, op)
 
-            | SpecificCall2 <@ Set.removeSeq @> (None, _, _, [elems ; RecordPropertyGet rp']) when rp = rp' ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ Set.removeSeq @> (None, _, _, [elems ; AttributeGet attr]) when attr = parent ->
                 let op = extractOperand elems
-                Delete(attrId, op)                
+                Delete(attr, op)
 
-            | SpecificCall2 <@ fun (s : Set<_>) (ts : seq<_>) -> s.Remove ts @> (Some (RecordPropertyGet rp'), _, _, [elems]) when rp = rp' ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ fun (s : Set<_>) (ts : seq<_>) -> s.Remove ts @> (Some (AttributeGet attr), _, _, [elems]) when attr = parent ->
                 let op = extractOperand elems
-                Delete(attrId, op)
+                Delete(attr, op)
 
-            | SpecificCall2 <@ (+) @> (None, _, _, ([RecordPropertyGet rp'; other] | [other ; RecordPropertyGet rp'])) when rp = rp' && not rp.Converter.IsScalar ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ (+) @> (None, _, _, ([AttributeGet attr; other] | [other ; AttributeGet attr])) when attr = parent && not attr.Converter.IsScalar ->
                 let op = extractOperand other
-                Add(attrId, op)
+                Add(attr, op)
 
-            | SpecificCall2 <@ (-) @> (None, _, _, ([RecordPropertyGet rp'; other] | [other ; RecordPropertyGet rp'])) when rp = rp' && not rp.Converter.IsScalar ->
-                let attrId = getAttr rp
+            | SpecificCall2 <@ (-) @> (None, _, _, [AttributeGet attr; other]) when attr = parent && not attr.Converter.IsScalar ->
                 let op = extractOperand other
-                Delete(attrId, op)
+                Delete(attr, op)
 
             | e -> 
-                let attrId = getAttr rp
                 let uv = extractUpdateValue e
-                Set(attrId, uv)
+                Set(parent, uv)
 
-        let updateExprs = updateExprs |> List.map (fun (rp,e) -> extractUpdateExpr rp e)
+        let updateExprs = updateExprs |> List.map (fun (rp,e) -> extractUpdateExpr (Root rp) e)
+
+        let attrs = new Dictionary<string, string> ()
+        let getAttrId (attr : AttributePath) =
+            let ok,found = attrs.TryGetValue attr.RootId
+            if ok then attr.Id
+            else
+                attrs.Add(attr.RootId, attr.RootName)
+                attr.Id
+
+        let values = new Dictionary<FsAttributeValue, string>()
+        let getValueId (fsv : FsAttributeValue) =
+            let ok,found = values.TryGetValue fsv
+            if ok then found
+            else
+                let id = sprintf ":val%d" values.Count
+                values.Add(fsv, id)
+                id
+
+        let exprString = updateExprsToString getAttrId getValueId updateExprs
 
         {
             UpdateExprs = updateExprs
-            Expression = updateExprToString updateExprs
-            Attributes = attributes |> Seq.map (fun kv -> kv.Value) |> Map.ofSeq
+            Expression = exprString
+            Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
             Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Map.ofSeq
         }
 

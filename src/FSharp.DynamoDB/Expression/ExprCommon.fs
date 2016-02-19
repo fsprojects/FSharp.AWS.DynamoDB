@@ -25,25 +25,18 @@ with
         | Item(_,conv,_) -> conv
         | _ -> invalidArg "ap" "internal error: no converter found here"
 
-    member ap.RootId =
+    member ap.RootProperty =
         let rec aux ap =
             match ap with
-            | Root rp -> sprintf "#ATTR%d" rp.Index
+            | Root rp -> rp
             | Nested(_,p) -> aux p
             | Item(_,_,p) -> aux p
             | Suffix(_,p) -> aux p
 
         aux ap
 
-    member ap.RootName =
-        let rec aux ap =
-            match ap with
-            | Root rp -> rp.Name
-            | Nested(_,p) -> aux p
-            | Item(_,_,p) -> aux p
-            | Suffix(_,p) -> aux p
-
-        aux ap
+    member ap.RootId = sprintf "#ATTR%d" ap.RootProperty.Index
+    member ap.RootName = ap.RootProperty.Name
 
     member ap.Id =
         let rec getTokens acc ap =

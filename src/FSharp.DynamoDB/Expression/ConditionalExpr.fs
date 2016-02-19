@@ -241,7 +241,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
         let attrs = new Dictionary<string, string> ()
         let getAttrId (attr : AttributePath) =
             let ok,found = attrs.TryGetValue attr.RootId
-            if ok then found
+            if ok then attr.Id
             else
                 attrs.Add(attr.RootId, attr.RootName)
                 attr.Id
