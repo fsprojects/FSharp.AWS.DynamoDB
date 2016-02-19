@@ -27,9 +27,9 @@ type QueryExpr =
     | Or of QueryExpr * QueryExpr
     | Compare of Comparator * Operand * Operand
     | Between of Operand * Operand * Operand
-    | BeginsWith of AttributeGetInfo * substr:string
-    | Contains of AttributeGetInfo * Operand
-    | Attribute_Exists of AttributeGetInfo
+    | BeginsWith of AttributePath * substr:string
+    | Contains of AttributePath * Operand
+    | Attribute_Exists of AttributePath
 
 and Comparator =
     | EQ
@@ -41,8 +41,8 @@ and Comparator =
 
 and Operand = 
     | Value of FsAttributeValue
-    | Attribute of AttributeGetInfo
-    | SizeOf of AttributeGetInfo
+    | Attribute of AttributePath
+    | SizeOf of AttributePath
 
 type ConditionalExpression =
     {
@@ -61,7 +61,7 @@ with
         |> Seq.map (fun kv -> keyVal kv.Key (FsAttributeValue.ToAttributeValue kv.Value))
         |> cdict
 
-let queryExprToString (getAttrId : AttributeGetInfo -> string) (getValueId : FsAttributeValue -> string) (qExpr : QueryExpr) =
+let queryExprToString (getAttrId : AttributePath -> string) (getValueId : FsAttributeValue -> string) (qExpr : QueryExpr) =
     let sb = new System.Text.StringBuilder()
     let inline (!) (p:string) = sb.Append p |> ignore
     let inline writeOp o = 
@@ -105,11 +105,11 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             expr |> evalRaw |> conv.OfFieldUntyped |> FsAttributeValue.FromAttributeValue
 
         let (|AttributeGet|_|) e = 
-            match AttributeGetInfo.Extract r recordInfo e with
+            match AttributePath.Extract r recordInfo e with
             | None -> None
             | Some attr as aopt ->
-                attr.Iter (fun rp -> 
-                    if rp.Converter.ConverterType = ConverterType.Serialized then 
+                attr.Iter (fun conv -> 
+                    if conv.ConverterType = ConverterType.Serialized then 
                         invalidArg "expr" "cannot perform queries on serialized attributes.")
 
                 aopt
@@ -147,7 +147,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
         let (|Comparison|_|) (pat : Expr) (expr : Expr) =
             match expr with
             | SpecificCall pat (None, _, args) ->
-                let conv = args |> List.tryPick (|AttributeGet|_|) |> Option.map (fun a -> a.ValueConverter)
+                let conv = args |> List.tryPick (|AttributeGet|_|) |> Option.map (fun a -> a.Converter)
                 args |> List.map (extractOperand conv) |> Some
 
             | _ -> None
@@ -197,17 +197,17 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 Contains(attr, valId)
 
             | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; AttributeGet attr]) when elem.IsClosed ->
-                let econv = getEconv attr.ValueConverter
+                let econv = getEconv attr.Converter
                 let op = extractOperand (Some econv) elem
                 Contains(attr, op)
 
             | SpecificCall2 <@ fun (x:Set<_>) e -> x.Contains e @> (Some(AttributeGet attr), _, _, [elem]) when elem.IsClosed ->
-                let econv = getEconv attr.ValueConverter
+                let econv = getEconv attr.Converter
                 let op = extractOperand (Some econv) elem
                 Contains(attr, op)
 
             | SpecificCall2 <@ fun (x : HashSet<_>) y -> x.Contains y @> (Some(AttributeGet attr), _, _, [elem]) when elem.IsClosed ->
-                let econv = getEconv attr.ValueConverter
+                let econv = getEconv attr.Converter
                 let op = extractOperand (Some econv) elem
                 Contains(attr, op)
 
@@ -216,21 +216,21 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 if not <| isValidFieldName key then
                     invalidArg key "map key must be alphanumeric not starting with a digit"
 
-                Attribute_Exists (attr.WithSuffix key)
+                Attribute_Exists (Suffix(key, attr))
 
             | SpecificCall2 <@ fun (x : Map<_,_>) y -> x.ContainsKey y @> (Some(AttributeGet attr), _, _, [key]) when key.IsClosed ->
                 let key = evalRaw key
                 if not <| isValidFieldName key then
                     invalidArg key "map key must be alphanumeric not starting with a digit"
 
-                Attribute_Exists (attr.WithSuffix key)
+                Attribute_Exists (Suffix(key, attr))
 
             | SpecificCall2 <@ fun (x : Dictionary<_,_>) y -> x.ContainsKey y @> (Some(AttributeGet attr), _, _, [key]) when key.IsClosed ->
                 let key = evalRaw key
                 if not <| isValidFieldName key then
                     invalidArg key "map key must be alphanumeric not starting with a digit"
 
-                Attribute_Exists (attr.WithSuffix key)
+                Attribute_Exists (Suffix(key, attr))
 
             | _ -> invalidQuery()
 
@@ -239,13 +239,12 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
         | query ->
 
         let attrs = new Dictionary<string, string> ()
-        let getAttrId (attr : AttributeGetInfo) =
-            let ok,found = attrs.TryGetValue attr.Root.Name
+        let getAttrId (attr : AttributePath) =
+            let ok,found = attrs.TryGetValue attr.RootId
             if ok then found
             else
-                let id = sprintf "#ATTR%d" attr.Root.Index
-                attrs.Add(attr.Root.Name, id)
-                attr.GetId(id)
+                attrs.Add(attr.RootId, attr.RootName)
+                attr.Id
 
         let values = new Dictionary<FsAttributeValue, string>()
         let getValueId (fsv : FsAttributeValue) =
@@ -261,7 +260,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
         {
             QueryExpr = query
             Expression = exprString
-            Attributes = attrs |> Seq.map (fun kv -> kv.Value, kv.Key) |> Map.ofSeq
+            Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
             Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Map.ofSeq
         }
 

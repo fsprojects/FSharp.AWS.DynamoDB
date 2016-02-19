@@ -5,6 +5,7 @@ open System.Collections.Generic
 open System.Reflection
 open System.Threading.Tasks
 
+open Microsoft.FSharp.Core.LanguagePrimitives.IntrinsicFunctions
 open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Quotations.Patterns
 open Microsoft.FSharp.Quotations.DerivedPatterns
@@ -150,6 +151,14 @@ module internal Utils =
                 | _ -> None
 
         | _ -> invalidArg "pattern" "supplied pattern is not a property getter"
+
+    let (|IndexGet|_|) (e : Expr) =
+        match e with
+        | SpecificCall2 <@ LanguagePrimitives.IntrinsicFunctions.GetArray @> (None,_,[t], [obj ; index]) -> 
+            Some(obj, t, index)
+        | PropertyGet(Some obj, prop, [index]) when prop.Name = "Item" && index.Type = typeof<int> ->
+            Some(obj, prop.PropertyType, index)
+        | _ -> None
 
     let (|PipeLeft|_|) (e : Expr) =
         match e with

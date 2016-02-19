@@ -85,7 +85,7 @@ with
             Attributes = attributes
         }
 
-and private IRecordConverter =
+and IRecordConverter =
     abstract RecordInfo : RecordInfo
 
 type RecordConverter<'T>(ctorInfo : ConstructorInfo, properties : RecordPropertyInfo []) =
