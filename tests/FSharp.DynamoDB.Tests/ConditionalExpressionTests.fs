@@ -25,6 +25,8 @@ type CondExprRecord =
 
         Nested : Nested
 
+        NestedList : Nested list
+
         TimeSpan : TimeSpan
 
         DateTimeOffset : DateTimeOffset
@@ -62,6 +64,7 @@ type ``Conditional Expression Tests`` () =
             TimeSpan = TimeSpan.FromTicks(rand()) ; DateTimeOffset = DateTimeOffset.Now ; Guid = Guid.NewGuid()
             Bool = false ; Optional = Some (guid()) ; Ref = ref (guid()) ; Bytes = Guid.NewGuid().ToByteArray()
             Nested = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
+            NestedList = [{ NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ]
             Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq 
             Set = seq { for i in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
             List = [for i in 0L .. rand() % 5L -> rand() ]
@@ -219,6 +222,16 @@ type ``Conditional Expression Tests`` () =
 
         table.PutItemAsync(item, <@ fun r -> r.Bytes.Length >= bytes.Length @>) |> run |> ignore
         table.PutItemAsync(item, <@ fun r -> r.Bytes |> Array.length >= bytes.Length @>) |> run |> ignore
+
+    [<Fact>]
+    let ``Array index precondition`` () =
+        let item = mkItem()
+        let key = table.PutItemAsync item |> run
+        let nested = item.NestedList.[0]
+        fun () -> table.PutItemAsync(item, <@ fun r -> r.NestedList.[0].NV = guid()  @>) |> run
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+        table.PutItemAsync(item, <@ fun r -> r.NestedList.[0] = nested @>) |> run |> ignore
 
     [<Fact>]
     let ``List-length precondition`` () =
