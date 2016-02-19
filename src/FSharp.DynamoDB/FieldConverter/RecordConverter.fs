@@ -18,9 +18,7 @@ open FSharp.DynamoDB.FieldConverter
 
 let private fieldNameRegex = new Regex("^[0-9a-zA-Z]+", RegexOptions.Compiled)
 let isValidFieldName (name : string) =
-    fieldNameRegex.IsMatch name && not <| Char.IsDigit name.[0] 
-
-//        
+    fieldNameRegex.IsMatch name && not <| Char.IsDigit name.[0]   
     
 
 [<CustomEquality; NoComparison>]
@@ -40,6 +38,7 @@ and [<CustomEquality; NoComparison>]
   RecordPropertyInfo =
     {
         Name : string
+        Index : int
         PropertyInfo : PropertyInfo
         Converter : FieldConverter
         NoDefaultValue : bool
@@ -59,7 +58,7 @@ with
 
     override r.GetHashCode() = hash r.PropertyInfo
 
-    static member FromPropertyInfo (resolver : IFieldConverterResolver) (prop : PropertyInfo) =
+    static member FromPropertyInfo (resolver : IFieldConverterResolver) (attrId : int) (prop : PropertyInfo) =
         let attributes = prop.GetAttributes()
         let converter = 
             match tryGetAttribute<PropertySerializerAttribute> attributes with
@@ -76,6 +75,7 @@ with
 
         {
             Name = name
+            Index = attrId
             PropertyInfo = prop
             Converter = converter
             IsHashKey = containsAttribute<HashKeyAttribute> attributes
@@ -132,11 +132,11 @@ type RecordConverter<'T>(ctorInfo : ConstructorInfo, properties : RecordProperty
 let mkTupleConverter<'T> (resolver : IFieldConverterResolver) =
     let ctor, rest = FSharpValue.PreComputeTupleConstructorInfo(typeof<'T>)
     if Option.isSome rest then invalidArg (string typeof<'T>) "Tuples of arity > 7 not supported"
-    let properties = typeof<'T>.GetProperties() |> Array.map (RecordPropertyInfo.FromPropertyInfo resolver)
+    let properties = typeof<'T>.GetProperties() |> Array.mapi (RecordPropertyInfo.FromPropertyInfo resolver)
     new RecordConverter<'T>(ctor, properties)
 
 let mkFSharpRecordConverter<'T> (resolver : IFieldConverterResolver) =
     let ctor = FSharpValue.PreComputeRecordConstructorInfo(typeof<'T>, true)
-    let properties = FSharpType.GetRecordFields(typeof<'T>, true) |> Array.map (RecordPropertyInfo.FromPropertyInfo resolver)
+    let properties = FSharpType.GetRecordFields(typeof<'T>, true) |> Array.mapi (RecordPropertyInfo.FromPropertyInfo resolver)
     let mkRecord values = ctor.Invoke values :?> 'T
     new RecordConverter<'T>(ctor, properties)

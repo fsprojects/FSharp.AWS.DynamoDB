@@ -55,6 +55,7 @@
     <Compile Include="FieldConverter\CollectionConverters.fs" />
     <Compile Include="FieldConverter\RecordConverter.fs" />
     <Compile Include="FieldConverter\FieldConverterResolver.fs" />
+    <Compile Include="Expression\ExprCommon.fs" />
     <Compile Include="Expression\ConditionalExpr.fs" />
     <Compile Include="Expression\UpdateExpr.fs" />
     <Compile Include="RecordSchema.fs" />
