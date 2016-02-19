@@ -10,6 +10,8 @@ open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB.RecordSchema
 
+type ConditionalCheckFailedException = Amazon.DynamoDBv2.Model.ConditionalCheckFailedException
+
 type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : string, record : RecordDescriptor<'TRecord>) =
 
     member __.Client = client

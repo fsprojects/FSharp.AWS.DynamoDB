@@ -138,27 +138,34 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                     invalidArg "expr" "cannot perform queries on serialized properties."
 
             let rec resolveRecordProps acc (ctx : RecordInfo option) curr =
-                match curr with
-                | [] -> Some(List.head acc, List.rev acc)
-                | Choice1Of2 p :: tail ->
-                    let rp = ctx.Value.Properties |> Array.find (fun rp -> rp.PropertyInfo = p)
-                    checkProperty rp
-                    resolveRecordProps (rp :: acc) rp.NestedRecord tail
+                match curr, ctx with
+                | [], _ -> Some(List.head acc, List.rev acc)
+                | Choice1Of2 p :: tail, Some rI ->
+                    match rI.Properties |> Array.tryFind (fun rp -> rp.PropertyInfo = p) with
+                    | None -> None
+                    | Some rp ->
+                        checkProperty rp
+                        resolveRecordProps (rp :: acc) rp.NestedRecord tail
 
-                | Choice2Of2 i :: tail -> 
+                | Choice2Of2 i :: tail, Some rp -> 
                     let rp = ctx.Value.Properties.[i-1]
                     checkProperty rp
                     resolveRecordProps (rp :: acc) rp.NestedRecord tail
 
+                | _ -> None
+
             extractProps [] e |> Option.bind (resolveRecordProps [] (Some recordInfo))
                 
 
-        let extractOperand (conv : FieldConverter option) (expr : Expr) =
+        let rec extractOperand (conv : FieldConverter option) (expr : Expr) =
             match expr with
             | _ when expr.IsClosed ->
                 let conv = match conv with Some c -> c | None -> FieldConverter.resolveUntyped expr.Type
                 let id = getValueExpr conv expr
                 Value id
+
+            | PipeLeft e
+            | PipeRight e -> extractOperand conv e
 
             | RecordPropertyGet (_,path) ->
                 let id = getAttr path
@@ -216,16 +223,16 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
 
             | AndAlso(left, right) -> 
                 match extractQuery left, extractQuery right with
-                | False, _ -> False
-                | _, False -> False
+//                | False, _ -> False
+//                | _, False -> False
                 | True, r -> r
                 | l, True -> l
                 | l, r -> And(l, r)
 
             | OrElse(left, right) -> 
                 match extractQuery left, extractQuery right with
-                | True, _ -> True
-                | _, True -> True
+//                | True, _ -> True
+//                | _, True -> True
                 | False, r -> r
                 | l, False -> l
                 | l, r -> Or(l, r)

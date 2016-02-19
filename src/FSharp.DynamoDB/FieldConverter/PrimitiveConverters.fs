@@ -195,7 +195,7 @@ type SerializerConverter(propertyInfo : PropertyInfo, serializer : PropertySeria
 
     override __.OfFieldUntyped value = 
         let pickle = serializer.SerializeUntyped value
-        converter.OfFieldUntyped value
+        converter.OfFieldUntyped pickle
 
     override __.ToFieldUntyped a =
         let pickle = converter.ToFieldUntyped a
