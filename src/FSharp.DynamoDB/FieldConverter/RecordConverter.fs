@@ -98,8 +98,9 @@ type RecordConverter<'T>(ctorInfo : ConstructorInfo, properties : RecordProperty
         let values = new RestObject()
         for prop in properties do
             let field = prop.PropertyInfo.GetValue value
-            let av = prop.Converter.OfFieldUntyped field
-            values.Add(prop.Name, av)
+            match prop.Converter.OfFieldUntyped field with
+            | None -> ()
+            | Some av -> values.Add(prop.Name, av)
 
         values
 
@@ -123,7 +124,9 @@ type RecordConverter<'T>(ctorInfo : ConstructorInfo, properties : RecordProperty
     override __.DefaultValue = invalidOp <| sprintf "default values not supported for records."
 
     override __.OfField (record : 'T) =
-        let ro = __.OfRecord record in AttributeValue(M = ro)
+        let ro = __.OfRecord record 
+        if ro.Count = 0 then None
+        else Some <| AttributeValue(M = ro)
 
     override __.ToField a =
         if a.IsMSet then __.ToRecord a.M

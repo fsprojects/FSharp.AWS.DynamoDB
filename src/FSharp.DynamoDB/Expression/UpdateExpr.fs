@@ -99,7 +99,9 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
     let getValue (conv : FieldConverter) (expr : Expr) =
-        expr |> evalRaw |> conv.Coerce |> FsAttributeValue.FromAttributeValue
+        match expr |> evalRaw |> conv.Coerce with
+        | None -> Undefined
+        | Some av -> FsAttributeValue.FromAttributeValue av
 
     match expr with
     | Lambda(r,body) ->
@@ -216,7 +218,7 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
             let ok,found = values.TryGetValue fsv
             if ok then found
             else
-                let id = sprintf ":val%d" values.Count
+                let id = sprintf ":uval%d" values.Count
                 values.Add(fsv, id)
                 id
 

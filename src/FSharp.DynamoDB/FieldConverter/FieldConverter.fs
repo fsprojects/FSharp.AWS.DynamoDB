@@ -34,10 +34,10 @@ type FieldConverter() =
     abstract ConverterType  : ConverterType
 
     abstract DefaultValueUntyped : obj
-    abstract OfFieldUntyped : obj -> AttributeValue
+    abstract OfFieldUntyped : obj -> AttributeValue option
     abstract ToFieldUntyped : AttributeValue -> obj
 
-    abstract Coerce : obj -> AttributeValue
+    abstract Coerce : obj -> AttributeValue option
     default __.Coerce obj = __.OfFieldUntyped obj
 
     member __.IsScalar = 
@@ -53,7 +53,7 @@ type FieldConverter<'T>() =
     inherit FieldConverter()
 
     abstract DefaultValue : 'T
-    abstract OfField : 'T -> AttributeValue
+    abstract OfField : 'T -> AttributeValue option
     abstract ToField : AttributeValue -> 'T
 
     override __.Type = typeof<'T>

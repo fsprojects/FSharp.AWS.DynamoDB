@@ -17,7 +17,7 @@ with
         let dict = new Dictionary<string, AttributeValue> ()
         let extractKey name (conv : FieldConverter) (value:obj) =
             if obj.ReferenceEquals(value, null) then invalidArg name "Key value was not specified."
-            let av = conv.OfFieldUntyped value
+            let av = conv.OfFieldUntyped value |> Option.get
             dict.Add(name, av)
 
         match keyStructure with
@@ -29,7 +29,7 @@ with
             if key.IsHashKeySpecified then
                 extractKey name conv key.HashKey
             else
-                let av = value |> conv.OfFieldUntyped
+                let av = value |> conv.OfFieldUntyped |> Option.get
                 dict.Add(name, av)
 
             extractKey rkp.Name rkp.Converter key.RangeKey

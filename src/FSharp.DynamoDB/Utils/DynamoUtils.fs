@@ -7,6 +7,7 @@ open System.Collections.Generic
 open Amazon.DynamoDBv2.Model
 
 type FsAttributeValue =
+    | Undefined
     | Null
     | Bool of bool
     | String of string
@@ -34,10 +35,11 @@ with
             |> Seq.toArray
             |> Map
 
-        else invalidArg "av" "undefined attribute value"
+        else Undefined
 
     static member ToAttributeValue(fsav : FsAttributeValue) =
         match fsav with
+        | Undefined -> invalidArg "fsav" "undefined attribute value"
         | Null -> AttributeValue(NULL = true)
         | Bool b -> AttributeValue(BOOL = b)
         | String null -> AttributeValue(NULL = true)

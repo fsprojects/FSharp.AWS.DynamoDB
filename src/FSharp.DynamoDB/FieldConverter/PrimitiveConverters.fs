@@ -20,7 +20,7 @@ type BoolConverter() =
     override __.ConverterType = ConverterType.Value
 
     override __.DefaultValue = false
-    override __.OfField b = AttributeValue(BOOL = b)
+    override __.OfField b = AttributeValue(BOOL = b) |> Some
     override __.ToField a =
         if a.IsBOOLSet then a.BOOL
         else invalidCast a
@@ -37,6 +37,7 @@ type StringConverter() =
     override __.OfField s =
         if isNull s then AttributeValue(NULL = true)
         else AttributeValue(s)
+        |> Some
 
     override __.ToField a =
         if a.NULL then null
@@ -56,7 +57,7 @@ let inline mkNumericalConverter< ^N when ^N : (static member Parse : string -> ^
         member __.UnParse e = string e
 
         member __.DefaultValue = Unchecked.defaultof< ^N>
-        member __.OfField num = AttributeValue(N = string num)
+        member __.OfField num = AttributeValue(N = string num) |> Some
         member __.ToField a = 
             if not <| isNull a.N then parseNum a.N 
             else invalidCast a
@@ -67,10 +68,11 @@ type BytesConverter() =
     override __.Representation = FieldRepresentation.Bytes
     override __.ConverterType = ConverterType.Value
 
-    override __.DefaultValue = null
+    override __.DefaultValue = [||]
     override __.OfField bs = 
-        if isNull bs then AttributeValue(NULL = true)
-        else AttributeValue(B = new MemoryStream(bs))
+        if isNull bs then Some <| AttributeValue(NULL = true)
+        elif bs.Length = 0 then None 
+        else Some <| AttributeValue(B = new MemoryStream(bs))
 
     override __.ToField a = 
         if a.NULL then null
@@ -84,7 +86,7 @@ type GuidConverter() =
     override __.ConverterType = ConverterType.Value
 
     override __.DefaultValue = Guid.Empty
-    override __.OfField g = AttributeValue(string g)
+    override __.OfField g = AttributeValue(string g) |> Some
     override __.ToField a =
         if not <| isNull a.S then Guid.Parse a.S
         else invalidCast a
@@ -104,7 +106,7 @@ type DateTimeOffsetConverter() =
     override __.Parse s = parse s
     override __.UnParse d = unparse d
 
-    override __.OfField d = AttributeValue(unparse d)
+    override __.OfField d = AttributeValue(unparse d) |> Some
     override __.ToField a = 
         if not <| isNull a.S then parse a.S 
         else invalidCast a
@@ -117,7 +119,7 @@ type TimeSpanConverter() =
     override __.Parse s = TimeSpan.FromTicks(int64 s)
     override __.UnParse t = string t.Ticks
     override __.DefaultValue = TimeSpan.Zero
-    override __.OfField t = AttributeValue(N = string t.Ticks)
+    override __.OfField t = AttributeValue(N = string t.Ticks) |> Some
     override __.ToField a = 
         if not <| isNull a.N then TimeSpan.FromTicks(int64 a.N) 
         else invalidCast a
@@ -138,7 +140,7 @@ type NullableConverter<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and '
     override __.Representation = tconv.Representation
     override __.ConverterType = ConverterType.Wrapper
     override __.DefaultValue = Nullable<'T>()
-    override __.OfField n = if n.HasValue then tconv.OfField n.Value else AttributeValue(NULL = true)
+    override __.OfField n = if n.HasValue then tconv.OfField n.Value else AttributeValue(NULL = true) |> Some
     override __.ToField a = if a.NULL then Nullable<'T> () else new Nullable<'T>(tconv.ToField a)
 
 type OptionConverter<'T>(tconv : FieldConverter<'T>) =
@@ -146,7 +148,7 @@ type OptionConverter<'T>(tconv : FieldConverter<'T>) =
     override __.Representation = tconv.Representation
     override __.ConverterType = ConverterType.Wrapper
     override __.DefaultValue = None
-    override __.OfField topt = match topt with None -> AttributeValue(NULL = true) | Some t -> tconv.OfField t
+    override __.OfField topt = match topt with None -> None | Some t -> tconv.OfField t
     override __.ToField a = if a.NULL then None else Some(tconv.ToField a)
 
 let mkFSharpRefConverter<'T> (tconv : FieldConverter<'T>) =

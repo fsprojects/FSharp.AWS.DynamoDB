@@ -40,7 +40,7 @@ type internal RecordDescriptor<'Record> internal () =
 
         match keyStructure with
         | DefaultHashKey(name, hashKey, converter, _) ->
-            let av = hashKey |> converter.OfFieldUntyped
+            let av = hashKey |> converter.OfFieldUntyped |> Option.get
             kv.Add(name, av)
         | _ -> ()
 

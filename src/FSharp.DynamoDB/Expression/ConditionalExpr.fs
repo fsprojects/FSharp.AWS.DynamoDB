@@ -30,6 +30,7 @@ type QueryExpr =
     | BeginsWith of AttributePath * substr:string
     | Contains of AttributePath * Operand
     | Attribute_Exists of AttributePath
+    | Attribute_Not_Exists of AttributePath
 
 and Comparator =
     | EQ
@@ -43,6 +44,8 @@ and Operand =
     | Value of FsAttributeValue
     | Attribute of AttributePath
     | SizeOf of AttributePath
+with
+    member o.IsUndefinedValue = match o with Value Undefined -> true | _ -> false
 
 type ConditionalExpression =
     {
@@ -90,6 +93,7 @@ let queryExprToString (getAttrId : AttributePath -> string) (getValueId : FsAttr
         | BeginsWith (attr, valId) -> ! "( begins_with ( " ; !(getAttrId attr) ; ! ", " ; ! valId ; !" ))"
         | Contains (attr, op) -> ! "( contains ( " ; !(getAttrId attr) ; !", " ; writeOp op ; !" ))"
         | Attribute_Exists attr -> ! "( attribute_exists ( " ; !(getAttrId attr) ; ! "))"
+        | Attribute_Not_Exists attr -> ! "( attribute_not_exists ( " ; !(getAttrId attr) ; ! "))"
 
     aux qExpr
     sb.ToString()
@@ -102,7 +106,9 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
     | Lambda(r, body) ->
 
         let getAttrValue (conv : FieldConverter) (expr : Expr) =
-            expr |> evalRaw |> conv.Coerce |> FsAttributeValue.FromAttributeValue
+            match expr |> evalRaw |> conv.Coerce with
+            | None -> Undefined
+            | Some av -> FsAttributeValue.FromAttributeValue av
 
         let (|AttributeGet|_|) e = 
             match AttributePath.Extract r recordInfo e with
@@ -152,6 +158,20 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
 
             | _ -> None
 
+        let extractComparison (cmp : Comparator) (left : Operand) (right : Operand) =
+            let defAttr =
+                if left.IsUndefinedValue then Some(match right with Attribute attr -> attr | _ -> invalidOp "internal error")
+                elif right.IsUndefinedValue then Some(match left with Attribute attr -> attr | _ -> invalidOp "internal error")
+                else None
+
+            match defAttr with
+            | None -> Compare(cmp, left, right)
+            | Some attr ->
+                match cmp with
+                | NE -> Attribute_Exists attr
+                | EQ -> Attribute_Not_Exists attr
+                | _ -> True
+
         let rec extractQuery (expr : Expr) =
             match expr with
             | e when e.IsClosed -> if evalRaw e then True else False
@@ -181,12 +201,12 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
 
             | AttributeGet attr -> Compare(EQ, Attribute attr, Value (Bool true))
 
-            | Comparison <@ (=) @> [left; right] -> Compare(EQ, left, right)
-            | Comparison <@ (<>) @> [left; right] -> Compare(NE, left, right)
-            | Comparison <@ (<) @> [left; right] -> Compare(LT, left, right)
-            | Comparison <@ (>) @> [left; right] -> Compare(GT, left, right)
-            | Comparison <@ (<=) @> [left; right] -> Compare(LE, left, right)
-            | Comparison <@ (>=) @> [left; right] -> Compare(GE, left, right)
+            | Comparison <@ (=) @> [left; right] -> extractComparison EQ left right
+            | Comparison <@ (<>) @> [left; right] -> extractComparison NE left right
+            | Comparison <@ (<) @> [left; right] -> extractComparison LT left right
+            | Comparison <@ (>) @> [left; right] -> extractComparison GT left right
+            | Comparison <@ (<=) @> [left; right] -> extractComparison LE left right
+            | Comparison <@ (>=) @> [left; right] -> extractComparison GE left right
 
             | SpecificCall2 <@ fun (x:string) y -> x.StartsWith y @> (Some (AttributeGet attr), _, _, [value]) when value.IsClosed ->
                 let valId = evalRaw value
@@ -251,7 +271,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             let ok,found = values.TryGetValue fsv
             if ok then found
             else
-                let id = sprintf ":val%d" values.Count
+                let id = sprintf ":cval%d" values.Count
                 values.Add(fsv, id)
                 id
 
