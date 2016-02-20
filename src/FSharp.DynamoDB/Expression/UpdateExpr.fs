@@ -20,6 +20,8 @@ open FSharp.DynamoDB.ExprCommon
 type Operand =
     | Attribute of AttributePath
     | Value of FsAttributeValue
+with
+    member op.IsUndefinedValue = match op with Value Undefined -> true | _ -> false
 
 type UpdateValue =
     | Operand of Operand
@@ -117,6 +119,8 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
             let rp = recordInfo.Properties.[i]
             match assignment with
             | PropertyGet(Some (Var y), prop, []) when r = y && rp.PropertyInfo = prop -> None
+            | _ when rp.IsHashKey -> invalidArg "expr" "update expression cannot update hash key."
+            | _ when rp.IsRangeKey -> invalidArg "expr" "update expression cannot update range key."
             | Var v when bindings.ContainsKey v -> Some(rp, bindings.[v])
             | e -> Some (rp, e)
 
@@ -134,76 +138,110 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
         let rec extractUpdateValue (conv : FieldConverter) (expr : Expr) =
             match expr with
             | PipeRight e | PipeLeft e -> extractUpdateValue conv e
-            | SpecificCall2 <@ (+) @> (None, _, _, [left; right]) when conv.IsScalar ->
+            | SpecificCall2 <@ (+) @> (None, _, _, [left; right]) when conv.Representation = FieldRepresentation.Number ->
                 let l, r = extractOperand conv left, extractOperand conv right
-                Op_Addition(l, r)
+                if l.IsUndefinedValue then Operand r
+                elif r.IsUndefinedValue then Operand l
+                else
+                    Op_Addition(l, r)
 
-            | SpecificCall2 <@ (-) @> (None, _, _, [left; right]) when conv.IsScalar ->
+            | SpecificCall2 <@ (-) @> (None, _, _, [left; right]) when conv.Representation = FieldRepresentation.Number ->
                 let l, r = extractOperand conv left, extractOperand conv right
-                Op_Subtraction(l, r)
+                if l.IsUndefinedValue then Operand r
+                elif r.IsUndefinedValue then Operand l
+                else
+                    Op_Subtraction(l, r)
 
             | SpecificCall2 <@ Array.append @> (None, _, _, [left; right]) ->
                 let l, r = extractOperand conv left, extractOperand conv right
-                List_Append(l ,r)
+                if l.IsUndefinedValue then Operand r
+                elif r.IsUndefinedValue then Operand l
+                else
+                    List_Append(l, r)
 
             | SpecificCall2 <@ (@) @> (None, _, _, [left; right]) ->
                 let l, r = extractOperand conv left, extractOperand conv right
-                List_Append(l ,r)
+                if l.IsUndefinedValue then Operand r
+                elif r.IsUndefinedValue then Operand l
+                else
+                    List_Append(l, r)
 
             | SpecificCall2 <@ List.append @> (None, _, _, [left; right]) ->
                 let l, r = extractOperand conv left, extractOperand conv right
-                List_Append(l ,r)
+                if l.IsUndefinedValue then Operand r
+                elif r.IsUndefinedValue then Operand l
+                else
+                    List_Append(l, r)
 
             | _ -> extractOperand conv expr |> Operand
 
-        let rec extractUpdateExpr (parent : AttributePath) (expr : Expr) =
+        let rec tryExtractUpdateExpr (parent : AttributePath) (expr : Expr) =
             match expr with
-            | PipeRight e | PipeLeft e -> extractUpdateExpr parent e
+            | PipeRight e | PipeLeft e -> tryExtractUpdateExpr parent e
             | SpecificCall2 <@ Set.add @> (None, _, _, [elem; AttributeGet attr]) when parent = attr ->
                 let op = extractOperand parent.Converter elem
-                Add(attr, op)
+                if op.IsUndefinedValue then None
+                else Add(attr, op) |> Some
 
             | SpecificCall2 <@ fun (s : Set<_>) e -> s.Add e @> (Some (AttributeGet attr), _, _, [elem]) when attr = parent ->
                 let op = extractOperand parent.Converter elem
-                Add(attr, op)
+                if op.IsUndefinedValue then None
+                else
+                    Add(attr, op) |> Some
 
             | SpecificCall2 <@ Set.remove @> (None, _, _, [elem ; AttributeGet attr]) when attr = parent ->
                 let op = extractOperand parent.Converter elem
-                Delete(attr, op)
+                if op.IsUndefinedValue then None
+                else
+                    Delete(attr, op) |> Some
 
             | SpecificCall2 <@ fun (s : Set<_>) e -> s.Remove e @> (Some (AttributeGet attr), _, _, [elem]) when attr = parent ->
                 let op = extractOperand parent.Converter elem
-                Delete(attr, op)
+                if op.IsUndefinedValue then None
+                else
+                    Delete(attr, op) |> Some
 
             | SpecificCall2 <@ Set.addSeq @> (None, _, _, [elems ; AttributeGet attr]) when attr = parent ->
                 let op = extractOperand parent.Converter elems
-                Add(attr, op)
+                if op.IsUndefinedValue then None
+                else
+                    Add(attr, op) |> Some
 
             | SpecificCall2 <@ fun (s : Set<_>) (ts : seq<_>) -> s.Add ts @> (Some (AttributeGet attr), _, _, [ts]) when attr = parent ->
                 let op = extractOperand parent.Converter ts
-                Add(attr, op)
+                if op.IsUndefinedValue then None
+                else
+                    Add(attr, op) |> Some
 
             | SpecificCall2 <@ Set.removeSeq @> (None, _, _, [elems ; AttributeGet attr]) when attr = parent ->
                 let op = extractOperand parent.Converter elems
-                Delete(attr, op)
+                if op.IsUndefinedValue then None
+                else
+                    Delete(attr, op) |> Some
 
             | SpecificCall2 <@ fun (s : Set<_>) (ts : seq<_>) -> s.Remove ts @> (Some (AttributeGet attr), _, _, [elems]) when attr = parent ->
                 let op = extractOperand parent.Converter elems
-                Delete(attr, op)
+                if op.IsUndefinedValue then None
+                else Delete(attr, op) |> Some
 
             | SpecificCall2 <@ (+) @> (None, _, _, ([AttributeGet attr; other] | [other ; AttributeGet attr])) when attr = parent && not attr.Converter.IsScalar ->
                 let op = extractOperand parent.Converter other
-                Add(attr, op)
+                if op.IsUndefinedValue then None
+                else
+                    Add(attr, op) |> Some
 
             | SpecificCall2 <@ (-) @> (None, _, _, [AttributeGet attr; other]) when attr = parent && not attr.Converter.IsScalar ->
                 let op = extractOperand parent.Converter other
-                Delete(attr, op)
+                if op.IsUndefinedValue then None
+                else
+                    Delete(attr, op) |> Some
 
             | e -> 
-                let uv = extractUpdateValue parent.Converter e
-                Set(parent, uv)
+                match extractUpdateValue parent.Converter e with
+                | Operand op when op.IsUndefinedValue -> Some(Remove parent)
+                | uv -> Some(Set(parent, uv))
 
-        let updateExprs = updateExprs |> List.map (fun (rp,e) -> extractUpdateExpr (Root rp) e)
+        let updateExprs = updateExprs |> List.choose (fun (rp,e) -> tryExtractUpdateExpr (Root rp) e)
 
         let attrs = new Dictionary<string, string> ()
         let getAttrId (attr : AttributePath) =

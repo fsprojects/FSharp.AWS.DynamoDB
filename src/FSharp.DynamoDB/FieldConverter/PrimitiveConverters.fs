@@ -9,7 +9,6 @@ open System.Reflection
 
 open Microsoft.FSharp.Core.LanguagePrimitives
 
-open Amazon.Util
 open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
@@ -96,8 +95,9 @@ type GuidConverter() =
 
 type DateTimeOffsetConverter() =
     inherit StringRepresentableFieldConverter<DateTimeOffset> ()
+    static let isoFormat = "yyyy-MM-dd\THH:mm:ss.fffffff\Z"
     let parse s = DateTimeOffset.Parse(s).ToLocalTime()
-    let unparse (d:DateTimeOffset) = d.ToUniversalTime().ToString(AWSSDKUtils.ISO8601DateFormat)
+    let unparse (d:DateTimeOffset) = d.ToUniversalTime().ToString(isoFormat)
 
     override __.Representation = FieldRepresentation.String
     override __.ConverterType = ConverterType.Value
@@ -150,39 +150,6 @@ type OptionConverter<'T>(tconv : FieldConverter<'T>) =
     override __.DefaultValue = None
     override __.OfField topt = match topt with None -> None | Some t -> tconv.OfField t
     override __.ToField a = if a.NULL then None else Some(tconv.ToField a)
-
-let mkFSharpRefConverter<'T> (tconv : FieldConverter<'T>) =
-    match tconv with
-    | :? NumRepresentableFieldConverter<'T> as tconv ->
-        { new NumRepresentableFieldConverter<'T ref>() with
-            member __.Representation = tconv.Representation
-            member __.ConverterType = tconv.ConverterType
-            member __.DefaultValue = ref tconv.DefaultValue
-            member __.OfField tref = tconv.OfField tref.Value
-            member __.ToField a = tconv.ToField a |> ref
-            member __.Parse s = tconv.Parse s |> ref
-            member __.UnParse tref = tconv.UnParse tref.Value
-        } :> FieldConverter<'T ref>
-
-    | :? StringRepresentableFieldConverter<'T> as tconv ->
-        { new StringRepresentableFieldConverter<'T ref>() with
-            member __.Representation = tconv.Representation
-            member __.ConverterType = tconv.ConverterType
-            member __.DefaultValue = ref tconv.DefaultValue
-            member __.OfField tref = tconv.OfField tref.Value
-            member __.ToField a = tconv.ToField a |> ref
-            member __.Parse s = tconv.Parse s |> ref
-            member __.UnParse tref = tconv.UnParse tref.Value
-        } :> FieldConverter<'T ref>
-
-    | _ ->
-        { new FieldConverter<'T ref>() with
-            member __.Representation = tconv.Representation
-            member __.ConverterType = tconv.ConverterType
-            member __.DefaultValue = ref tconv.DefaultValue
-            member __.OfField tref = tconv.OfField tref.Value
-            member __.ToField a = tconv.ToField a |> ref }
-
 
 type SerializerConverter(propertyInfo : PropertyInfo, serializer : PropertySerializerAttribute, resolver : IFieldConverterResolver) =
     inherit FieldConverter()

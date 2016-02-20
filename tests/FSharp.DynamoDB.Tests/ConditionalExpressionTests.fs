@@ -8,48 +8,51 @@ open FsUnit.Xunit
 
 open FSharp.DynamoDB
 
-type Enum = A = 0 | B = 1 | C = 2
+[<AutoOpen>]
+module CondExprTypes =
 
-type Nested = { NV : string ; NE : Enum }
+    type Enum = A = 0 | B = 1 | C = 2
 
-type CondExprRecord =
-    {
-        [<HashKey>]
-        HashKey : string
-        [<RangeKey>]
-        RangeKey : string
+    type Nested = { NV : string ; NE : Enum }
 
-        Value : int64
+    type CondExprRecord =
+        {
+            [<HashKey>]
+            HashKey : string
+            [<RangeKey>]
+            RangeKey : string
 
-        Tuple : int64 * int64
+            Value : int64
 
-        Nested : Nested
+            Tuple : int64 * int64
 
-        NestedList : Nested list
+            Nested : Nested
 
-        TimeSpan : TimeSpan
+            NestedList : Nested list
 
-        DateTimeOffset : DateTimeOffset
+            TimeSpan : TimeSpan
 
-        Guid : Guid
+            DateTimeOffset : DateTimeOffset
 
-        Bool : bool
+            Guid : Guid
 
-        Bytes : byte[]
+            Bool : bool
 
-        Ref : string ref
+            Bytes : byte[]
 
-        Optional : string option
+            Ref : string ref
 
-        List : int64 list
+            Optional : string option
 
-        Map : Map<string, int64>
+            List : int64 list
 
-        Set : Set<int64>
+            Map : Map<string, int64>
 
-        [<BinaryFormatter>]
-        Serialized : int64 * string
-    }
+            Set : Set<int64>
+
+            [<BinaryFormatter>]
+            Serialized : int64 * string
+        }
 
 type ``Conditional Expression Tests`` () =
 

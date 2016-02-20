@@ -61,6 +61,7 @@
     <Compile Include="RecordGenerationTests.fs" />
     <Compile Include="SimpleTableOperationTests.fs" />
     <Compile Include="ConditionalExpressionTests.fs" />
+    <Compile Include="UpdateExpressionTests.fs" />
     <None Include="paket.references" />
     <Content Include="App.config" />
     <Content Include="packages.config" />

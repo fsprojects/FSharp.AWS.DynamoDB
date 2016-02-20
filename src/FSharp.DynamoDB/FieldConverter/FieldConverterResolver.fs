@@ -48,12 +48,6 @@ module private ResolverImpl =
                     member __.VisitNullable<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct> () = 
                         new NullableConverter<'T>(resolver.Resolve()) :> _ }
 
-        | ShapeFSharpRef s ->
-            s.Accept {
-                new IFSharpRefVisitor<FieldConverter> with
-                    member __.VisitFSharpRef<'T> () =
-                        mkFSharpRefConverter<'T> (resolver.Resolve()) :> _ }
-
         | ShapeFSharpOption s ->
             s.Accept {
                 new IFSharpOptionVisitor<FieldConverter> with
