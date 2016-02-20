@@ -102,7 +102,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
     | Lambda(r, body) ->
 
         let getAttrValue (conv : FieldConverter) (expr : Expr) =
-            expr |> evalRaw |> conv.OfFieldUntyped |> FsAttributeValue.FromAttributeValue
+            expr |> evalRaw |> conv.Coerce |> FsAttributeValue.FromAttributeValue
 
         let (|AttributeGet|_|) e = 
             match AttributePath.Extract r recordInfo e with

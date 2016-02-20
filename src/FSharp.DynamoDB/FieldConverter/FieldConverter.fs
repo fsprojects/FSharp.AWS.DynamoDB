@@ -37,6 +37,9 @@ type FieldConverter() =
     abstract OfFieldUntyped : obj -> AttributeValue
     abstract ToFieldUntyped : AttributeValue -> obj
 
+    abstract Coerce : obj -> AttributeValue
+    default __.Coerce obj = __.OfFieldUntyped obj
+
     member __.IsScalar = 
         match __.Representation with
         | FieldRepresentation.Number

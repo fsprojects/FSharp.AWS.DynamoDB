@@ -99,7 +99,7 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
     let getValue (conv : FieldConverter) (expr : Expr) =
-        expr |> evalRaw |> conv.OfFieldUntyped |> FsAttributeValue.FromAttributeValue
+        expr |> evalRaw |> conv.Coerce |> FsAttributeValue.FromAttributeValue
 
     match expr with
     | Lambda(r,body) ->
@@ -122,90 +122,83 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
 
         let (|AttributeGet|_|) (e : Expr) = AttributePath.Extract r recordInfo e
 
-        let rec extractOperand (expr : Expr) =
+        let rec extractOperand (conv : FieldConverter) (expr : Expr) =
             match expr with
-            | _ when expr.IsClosed ->
-                let conv = FieldConverter.resolveUntyped expr.Type
-                let av = getValue conv expr in Value av
-
-            | PipeRight e | PipeLeft e -> extractOperand e
+            | _ when expr.IsClosed -> let av = getValue conv expr in Value av
+            | PipeRight e | PipeLeft e -> extractOperand conv e
             | AttributeGet attr -> Attribute attr
             | _ -> invalidExpr()
 
-        let rec extractUpdateValue (expr : Expr) =
+        let rec extractUpdateValue (conv : FieldConverter) (expr : Expr) =
             match expr with
-            | PipeRight e | PipeLeft e -> extractUpdateValue e
-            | SpecificCall2 <@ (+) @> (None, _, _, [left; right]) ->
-                let conv = FieldConverter.resolveUntyped left.Type
-                if not conv.IsScalar then invalidArg "expr" "Addition of non-scalar types not supported"
-                let l, r = extractOperand left, extractOperand right
+            | PipeRight e | PipeLeft e -> extractUpdateValue conv e
+            | SpecificCall2 <@ (+) @> (None, _, _, [left; right]) when conv.IsScalar ->
+                let l, r = extractOperand conv left, extractOperand conv right
                 Op_Addition(l, r)
 
-            | SpecificCall2 <@ (-) @> (None, _, _, [left; right]) ->
-                let conv = FieldConverter.resolveUntyped left.Type
-                if not conv.IsScalar then invalidArg "expr" "Addition of non-scalar types not supported"
-                let l, r = extractOperand left, extractOperand right
+            | SpecificCall2 <@ (-) @> (None, _, _, [left; right]) when conv.IsScalar ->
+                let l, r = extractOperand conv left, extractOperand conv right
                 Op_Subtraction(l, r)
 
             | SpecificCall2 <@ Array.append @> (None, _, _, [left; right]) ->
-                let l, r = extractOperand left, extractOperand right
+                let l, r = extractOperand conv left, extractOperand conv right
                 List_Append(l ,r)
 
             | SpecificCall2 <@ (@) @> (None, _, _, [left; right]) ->
-                let l, r = extractOperand left, extractOperand right
+                let l, r = extractOperand conv left, extractOperand conv right
                 List_Append(l ,r)
 
             | SpecificCall2 <@ List.append @> (None, _, _, [left; right]) ->
-                let l, r = extractOperand left, extractOperand right
+                let l, r = extractOperand conv left, extractOperand conv right
                 List_Append(l ,r)
 
-            | _ -> extractOperand expr |> Operand
+            | _ -> extractOperand conv expr |> Operand
 
         let rec extractUpdateExpr (parent : AttributePath) (expr : Expr) =
             match expr with
             | PipeRight e | PipeLeft e -> extractUpdateExpr parent e
             | SpecificCall2 <@ Set.add @> (None, _, _, [elem; AttributeGet attr]) when parent = attr ->
-                let op = extractOperand elem
+                let op = extractOperand parent.Converter elem
                 Add(attr, op)
 
             | SpecificCall2 <@ fun (s : Set<_>) e -> s.Add e @> (Some (AttributeGet attr), _, _, [elem]) when attr = parent ->
-                let op = extractOperand elem
+                let op = extractOperand parent.Converter elem
                 Add(attr, op)
 
             | SpecificCall2 <@ Set.remove @> (None, _, _, [elem ; AttributeGet attr]) when attr = parent ->
-                let op = extractOperand elem
+                let op = extractOperand parent.Converter elem
                 Delete(attr, op)
 
             | SpecificCall2 <@ fun (s : Set<_>) e -> s.Remove e @> (Some (AttributeGet attr), _, _, [elem]) when attr = parent ->
-                let op = extractOperand elem
+                let op = extractOperand parent.Converter elem
                 Delete(attr, op)
 
             | SpecificCall2 <@ Set.addSeq @> (None, _, _, [elems ; AttributeGet attr]) when attr = parent ->
-                let op = extractOperand elems
+                let op = extractOperand parent.Converter elems
                 Add(attr, op)
 
             | SpecificCall2 <@ fun (s : Set<_>) (ts : seq<_>) -> s.Add ts @> (Some (AttributeGet attr), _, _, [ts]) when attr = parent ->
-                let op = extractOperand ts
+                let op = extractOperand parent.Converter ts
                 Add(attr, op)
 
             | SpecificCall2 <@ Set.removeSeq @> (None, _, _, [elems ; AttributeGet attr]) when attr = parent ->
-                let op = extractOperand elems
+                let op = extractOperand parent.Converter elems
                 Delete(attr, op)
 
             | SpecificCall2 <@ fun (s : Set<_>) (ts : seq<_>) -> s.Remove ts @> (Some (AttributeGet attr), _, _, [elems]) when attr = parent ->
-                let op = extractOperand elems
+                let op = extractOperand parent.Converter elems
                 Delete(attr, op)
 
             | SpecificCall2 <@ (+) @> (None, _, _, ([AttributeGet attr; other] | [other ; AttributeGet attr])) when attr = parent && not attr.Converter.IsScalar ->
-                let op = extractOperand other
+                let op = extractOperand parent.Converter other
                 Add(attr, op)
 
             | SpecificCall2 <@ (-) @> (None, _, _, [AttributeGet attr; other]) when attr = parent && not attr.Converter.IsScalar ->
-                let op = extractOperand other
+                let op = extractOperand parent.Converter other
                 Delete(attr, op)
 
             | e -> 
-                let uv = extractUpdateValue e
+                let uv = extractUpdateValue parent.Converter e
                 Set(parent, uv)
 
         let updateExprs = updateExprs |> List.map (fun (rp,e) -> extractUpdateExpr (Root rp) e)

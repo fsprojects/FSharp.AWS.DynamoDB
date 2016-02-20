@@ -66,39 +66,39 @@ module private ResolverImpl =
                 new IArrayVisitor<FieldConverter> with
                     member __.VisitArray<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        new ListConverter<'T [], 'T>(Seq.toArray, Array.isEmpty, tconv) :> _ }
+                        new ListConverter<'T [], 'T>(Seq.toArray, tconv) :> _ }
 
         | ShapeFSharpList s ->
             s.Accept {
                 new IFSharpListVisitor<FieldConverter> with
                     member __.VisitFSharpList<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        new ListConverter<'T list, 'T>(List.ofSeq, List.isEmpty, tconv) :> _ }
+                        new ListConverter<'T list, 'T>(List.ofSeq, tconv) :> _ }
 
         | ShapeResizeArray s ->
             s.Accept {
                 new IResizeArrayVisitor<FieldConverter> with
                     member __.VisitResizeArray<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        new ListConverter<ResizeArray<'T>, 'T>(rlist, (fun r -> r.Count = 0), tconv) :> _ }
+                        new ListConverter<ResizeArray<'T>, 'T>(rlist, tconv) :> _ }
 
         | ShapeHashSet s ->
             s.Accept {
                 new IHashSetVisitor<FieldConverter> with
                     member __.VisitHashSet<'T when 'T : equality> () =
                         if typeof<'T> = typeof<byte []> then
-                            BytesSetConverter<HashSet<byte []>>(HashSet, (fun r -> r.Count = 0)) :> _
+                            BytesSetConverter<HashSet<byte []>>(HashSet) :> _
                         else
-                            mkSetConverter<_,'T> HashSet (fun r -> r.Count = 0) (resolver.Resolve()) :> _ }
+                            mkSetConverter<_,'T> HashSet (resolver.Resolve()) :> _ }
 
         | ShapeFSharpSet s ->
             s.Accept {
                 new IFSharpSetVisitor<FieldConverter> with
                     member __.VisitFSharpSet<'T when 'T : comparison> () =
                         if typeof<'T> = typeof<byte []> then
-                            BytesSetConverter<Set<byte []>>(Set.ofSeq, Set.isEmpty) :> _
+                            BytesSetConverter<Set<byte []>>(Set.ofSeq) :> _
                         else
-                            mkSetConverter<_,'T> Set.ofSeq Set.isEmpty (resolver.Resolve()) :> _ }
+                            mkSetConverter<_,'T> Set.ofSeq (resolver.Resolve()) :> _ }
 
         | ShapeDictionary s ->
             s.Accept {
@@ -126,14 +126,14 @@ module private ResolverImpl =
                 new ICollectionVisitor<FieldConverter> with
                     member __.VisitCollection<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        new ListConverter<ICollection<'T>, 'T>(Seq.toArray >> unbox, (fun c -> c.Count = 0), tconv) :> _ }
+                        new ListConverter<ICollection<'T>, 'T>(Seq.toArray >> unbox, tconv) :> _ }
 
         | ShapeEnumerable s ->
             s.Accept {
                 new IEnumerableVisitor<FieldConverter> with
                     member __.VisitEnumerable<'T> () =
                         let tconv = resolver.Resolve<'T>()
-                        new ListConverter<seq<'T>, 'T>(Seq.toArray >> unbox, Seq.isEmpty, tconv) :> _ }
+                        new ListConverter<seq<'T>, 'T>(Seq.toArray >> unbox, tconv) :> _ }
 
         | ShapeTuple as s ->
             s.Accept {

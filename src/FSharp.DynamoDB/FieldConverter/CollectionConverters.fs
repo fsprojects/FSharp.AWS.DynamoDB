@@ -12,15 +12,22 @@ open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
 
-type ListConverter<'List, 'T when 'List :> seq<'T>>(ctor : seq<'T> -> 'List, isEmpty : 'List -> bool, tconv : FieldConverter<'T>) =
+type ListConverter<'List, 'T when 'List :> seq<'T>>(ctor : seq<'T> -> 'List, tconv : FieldConverter<'T>) =
     inherit FieldConverter<'List>()
     override __.Representation = FieldRepresentation.List
     override __.ConverterType = ConverterType.Value
     override __.DefaultValue = ctor [||]
-    override __.OfField list = 
-        if isNull list || isEmpty list then AttributeValue(NULL = true)
-        else 
-            AttributeValue(L = (list |> Seq.map tconv.OfField |> rlist))
+    override __.Coerce obj =
+        match obj with
+        | null -> AttributeValue(NULL = true)
+        | :? 'T as t -> AttributeValue(L = rlist [|tconv.OfField t|])
+        | _ ->
+            let rl = unbox<seq<'T>> obj |> Seq.map tconv.OfField |> rlist
+            if rl.Count = 0 then AttributeValue(NULL = true)
+            else
+                AttributeValue(L = rl)
+
+    override __.OfField list = __.Coerce list
 
     override __.ToField a =
         if a.NULL then ctor [||]
@@ -30,14 +37,22 @@ type ListConverter<'List, 'T when 'List :> seq<'T>>(ctor : seq<'T> -> 'List, isE
     interface ICollectionConverter with
         member __.ElementConverter = tconv :> _
 
-type BytesSetConverter<'BSet when 'BSet :> seq<byte[]>>(ctor : seq<byte []> -> 'BSet, isEmpty : 'BSet -> bool) =
+type BytesSetConverter<'BSet when 'BSet :> seq<byte[]>>(ctor : seq<byte []> -> 'BSet) =
     inherit FieldConverter<'BSet>()
     override __.Representation = FieldRepresentation.BytesSet
     override __.ConverterType = ConverterType.Value
     override __.DefaultValue = ctor [||]
-    override __.OfField bss = 
-        if isNull bss || isEmpty bss then AttributeValue(NULL = true)
-        else AttributeValue (BS = (bss |> Seq.map (fun bs -> new MemoryStream(bs)) |> rlist))
+    override __.Coerce obj =
+        match obj with
+        | null -> AttributeValue(NULL = true)
+        | :? (byte[]) as bs -> AttributeValue(BS = rlist [|new MemoryStream(bs)|])
+        | _ ->
+            let rl = unbox<seq<byte[]>> obj |> Seq.map (fun bs -> new MemoryStream(bs)) |> rlist
+            if rl.Count = 0 then AttributeValue(NULL = true)
+            else
+                AttributeValue(BS = rl)
+
+    override __.OfField bss = __.Coerce bss
 
     override __.ToField a =
         if a.NULL then ctor [||]
@@ -47,15 +62,21 @@ type BytesSetConverter<'BSet when 'BSet :> seq<byte[]>>(ctor : seq<byte []> -> '
     interface ICollectionConverter with
         member __.ElementConverter = new BytesConverter() :> _
 
-type NumSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, isEmpty : 'Set -> bool, tconv : NumRepresentableFieldConverter<'T>) =
+type NumSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, tconv : NumRepresentableFieldConverter<'T>) =
     inherit FieldConverter<'Set>()
     override __.DefaultValue = ctor [||]
     override __.Representation = FieldRepresentation.NumberSet
     override __.ConverterType = ConverterType.Value
-    override __.OfField set = 
-        if isNull set || isEmpty set then AttributeValue(NULL = true)
-        else
-            AttributeValue(NS = (set |> Seq.map tconv.UnParse |> rlist))
+    override __.Coerce obj =
+        match obj with
+        | null -> AttributeValue(NULL = true)
+        | :? 'T as t -> AttributeValue(NS = rlist[|tconv.UnParse t|])
+        | _ ->
+            let rl = obj |> unbox<seq<'T>> |> Seq.map tconv.UnParse |> rlist
+            if rl.Count = 0 then AttributeValue(NULL = true)
+            else AttributeValue(NS = rl)
+
+    override __.OfField set = __.Coerce set
 
     override __.ToField a =
         if a.NULL then ctor [||]
@@ -65,14 +86,21 @@ type NumSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, isE
     interface ICollectionConverter with
         member __.ElementConverter = tconv :> _
 
-type StringSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, isEmpty : 'Set -> bool, tconv : StringRepresentableFieldConverter<'T>) =
+type StringSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, tconv : StringRepresentableFieldConverter<'T>) =
     inherit FieldConverter<'Set>()
     override __.DefaultValue = ctor [||]
     override __.Representation = FieldRepresentation.StringSet
     override __.ConverterType = ConverterType.Value
-    override __.OfField set = 
-        if isNull set || isEmpty set then AttributeValue(NULL = true)
-        else AttributeValue(SS = (set |> Seq.map tconv.UnParse |> rlist))
+    override __.Coerce obj =
+        match obj with
+        | null -> AttributeValue(NULL = true)
+        | :? 'T as t -> AttributeValue(SS = rlist[|tconv.UnParse t|])
+        | _ ->
+            let rl = obj |> unbox<seq<'T>> |> Seq.map tconv.UnParse |> rlist
+            if rl.Count = 0 then AttributeValue(NULL = true)
+            else AttributeValue(SS = rl)
+
+    override __.OfField set = __.Coerce set
 
     override __.ToField a =
         if a.NULL then ctor [||]
@@ -82,10 +110,10 @@ type StringSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, 
     interface ICollectionConverter with
         member __.ElementConverter = tconv :> _
 
-let mkSetConverter<'Set, 'T when 'Set :> seq<'T>> ctor isEmpty (tconv : FieldConverter<'T>) : FieldConverter<'Set> =
+let mkSetConverter<'Set, 'T when 'Set :> seq<'T>> ctor (tconv : FieldConverter<'T>) : FieldConverter<'Set> =
     match tconv with
-    | :? NumRepresentableFieldConverter<'T> as tc -> NumSetConverter<'Set, 'T>(ctor, isEmpty, tc) :> _
-    | :? StringRepresentableFieldConverter<'T> as tc -> StringSetConverter<'Set, 'T>(ctor, isEmpty, tc) :> _
+    | :? NumRepresentableFieldConverter<'T> as tc -> NumSetConverter<'Set, 'T>(ctor, tc) :> _
+    | :? StringRepresentableFieldConverter<'T> as tc -> StringSetConverter<'Set, 'T>(ctor, tc) :> _
     | _ -> UnSupportedField.Raise typeof<'Set>
 
 type MapConverter<'Map, 'Value when 'Map :> seq<KeyValuePair<string, 'Value>>>
@@ -96,11 +124,28 @@ type MapConverter<'Map, 'Value when 'Map :> seq<KeyValuePair<string, 'Value>>>
     override __.Representation = FieldRepresentation.Map
     override __.ConverterType = ConverterType.Value
     override __.DefaultValue = ctor [||]
-    override __.OfField map =
-        if isNullOrEmpty map then AttributeValue(NULL = true)
-        else
-            let m = map |> Seq.map (fun kv -> keyVal kv.Key (vconv.OfField kv.Value)) |> cdict
-            AttributeValue(M = m)
+    override __.Coerce obj =
+        match obj with
+        | null -> AttributeValue(NULL = true)
+        | :? KeyValuePair<string, 'Value> as kv -> 
+            AttributeValue(M = cdict [|keyVal kv.Key (vconv.OfField kv.Value)|])
+
+        | :? (string * 'Value) as kv -> 
+            AttributeValue(M = cdict [|keyVal (fst kv) (vconv.OfField (snd kv))|])
+
+        | :? seq<KeyValuePair<string, 'Value>> as kvs ->
+            let m = kvs |> Seq.map (fun kv -> keyVal kv.Key (vconv.OfField kv.Value)) |> cdict
+            if m.Count = 0 then AttributeValue(NULL = true)
+            else AttributeValue(M = m)
+
+        | :? seq<string * 'Value> as kvs ->
+            let m = kvs |> Seq.map (fun (k,v) -> keyVal k (vconv.OfField v)) |> cdict
+            if m.Count = 0 then AttributeValue(NULL = true)
+            else AttributeValue(M = m)
+
+        | _ -> raise <| InvalidCastException()
+
+    override __.OfField map = __.Coerce map
 
     override __.ToField a =
         if a.NULL then ctor [||]
@@ -109,17 +154,3 @@ type MapConverter<'Map, 'Value when 'Map :> seq<KeyValuePair<string, 'Value>>>
 
     interface ICollectionConverter with
         member __.ElementConverter = vconv :> _
-
-open FSharp.DynamoDB.TypeShape
-let convertToSet (setType : Type) (value:obj) =
-    match getShape(setType) with
-    | ShapeFSharpSet s ->
-        s.Accept { 
-            new IFSharpSetVisitor<IEnumerable> with
-                member __.VisitFSharpSet<'T when 'T : comparison> () =
-                    match value with
-                    | :? 'T as t -> set [t] :> _
-                    | _ -> set (value :?> seq<'T>) :> _
-        }
-
-    | _ -> invalidArg "setType" "not a set type"
