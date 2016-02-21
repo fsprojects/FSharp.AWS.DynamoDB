@@ -15,6 +15,11 @@ open FSharp.DynamoDB
 let account = AWSCredentialsProfile.LoadFrom("default").Credentials
 let ddb = new AmazonDynamoDBClient(account, RegionEndpoint.EUCentral1) :> IAmazonDynamoDB
 
+let tables = ddb.ListTables().TableNames |> Seq.toArray
+for t in tables do 
+    ddb.DeleteTable t
+    System.Threading.Thread.Sleep 1000
+
 type Nested = { A : string ; B : System.Reflection.BindingFlags }
 
 type Test =

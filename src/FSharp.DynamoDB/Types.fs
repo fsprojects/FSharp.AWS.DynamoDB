@@ -107,17 +107,3 @@ type TableKey private (hashKey : obj, rangeKey : obj) =
     static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey) = 
         if obj.ReferenceEquals(hashKey, null) then raise <| new ArgumentNullException("HashKey must not be null")
         new TableKey(hashKey, rangeKey)
-
-[<AutoOpen>]
-module QueryExtensions =
-
-    type Set<'T when 'T : comparison> with
-        member s.Add(ts : seq<'T>) =
-            Seq.append s ts |> Set.ofSeq
-
-        member s.Remove(ts : seq<'T>) = s - set ts
-
-    [<RequireQualifiedAccess>]
-    module Set =
-        let addSeq (ts : seq<'T>) (s : Set<'T>) = s.Add ts
-        let removeSeq (ts : seq<'T>) (s : Set<'T>) = s.Remove ts

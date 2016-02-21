@@ -189,3 +189,63 @@ type ``Update Expression Tests`` () =
         let key = table.PutItemAsync item |> run
         let item' = table.UpdateItemAsync(key, <@ fun r -> { r with List = [] } @>) |> run
         item'.List.Length |> should equal 0
+
+    [<Fact>]
+    let ``Update list with concatenation`` () =
+        let item = { mkItem() with List = [1L] }
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemAsync(key, <@ fun r -> { r with List = r.List @ r.List } @>) |> run
+        item'.List |> should equal (item.List @ item.List)
+
+    [<Fact>]
+    let ``Update set with add element`` () =
+        let item = { mkItem() with Set = set [1L;2L] }
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemAsync(key, <@ fun r -> { r with Set = r.Set |> Set.add 3L } @>) |> run
+        item'.Set.Contains 3L |> should equal true
+
+    [<Fact>]
+    let ``Update set with remove element`` () =
+        let item = { mkItem() with Set = set [1L;2L] }
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemAsync(key, <@ fun r -> { r with Set = r.Set |> Set.remove 2L } @>) |> run
+        item'.Set.Contains 2L |> should equal false
+
+    [<Fact>]
+    let ``Update set with append set`` () =
+        let item = { mkItem() with Set = set [1L;2L] }
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemAsync(key, <@ fun r -> { r with Set = r.Set + set[3L] } @>) |> run
+        item'.Set.Contains 3L |> should equal true
+
+    [<Fact>]
+    let ``Update set with remove set`` () =
+        let item = { mkItem() with Set = set [1L;2L] }
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemAsync(key, <@ fun r -> { r with Set = r.Set - set[1L;2L;3L] } @>) |> run
+        item'.Set.Count |> should equal 0
+
+    [<Fact>]
+    let ``Update map with add element`` () =
+        let item = { mkItem() with Map = Map.ofList [("A", 1L) ; ("B", 2L)] }
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemAsync(key, <@ fun r -> { r with Map = r.Map |> Map.add "C" 3L } @>) |> run
+        item'.Map.TryFind "C" |> should equal (Some 3L)
+
+    [<Fact>]
+    let ``Update map with remove element`` () =
+        let item = { mkItem() with Map = Map.ofList [("A", 1L) ; ("B", 2L)] }
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemAsync(key, <@ fun r -> { r with Map = r.Map |> Map.remove "B" } @>) |> run
+        item'.Map.ContainsKey "B" |> should equal false
+
+    [<Fact>]
+    let ``Update map with remove element on existing`` () =
+        let item = { mkItem() with Map = Map.ofList [("A", 1L) ; ("B", 2L)] }
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemAsync(key, <@ fun r -> { r with Map = r.Map |> Map.remove "C" } @>) |> run
+        item'.Map.Count |> should equal 2
+
+    interface IDisposable with
+        member __.Dispose() =
+            ignore <| client.DeleteTable(tableName)

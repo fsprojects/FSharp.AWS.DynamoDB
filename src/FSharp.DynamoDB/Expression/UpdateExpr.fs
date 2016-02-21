@@ -201,29 +201,6 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
                 else
                     Delete(attr, op) |> Some
 
-            | SpecificCall2 <@ Set.addSeq @> (None, _, _, [elems ; AttributeGet attr]) when attr = parent ->
-                let op = extractOperand parent.Converter elems
-                if op.IsUndefinedValue then None
-                else
-                    Add(attr, op) |> Some
-
-            | SpecificCall2 <@ fun (s : Set<_>) (ts : seq<_>) -> s.Add ts @> (Some (AttributeGet attr), _, _, [ts]) when attr = parent ->
-                let op = extractOperand parent.Converter ts
-                if op.IsUndefinedValue then None
-                else
-                    Add(attr, op) |> Some
-
-            | SpecificCall2 <@ Set.removeSeq @> (None, _, _, [elems ; AttributeGet attr]) when attr = parent ->
-                let op = extractOperand parent.Converter elems
-                if op.IsUndefinedValue then None
-                else
-                    Delete(attr, op) |> Some
-
-            | SpecificCall2 <@ fun (s : Set<_>) (ts : seq<_>) -> s.Remove ts @> (Some (AttributeGet attr), _, _, [elems]) when attr = parent ->
-                let op = extractOperand parent.Converter elems
-                if op.IsUndefinedValue then None
-                else Delete(attr, op) |> Some
-
             | SpecificCall2 <@ (+) @> (None, _, _, ([AttributeGet attr; other] | [other ; AttributeGet attr])) when attr = parent && not attr.Converter.IsScalar ->
                 let op = extractOperand parent.Converter other
                 if op.IsUndefinedValue then None
@@ -235,6 +212,19 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
                 if op.IsUndefinedValue then None
                 else
                     Delete(attr, op) |> Some
+
+            | SpecificCall2 <@ Map.add @> (None, _, _, [keyE; value; AttributeGet attr]) when attr = parent ->
+                let key = evalRaw keyE
+                let attr = Suffix(key, parent)
+                let econv = unbox<ICollectionConverter>(parent.Converter).ElementConverter
+                match extractUpdateValue econv value with
+                | Operand op when op.IsUndefinedValue -> Some(Remove attr)
+                | uv -> Some(Set(attr, uv))
+
+            | SpecificCall2 <@ Map.remove @> (None, _, _, [keyE; AttributeGet attr]) when attr = parent ->
+                let key = evalRaw keyE
+                let attr = Suffix(key, parent)
+                Some(Remove attr)
 
             | e -> 
                 match extractUpdateValue parent.Converter e with
