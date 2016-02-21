@@ -43,14 +43,11 @@ type UpdateExpression =
         Values     : Map<string, FsAttributeValue>
     }
 with
-    member __.DAttributes = 
-        __.Attributes
-        |> cdict
+    member __.AppendAttributesTo(target : Dictionary<string, string>) =
+        for kv in __.Attributes do target.[kv.Key] <- kv.Value
 
-    member __.DValues = 
-        __.Values 
-        |> Seq.map (fun kv -> keyVal kv.Key (FsAttributeValue.ToAttributeValue kv.Value))
-        |> cdict
+    member __.AppendValuesTo(target : Dictionary<string, AttributeValue>) =
+        for kv in __.Values do target.[kv.Key] <- FsAttributeValue.ToAttributeValue kv.Value
 
 
 let updateExprsToString (getAttrId : AttributePath -> string) (getValueId : FsAttributeValue -> string) (uexprs : UpdateExpr list) =

@@ -35,8 +35,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         match precondition with
         | Some cond ->
             let qc = record.ExtractConditional cond
-            request.ExpressionAttributeNames <- qc.DAttributes
-            request.ExpressionAttributeValues <- qc.DValues
+            request.ExpressionAttributeNames |> qc.AppendAttributesTo
+            request.ExpressionAttributeValues |> qc.AppendValuesTo
             request.ConditionExpression <- qc.Expression
         | _ -> ()
 
@@ -75,14 +75,14 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         request.Key <- kav
         request.TableName <- tableName
         request.UpdateExpression <- updateExpr.Expression
-        request.ExpressionAttributeNames <- updateExpr.DAttributes
-        request.ExpressionAttributeValues <- updateExpr.DValues
+        request.ExpressionAttributeNames |> updateExpr.AppendAttributesTo
+        request.ExpressionAttributeValues |> updateExpr.AppendValuesTo
         request.ReturnValues <- ReturnValue.ALL_NEW
         match precondition with
         | Some cond ->
             let qc = record.ExtractConditional cond
-            request.ExpressionAttributeNames <- qc.DAttributes
-            request.ExpressionAttributeValues <- qc.DValues
+            request.ExpressionAttributeNames |> updateExpr.AppendAttributesTo
+            request.ExpressionAttributeValues |> updateExpr.AppendValuesTo
             request.ConditionExpression <- qc.Expression
         | _ -> ()
 
