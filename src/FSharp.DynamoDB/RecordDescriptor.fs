@@ -30,7 +30,9 @@ type internal RecordDescriptor<'Record> internal () =
         new ConditionExpression<'Record>(extractConditionalExpr converter.RecordInfo expr, expr)
 
     member __.ExtractUpdater(expr : Expr<'Record -> 'Record>) : UpdateExpression<'Record> =
-        new UpdateExpression<'Record>(extractUpdateExpression converter.RecordInfo expr, expr)
+        let aexpr = extractRecordExprAssignments converter.RecordInfo expr
+        let uexpr = extractUpdateExpression aexpr
+        new UpdateExpression<'Record>(uexpr, expr)
 
     member __.ToAttributeValues(record : 'Record) =
         let kv = converter.OfRecord record
