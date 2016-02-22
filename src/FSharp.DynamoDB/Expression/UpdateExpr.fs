@@ -17,30 +17,33 @@ open Amazon.DynamoDBv2.Model
 open FSharp.DynamoDB.FieldConverter
 open FSharp.DynamoDB.ExprCommon
 
-type Operand =
+// http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.Modifying.html#Expressions.Modifying.UpdateExpressions
+
+type UpdateOperation =
+    | Set of AttributePath * UpdateValue
+    | Remove of AttributePath
+    | Add of AttributePath * Operand
+    | Delete of AttributePath * Operand
+
+and UpdateValue =
+    | Operand of Operand
+    | Op_Addition of Operand * Operand
+    | Op_Subtraction of Operand * Operand
+    | List_Append of Operand * Operand
+
+and Operand =
     | Attribute of AttributePath
     | Value of AttributeValue
     | Undefined
 with
     member op.IsUndefinedValue = match op with Undefined -> true | _ -> false
 
-type UpdateValue =
-    | Operand of Operand
-    | Op_Addition of Operand * Operand
-    | Op_Subtraction of Operand * Operand
-    | List_Append of Operand * Operand
-
-and UpdateExpr =
-    | Set of AttributePath * UpdateValue
-    | Remove of AttributePath
-    | Add of AttributePath * Operand
-    | Delete of AttributePath * Operand
-
-type ExprAssignments = 
+type UpdateExprs = 
     { 
         RVar : Var
         RecordInfo : RecordInfo
         Assignments : (AttributePath * Expr) list 
+        UpdateOps : UpdateOperation list
     }
 
 type UpdateExpression =
@@ -56,7 +59,7 @@ with
     member __.WriteValuesTo(target : Dictionary<string, AttributeValue>) =
         for k,v in __.Values do target.[k] <- v
 
-let extractRecordExprAssignments (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecord>) =
+let extractRecordExprUpdaters (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecord>) =
     if not expr.IsClosed then invalidArg "expr" "supplied update expression contains free variables."
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
@@ -74,19 +77,61 @@ let extractRecordExprAssignments (recordInfo : RecordInfo) (expr : Expr<'TRecord
             let rp = recordInfo.Properties.[i]
             match assignment with
             | PropertyGet(Some (Var y), prop, []) when r = y && rp.PropertyInfo = prop -> None
-            | _ when rp.IsHashKey -> invalidArg "expr" "update expression cannot update hash key."
-            | _ when rp.IsRangeKey -> invalidArg "expr" "update expression cannot update range key."
             | Var v when bindings.ContainsKey v -> Some(Root rp, bindings.[v])
             | e -> Some (Root rp, e)
 
         let assignmentExprs = assignments |> List.mapi tryExtractValueExpr |> List.choose id
 
-        { RVar = r ; Assignments = assignmentExprs ; RecordInfo = recordInfo }
+        { RVar = r ; Assignments = assignmentExprs ; RecordInfo = recordInfo ; UpdateOps = [] }
 
     | _ -> invalidExpr()
 
 
-let extractUpdateExprs (exprs : ExprAssignments) =
+let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr<'TRecord -> UpdateOp>) =
+    if not expr.IsClosed then invalidArg "expr" "supplied update expression contains free variables."
+    let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
+
+    let getValue (conv : FieldConverter) (expr : Expr) =
+        match expr |> evalRaw |> conv.Coerce with
+        | None -> Undefined
+        | Some av -> Value av
+
+    match expr with
+    | Lambda(r,body) ->
+        let (|AttributeGet|_|) (e : Expr) = AttributePath.Extract r recordInfo e
+        let assignments = new ResizeArray<AttributePath * Expr> ()
+        let updateOps = new ResizeArray<UpdateOperation> ()
+        let rec extract e =
+            match e with
+            | SpecificCall2 <@ (&&&) @> (None, _, _, [l; r]) ->
+                extract l ; extract r
+
+            | SpecificCall2 <@ SET @> (None, _, _, [AttributeGet attr; value]) ->
+                assignments.Add(attr, value)
+
+            | SpecificCall2 <@ REMOVE @> (None, _, _, [AttributeGet attr]) ->
+                updateOps.Add (Remove attr)
+
+            | SpecificCall2 <@ ADD @> (None, _, _, [AttributeGet attr; value]) ->
+                let op = getValue attr.Converter value
+                updateOps.Add (Add (attr, op))
+
+            | SpecificCall2 <@ DELETE @> (None, _, _, [AttributeGet attr; value]) ->
+                let op = getValue attr.Converter value
+                updateOps.Add (Delete (attr, op))
+
+            | _ -> invalidExpr()
+
+        do extract body
+        let assignments = assignments |> Seq.toList
+        let updateOps = updateOps |> Seq.toList
+
+        { RVar = r ; RecordInfo = recordInfo ; Assignments = assignments ; UpdateOps = updateOps }
+
+    | _ -> invalidExpr()
+
+
+let extractUpdateOps (exprs : UpdateExprs) =
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
     let (|AttributeGet|_|) (e : Expr) = AttributePath.Extract exprs.RVar exprs.RecordInfo e
 
@@ -202,7 +247,7 @@ let extractUpdateExprs (exprs : ExprAssignments) =
 
 
 let updateExprsToString (getAttrId : AttributePath -> string) 
-                        (getValueId : AttributeValue -> string) (uexprs : UpdateExpr list) =
+                        (getValueId : AttributeValue -> string) (uexprs : UpdateOperation list) =
 
     let opStr op = 
         match op with 
@@ -250,31 +295,33 @@ let updateExprsToString (getAttrId : AttributePath -> string)
 
     sb.ToString()
 
-let extractUpdateExpression (assignments : ExprAssignments) =
-    match extractUpdateExprs assignments with
-    | [] -> invalidArg "expr" "No update clauses found in expression"
-    | updateExprs ->
-        let attrs = new Dictionary<string, string> ()
-        let getAttrId (attr : AttributePath) =
-            let ok,found = attrs.TryGetValue attr.RootId
-            if ok then attr.Id
-            else
-                attrs.Add(attr.RootId, attr.RootName)
-                attr.Id
+let extractUpdateExpression (assignments : UpdateExprs) =
+    let updateOps = extractUpdateOps assignments @ assignments.UpdateOps
+    if updateOps.IsEmpty then invalidArg "expr" "No update clauses found in expression"
 
-        let values = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
-        let getValueId (av : AttributeValue) =
-            let ok,found = values.TryGetValue av
-            if ok then found
-            else
-                let id = sprintf ":uval%d" values.Count
-                values.Add(av, id)
-                id
+    let attrs = new Dictionary<string, string> ()
+    let getAttrId (attr : AttributePath) =
+        if attr.RootProperty.IsHashKey then invalidArg "expr" "update expression cannot update hash key."
+        if attr.RootProperty.IsRangeKey then invalidArg "expr" "update expression cannot update range key."
+        let ok,found = attrs.TryGetValue attr.RootId
+        if ok then attr.Id
+        else
+            attrs.Add(attr.RootId, attr.RootName)
+            attr.Id
 
-        let exprString = updateExprsToString getAttrId getValueId updateExprs
+    let values = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
+    let getValueId (av : AttributeValue) =
+        let ok,found = values.TryGetValue av
+        if ok then found
+        else
+            let id = sprintf ":uval%d" values.Count
+            values.Add(av, id)
+            id
 
-        {
-            Expression = exprString
-            Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray
-            Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.toArray
-        }
+    let exprString = updateExprsToString getAttrId getValueId updateOps
+
+    {
+        Expression = exprString
+        Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray
+        Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.toArray
+    }

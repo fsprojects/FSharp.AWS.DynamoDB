@@ -107,3 +107,22 @@ type TableKey private (hashKey : obj, rangeKey : obj) =
     static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey) = 
         if obj.ReferenceEquals(hashKey, null) then raise <| new ArgumentNullException("HashKey must not be null")
         new TableKey(hashKey, rangeKey)
+
+[<AutoOpen>]
+module UpdateOperators =
+
+    type UpdateOp =
+        static member (&&&) (left : UpdateOp, right : UpdateOp) : UpdateOp =
+            invalidOp "Update combiner reserved for quoted update expressions."
+
+    let SET (path : 'T) (value : 'T) : UpdateOp =
+        invalidOp "Assignment operation reserved for quoted update expressions."
+
+    let REMOVE (path : 'T) : UpdateOp =
+        invalidOp "Remove operation reserved for quoted update expressions."
+
+    let ADD (path : Set<'T>) (values : seq<'T>) : UpdateOp =
+        invalidOp "Remove operation reserved for quoted update expressions."
+
+    let DELETE (path : Set<'T>) (values : seq<'T>) : UpdateOp =
+        invalidOp "Remove operation reserved for quoted update expressions."

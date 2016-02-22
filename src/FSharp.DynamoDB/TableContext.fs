@@ -35,8 +35,11 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.ExtractConditionalExpr(expr : Expr<'TRecord -> bool>) =
         record.ExtractConditional expr
 
-    member __.ExtractUpdateExpr(expr : Expr<'TRecord -> 'TRecord>) =
-        record.ExtractUpdater expr
+    member __.ExtractRecExprUpdater(expr : Expr<'TRecord -> 'TRecord>) =
+        record.ExtractRecExprUpdater expr
+
+    member __.ExtractOpExprUpdater(expr : Expr<'TRecord -> UpdateOp>) =
+        record.ExtractOpExprUpdater expr
 
     member __.PutItemAsync(item : 'TRecord, ?precondition : ConditionExpression<'TRecord>) : Async<TableKey> = async {
         let attrValues = record.ToAttributeValues(item)
@@ -81,7 +84,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return items |> Array.map record.ExtractKey
     }
 
-    member __.UpdateItemUEAsync(key : TableKey, updater : UpdateExpression<'TRecord>, 
+    member __.UpdateItemAsync(key : TableKey, updater : UpdateExpression<'TRecord>, 
                                 ?returnValue : UpdateReturnValue, 
                                 ?precondition : ConditionExpression<'TRecord>) : Async<'TRecord> = async {
 
@@ -114,12 +117,20 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return record.OfAttributeValues response.Attributes
     }
 
-    member __.UpdateItemAsync(key : TableKey, updateExpr : Expr<'TRecord -> 'TRecord>, 
-                                ?returnValue : UpdateReturnValue,
-                                ?precondition : Expr<'TRecord -> bool>) = async {
-        let updater = __.ExtractUpdateExpr updateExpr
+    member __.UpdateItemRecExprAsync(key : TableKey, updateExpr : Expr<'TRecord -> 'TRecord>, 
+                                        ?returnValue : UpdateReturnValue,
+                                        ?precondition : Expr<'TRecord -> bool>) = async {
+        let updater = __.ExtractRecExprUpdater updateExpr
         let precondition = precondition |> Option.map __.ExtractConditionalExpr
-        return! __.UpdateItemUEAsync(key, updater, ?returnValue = returnValue, ?precondition = precondition)
+        return! __.UpdateItemAsync(key, updater, ?returnValue = returnValue, ?precondition = precondition)
+    }
+
+    member __.UpdateItemOpExprAsync(key : TableKey, updateExpr : Expr<'TRecord -> UpdateOp>, 
+                                        ?returnValue : UpdateReturnValue,
+                                        ?precondition : Expr<'TRecord -> bool>) = async {
+        let updater = __.ExtractOpExprUpdater updateExpr
+        let precondition = precondition |> Option.map __.ExtractConditionalExpr
+        return! __.UpdateItemAsync(key, updater, ?returnValue = returnValue, ?precondition = precondition)
     }
 
     member __.ContainsKeyAsync(key : TableKey) = async {

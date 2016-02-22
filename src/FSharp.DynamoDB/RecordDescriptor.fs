@@ -29,8 +29,13 @@ type internal RecordDescriptor<'Record> internal () =
     member __.ExtractConditional(expr : Expr<'Record -> bool>) : ConditionExpression<'Record> =
         new ConditionExpression<'Record>(extractConditionalExpr converter.RecordInfo expr, expr)
 
-    member __.ExtractUpdater(expr : Expr<'Record -> 'Record>) : UpdateExpression<'Record> =
-        let aexpr = extractRecordExprAssignments converter.RecordInfo expr
+    member __.ExtractRecExprUpdater(expr : Expr<'Record -> 'Record>) : UpdateExpression<'Record> =
+        let aexpr = extractRecordExprUpdaters converter.RecordInfo expr
+        let uexpr = extractUpdateExpression aexpr
+        new UpdateExpression<'Record>(uexpr, expr)
+
+    member __.ExtractOpExprUpdater(expr : Expr<'TRecord -> UpdateOp>) : UpdateExpression<'Record> =
+        let aexpr = extractOpExprUpdaters converter.RecordInfo expr
         let uexpr = extractUpdateExpression aexpr
         new UpdateExpression<'Record>(uexpr, expr)
 
