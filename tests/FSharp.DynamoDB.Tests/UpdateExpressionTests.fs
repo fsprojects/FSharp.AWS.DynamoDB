@@ -98,6 +98,13 @@ type ``Update Expression Tests`` () =
         |> shouldFailwith<_, ArgumentException>
 
     [<Fact>]
+    let ``Returning old value`` () =
+        let item = mkItem()
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemRecExprAsync(key, <@ fun r -> { r with Value = r.Value + 1L } @>, UpdateReturnValue.Old) |> run
+        item' |> should equal item
+
+    [<Fact>]
     let ``Simple update DateTimeOffset`` () =
         let item = mkItem()
         let key = table.PutItemAsync item |> run
