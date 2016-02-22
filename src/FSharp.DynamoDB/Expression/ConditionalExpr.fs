@@ -27,7 +27,7 @@ type QueryExpr =
     | Or of QueryExpr * QueryExpr
     | Compare of Comparator * Operand * Operand
     | Between of Operand * Operand * Operand
-    | BeginsWith of AttributePath * substr:string
+    | BeginsWith of AttributePath * Operand
     | Contains of AttributePath * Operand
     | Attribute_Exists of AttributePath
     | Attribute_Not_Exists of AttributePath
@@ -50,7 +50,6 @@ with
 
 type ConditionalExpression =
     {
-        QueryExpr : QueryExpr
         Expression : string
         Attributes : (string * string) []
         Values : (string * AttributeValue) []
@@ -179,25 +178,25 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             | Comparison <@ (<=) @> [left; right] -> extractComparison LE left right
             | Comparison <@ (>=) @> [left; right] -> extractComparison GE left right
 
-            | SpecificCall2 <@ fun (x:string) y -> x.StartsWith y @> (Some (AttributeGet attr), _, _, [value]) when value.IsClosed ->
-                let valId = evalRaw value
-                BeginsWith(attr, valId)
+            | SpecificCall2 <@ fun (x:string) y -> x.StartsWith y @> (Some (AttributeGet attr), _, _, [value]) ->
+                let op = extractOperand None value
+                BeginsWith(attr, op)
 
-            | SpecificCall2 <@ fun (x:string) y -> x.Contains y @> (Some (AttributeGet attr), _, _, [value]) when value.IsClosed ->
-                let valId = extractOperand None value
-                Contains(attr, valId)
+            | SpecificCall2 <@ fun (x:string) y -> x.Contains y @> (Some (AttributeGet attr), _, _, [value]) ->
+                let op = extractOperand None value
+                Contains(attr, op)
 
-            | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; AttributeGet attr]) when elem.IsClosed ->
+            | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; AttributeGet attr]) ->
                 let econv = getEconv attr.Converter
                 let op = extractOperand (Some econv) elem
                 Contains(attr, op)
 
-            | SpecificCall2 <@ fun (x:Set<_>) e -> x.Contains e @> (Some(AttributeGet attr), _, _, [elem]) when elem.IsClosed ->
+            | SpecificCall2 <@ fun (x:Set<_>) e -> x.Contains e @> (Some(AttributeGet attr), _, _, [elem]) ->
                 let econv = getEconv attr.Converter
                 let op = extractOperand (Some econv) elem
                 Contains(attr, op)
 
-            | SpecificCall2 <@ fun (x : HashSet<_>) y -> x.Contains y @> (Some(AttributeGet attr), _, _, [elem]) when elem.IsClosed ->
+            | SpecificCall2 <@ fun (x : HashSet<_>) y -> x.Contains y @> (Some(AttributeGet attr), _, _, [elem]) ->
                 let econv = getEconv attr.Converter
                 let op = extractOperand (Some econv) elem
                 Contains(attr, op)
@@ -259,7 +258,7 @@ let queryExprToString (getAttrId : AttributePath -> string)
         | Or (l,r) -> ! "( " ; aux l ; ! " OR " ; aux r ; ! " )"
         | Compare (cmp, l, r) -> ! "( " ; writeOp l ; writeCmp cmp ; writeOp r ; ! " )"
         | Between (v,l,u) -> ! "( " ; writeOp v ; ! " BETWEEN " ; writeOp l ; ! " AND " ; writeOp u ; ! " )"
-        | BeginsWith (attr, valId) -> ! "( begins_with ( " ; !(getAttrId attr) ; ! ", " ; ! valId ; !" ))"
+        | BeginsWith (attr, op) -> ! "( begins_with ( " ; !(getAttrId attr) ; ! ", " ;  writeOp op ; !" ))"
         | Contains (attr, op) -> ! "( contains ( " ; !(getAttrId attr) ; !", " ; writeOp op ; !" ))"
         | Attribute_Exists attr -> ! "( attribute_exists ( " ; !(getAttrId attr) ; ! "))"
         | Attribute_Not_Exists attr -> ! "( attribute_not_exists ( " ; !(getAttrId attr) ; ! "))"
@@ -293,7 +292,6 @@ let extractConditionalExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bo
     let exprString = queryExprToString getAttrId getValueId query
 
     {
-        QueryExpr = query
         Expression = exprString
         Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray
         Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.toArray

@@ -38,7 +38,6 @@ and UpdateExpr =
 
 type UpdateExpression =
     {
-        UpdateExprs : UpdateExpr list
         Expression : string
         Attributes : (string * string) []
         Values     : (string * AttributeValue) []
@@ -262,7 +261,6 @@ let extractUpdateExpression (recordInfo : RecordInfo) (expr : Expr<'Record -> 'R
         let exprString = updateExprsToString getAttrId getValueId updateExprs
 
         {
-            UpdateExprs = updateExprs
             Expression = exprString
             Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray
             Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.toArray

@@ -69,25 +69,32 @@ with
                 | None -> None
                 | Some rp -> mkAttrPath (Root rp) rp.NestedRecord props
 
-            | PropertyGet(Some e, p, []) -> extractProps (Choice1Of3 p :: props) e
-            | SpecificCall2 <@ fst @> (None, _, _, [e]) -> extractProps (Choice2Of3 0 :: props) e
-            | SpecificCall2 <@ snd @> (None, _, _, [e]) -> extractProps (Choice2Of3 1 :: props) e
-            | IndexGet(e, et, i) when i.IsClosed -> extractProps (Choice3Of3 (et, i) :: props) e
+            | SpecificProperty <@ fun (r : _ ref) -> r.Value @> (Some e,_,_) ->
+                let p = e.Type.GetProperty("contents")
+                extractProps (Choice1Of2 p :: props) e
+
+            | PropertyGet(Some e, p, []) -> extractProps (Choice1Of2 p :: props) e
+
+            | SpecificCall2 <@ fst @> (None, _, _, [e]) -> 
+                let p = e.Type.GetProperty("Item1") 
+                extractProps (Choice1Of2 p :: props) e
+
+            | SpecificCall2 <@ snd @> (None, _, _, [e]) -> 
+                let p = e.Type.GetProperty("Item2")
+                extractProps (Choice1Of2 p :: props) e
+
+            | IndexGet(e, et, i) when i.IsClosed -> extractProps (Choice2Of2 (et, i) :: props) e
             | _ -> None
 
         and mkAttrPath acc (ctx : RecordInfo option) rest =
             match rest, ctx with
             | [], _ -> Some acc
-            | Choice1Of3 p :: tail, Some rI ->
-                match rI.Properties |> Array.tryFind (fun rp -> rp.PropertyInfo = p) with
+            | Choice1Of2 p :: tail, Some rI ->
+                match tryGetPropInfo rI p with
                 | None -> None
                 | Some rp -> mkAttrPath (Nested(rp, acc)) rp.NestedRecord tail
 
-            | Choice2Of3 i :: tail, Some rI ->
-                let rp = rI.Properties.[i]
-                mkAttrPath (Nested(rp, acc)) rp.NestedRecord tail
-
-            | Choice3Of3 (et, ie) :: tail, None ->
+            | Choice2Of2 (et, ie) :: tail, None ->
                 let conv = FieldConverter.resolveUntyped et
                 let i = evalRaw ie
                 let ctx = match box conv with :? IRecordConverter as rc -> Some rc.RecordInfo | _ -> None

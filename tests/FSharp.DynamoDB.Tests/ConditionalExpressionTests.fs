@@ -205,6 +205,26 @@ type ``Conditional Expression Tests`` () =
         table.PutItemAsync(item, <@ fun r -> r.Nested.NE = value @>) |> run |> ignore
 
     [<Fact>]
+    let ``String-Contains precondition`` () =
+        let item = { mkItem() with Ref = ref "12-42-12" }
+        let key = table.PutItemAsync item |> run
+        let elem = item.HashKey
+        fun () -> table.PutItemAsync(item, <@ fun r -> r.Ref.Value.Contains "41" @>) |> run
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+        table.PutItemAsync(item, <@ fun r -> r.Ref.Value.Contains "42" @>) |> run |> ignore
+
+    [<Fact>]
+    let ``String-StartsWith precondition`` () =
+        let item = { mkItem() with Ref = ref "12-42-12" }
+        let key = table.PutItemAsync item |> run
+        let elem = item.HashKey
+        fun () -> table.PutItemAsync(item, <@ fun r -> r.Ref.Value.StartsWith "41" @>) |> run
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+        table.PutItemAsync(item, <@ fun r -> r.Ref.Value.StartsWith "12" @>) |> run |> ignore
+
+    [<Fact>]
     let ``String-length precondition`` () =
         let item = mkItem()
         let key = table.PutItemAsync item |> run
