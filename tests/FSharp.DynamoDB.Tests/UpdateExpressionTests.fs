@@ -54,6 +54,9 @@ module UpdateExprTypes =
 
             [<BinaryFormatter>]
             Serialized : int64 * string
+
+            [<BinaryFormatter>]
+            Serialized2 : Nested
         }
 
 type ``Update Expression Tests`` () =
@@ -73,7 +76,7 @@ type ``Update Expression Tests`` () =
             Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq 
             Set = seq { for i in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
             List = [for i in 0L .. rand() % 5L -> rand() ]
-            Serialized = rand(), guid()
+            Serialized = rand(), guid() ; Serialized2 = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
         }
 
     let run = Async.RunSynchronously

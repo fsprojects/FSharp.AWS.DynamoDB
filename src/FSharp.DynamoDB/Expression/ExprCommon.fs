@@ -59,13 +59,17 @@ with
         aux ap
 
     static member Extract (record : Var) (info : RecordInfo) (e : Expr) =
-        let tryGetPropInfo (info : RecordInfo) (p : PropertyInfo) =
-            info.Properties |> Array.tryFind (fun rp -> rp.PropertyInfo = p)
+        let tryGetPropInfo (info : RecordInfo) isFinalProp (p : PropertyInfo) =
+            match info.Properties |> Array.tryFind (fun rp -> rp.PropertyInfo = p) with
+            | None -> None
+            | Some rp when rp.Converter.ConverterType = ConverterType.Serialized && not isFinalProp ->
+                invalidArg "expr" "cannot access nested properties of serialized fields."
+            | Some _ as r -> r
 
         let rec extractProps props e =
             match e with
             | PropertyGet(Some (Var r'), p, []) when record = r' -> 
-                match tryGetPropInfo info p with
+                match tryGetPropInfo info (List.isEmpty props) p with
                 | None -> None
                 | Some rp -> mkAttrPath (Root rp) rp.NestedRecord props
 
@@ -90,7 +94,7 @@ with
             match rest, ctx with
             | [], _ -> Some acc
             | Choice1Of2 p :: tail, Some rI ->
-                match tryGetPropInfo rI p with
+                match tryGetPropInfo rI (List.isEmpty tail) p with
                 | None -> None
                 | Some rp -> mkAttrPath (Nested(rp, acc)) rp.NestedRecord tail
 
