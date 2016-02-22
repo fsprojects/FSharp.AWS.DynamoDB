@@ -61,40 +61,6 @@ with
     member __.AppendValuesTo(target : Dictionary<string, AttributeValue>) =
         for kv in __.Values do target.[kv.Key] <- FsAttributeValue.ToAttributeValue kv.Value
 
-let queryExprToString (getAttrId : AttributePath -> string) (getValueId : FsAttributeValue -> string) (qExpr : QueryExpr) =
-    let sb = new System.Text.StringBuilder()
-    let inline (!) (p:string) = sb.Append p |> ignore
-    let inline writeOp o = 
-        match o with 
-        | Value v -> !(getValueId v) 
-        | Attribute a -> !(getAttrId a) 
-        | SizeOf a -> ! "( size ( " ; !(getAttrId a) ; ! " ))"
-
-    let inline writeCmp cmp =
-        match cmp with
-        | EQ -> ! " = "
-        | NE -> ! " <> "
-        | LT -> ! " < "
-        | GT -> ! " > "
-        | GE -> ! " >= "
-        | LE -> ! " <= "
-
-    let rec aux q =
-        match q with
-        | False | True -> invalidOp "internal error: invalid query representation"
-        | Not q -> ! "( NOT " ; aux q ; ! " )"
-        | And (l,r) -> ! "( " ; aux l ; ! " AND " ; aux r ; ! " )"
-        | Or (l,r) -> ! "( " ; aux l ; ! " OR " ; aux r ; ! " )"
-        | Compare (cmp, l, r) -> ! "( " ; writeOp l ; writeCmp cmp ; writeOp r ; ! " )"
-        | Between (v,l,u) -> ! "( " ; writeOp v ; ! " BETWEEN " ; writeOp l ; ! " AND " ; writeOp u ; ! " )"
-        | BeginsWith (attr, valId) -> ! "( begins_with ( " ; !(getAttrId attr) ; ! ", " ; ! valId ; !" ))"
-        | Contains (attr, op) -> ! "( contains ( " ; !(getAttrId attr) ; !", " ; writeOp op ; !" ))"
-        | Attribute_Exists attr -> ! "( attribute_exists ( " ; !(getAttrId attr) ; ! "))"
-        | Attribute_Not_Exists attr -> ! "( attribute_not_exists ( " ; !(getAttrId attr) ; ! "))"
-
-    aux qExpr
-    sb.ToString()
-
 let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
     if not expr.IsClosed then invalidArg "expr" "supplied query is not a closed expression."
     let invalidQuery() = invalidArg "expr" <| sprintf "Supplied expression is not a valid conditional."
@@ -251,34 +217,75 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
 
             | _ -> invalidQuery()
 
-        match extractQuery body with
-        | False | True -> invalidArg "expr" "supplied query is tautological."
-        | query ->
-
-        let attrs = new Dictionary<string, string> ()
-        let getAttrId (attr : AttributePath) =
-            let ok,found = attrs.TryGetValue attr.RootId
-            if ok then attr.Id
-            else
-                attrs.Add(attr.RootId, attr.RootName)
-                attr.Id
-
-        let values = new Dictionary<FsAttributeValue, string>()
-        let getValueId (fsv : FsAttributeValue) =
-            let ok,found = values.TryGetValue fsv
-            if ok then found
-            else
-                let id = sprintf ":cval%d" values.Count
-                values.Add(fsv, id)
-                id
-
-        let exprString = queryExprToString getAttrId getValueId query
-
-        {
-            QueryExpr = query
-            Expression = exprString
-            Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
-            Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Map.ofSeq
-        }
+        extractQuery body
 
     | _ -> invalidQuery()
+
+
+let queryExprToString (getAttrId : AttributePath -> string) 
+                        (getValueId : FsAttributeValue -> string) (qExpr : QueryExpr) =
+
+    let sb = new System.Text.StringBuilder()
+    let inline (!) (p:string) = sb.Append p |> ignore
+    let inline writeOp o = 
+        match o with 
+        | Value v -> !(getValueId v) 
+        | Attribute a -> !(getAttrId a) 
+        | SizeOf a -> ! "( size ( " ; !(getAttrId a) ; ! " ))"
+
+    let inline writeCmp cmp =
+        match cmp with
+        | EQ -> ! " = "
+        | NE -> ! " <> "
+        | LT -> ! " < "
+        | GT -> ! " > "
+        | GE -> ! " >= "
+        | LE -> ! " <= "
+
+    let rec aux q =
+        match q with
+        | False | True -> invalidOp "internal error: invalid query representation"
+        | Not q -> ! "( NOT " ; aux q ; ! " )"
+        | And (l,r) -> ! "( " ; aux l ; ! " AND " ; aux r ; ! " )"
+        | Or (l,r) -> ! "( " ; aux l ; ! " OR " ; aux r ; ! " )"
+        | Compare (cmp, l, r) -> ! "( " ; writeOp l ; writeCmp cmp ; writeOp r ; ! " )"
+        | Between (v,l,u) -> ! "( " ; writeOp v ; ! " BETWEEN " ; writeOp l ; ! " AND " ; writeOp u ; ! " )"
+        | BeginsWith (attr, valId) -> ! "( begins_with ( " ; !(getAttrId attr) ; ! ", " ; ! valId ; !" ))"
+        | Contains (attr, op) -> ! "( contains ( " ; !(getAttrId attr) ; !", " ; writeOp op ; !" ))"
+        | Attribute_Exists attr -> ! "( attribute_exists ( " ; !(getAttrId attr) ; ! "))"
+        | Attribute_Not_Exists attr -> ! "( attribute_not_exists ( " ; !(getAttrId attr) ; ! "))"
+
+    aux qExpr
+    sb.ToString()
+
+
+let extractConditionalExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
+    match extractQueryExpr recordInfo expr with
+    | False | True -> invalidArg "expr" "supplied query is tautological."
+    | query ->
+
+    let attrs = new Dictionary<string, string> ()
+    let getAttrId (attr : AttributePath) =
+        let ok,found = attrs.TryGetValue attr.RootId
+        if ok then attr.Id
+        else
+            attrs.Add(attr.RootId, attr.RootName)
+            attr.Id
+
+    let values = new Dictionary<FsAttributeValue, string>()
+    let getValueId (fsv : FsAttributeValue) =
+        let ok,found = values.TryGetValue fsv
+        if ok then found
+        else
+            let id = sprintf ":cval%d" values.Count
+            values.Add(fsv, id)
+            id
+
+    let exprString = queryExprToString getAttrId getValueId query
+
+    {
+        QueryExpr = query
+        Expression = exprString
+        Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
+        Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Map.ofSeq
+    }

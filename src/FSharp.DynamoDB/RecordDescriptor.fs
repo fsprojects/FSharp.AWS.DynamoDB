@@ -18,9 +18,6 @@ type internal RecordDescriptor<'Record> internal () =
     let converter = FieldConverter.resolve<'Record>() :?> RecordConverter<'Record>
     let keyStructure = KeyStructure.FromRecordInfo converter.RecordInfo
     let keySchema = TableKeySchema.OfKeyStructure keyStructure
-    let exprCmp = new ExprEqualityComparer()
-    let conditionals = new ConcurrentDictionary<Expr, ConditionalExpression>(exprCmp)
-    let updaters = new ConcurrentDictionary<Expr, UpdateExpression>(exprCmp)
 
     member __.KeySchema = keySchema
     member __.Info = converter.RecordInfo
@@ -29,11 +26,11 @@ type internal RecordDescriptor<'Record> internal () =
     member __.ExtractKey(record : 'Record) = 
         KeyStructure.ExtractKey(keyStructure, converter.RecordInfo, record)
 
-    member __.ExtractConditional(expr : Expr<'Record -> bool>) : ConditionalExpression =
-        conditionals.GetOrAdd(expr, fun _ -> extractQueryExpr converter.RecordInfo expr)
+    member __.ExtractConditional(expr : Expr<'Record -> bool>) : ConditionalExpression<'Record> =
+        new ConditionalExpression<'Record>(extractConditionalExpr converter.RecordInfo expr, expr)
 
-    member __.ExtractUpdater(expr : Expr<'Record -> 'Record>) : UpdateExpression =
-        updaters.GetOrAdd(expr, fun _ -> extractUpdateExpr converter.RecordInfo expr)
+    member __.ExtractUpdater(expr : Expr<'Record -> 'Record>) : UpdateExpression<'Record> =
+        new UpdateExpression<'Record>(extractUpdateExpression converter.RecordInfo expr, expr)
 
     member __.ToAttributeValues(record : 'Record) =
         let kv = converter.OfRecord record

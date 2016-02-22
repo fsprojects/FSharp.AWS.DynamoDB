@@ -58,6 +58,7 @@
     <Compile Include="Expression\ExprCommon.fs" />
     <Compile Include="Expression\ConditionalExpr.fs" />
     <Compile Include="Expression\UpdateExpr.fs" />
+    <Compile Include="Expression\ExpressionContainers.fs" />
     <Compile Include="RecordSchema.fs" />
     <Compile Include="RecordDescriptor.fs" />
     <Compile Include="TableContext.fs" />

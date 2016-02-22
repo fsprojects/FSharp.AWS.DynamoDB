@@ -15,11 +15,6 @@ open FSharp.DynamoDB
 let account = AWSCredentialsProfile.LoadFrom("default").Credentials
 let ddb = new AmazonDynamoDBClient(account, RegionEndpoint.EUCentral1) :> IAmazonDynamoDB
 
-let tables = ddb.ListTables().TableNames |> Seq.toArray
-for t in tables do 
-    ddb.DeleteTable t
-    System.Threading.Thread.Sleep 1000
-
 type Nested = { A : string ; B : System.Reflection.BindingFlags }
 
 type Test =
@@ -47,7 +42,9 @@ let key = table.PutItemAsync(value) |> Async.RunSynchronously
 table.GetItemAsync key |> Async.RunSynchronously
 table.PutItemAsync({ value with Value2 = None}, <@ fun r -> r.HashKey.StartsWith "1"@>) |> Async.RunSynchronously
 
-table.UpdateItemAsync(key, <@ fun r -> { r with RangeKey = "skata" } @>) |> Async.RunSynchronously
+<@ fun (r:Test) -> { r with Set = { r.Set with }}
+
+table.UpdateItemAsync(key, <@ fun r -> { r with Set = r.Set.Re } @>) |> Async.RunSynchronously
 open System.Collections.Generic
 let up = new UpdateItemRequest()
 up.TableName <- table.TableName
@@ -66,3 +63,21 @@ let dto = DateTimeOffset.Now
 dto.ToString( "yyyy-MM-dd\THH:mm:ss.fffffff\Z")
 
 { value with Values.[0].A = "3" }
+
+
+let mk (x : int list) = <@ fun r -> x.Length + r @>
+
+mk [1 .. 1000]
+
+ValueType
+
+open System.IO
+
+let x = ResizeArray<string>()
+let y = ResizeArray<string>()
+
+x.Add "1"
+x.Add "1"
+y.Add "1"
+
+areEqualResizeArrays x y

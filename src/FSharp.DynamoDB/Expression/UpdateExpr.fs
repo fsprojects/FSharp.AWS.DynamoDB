@@ -48,52 +48,9 @@ with
 
     member __.AppendValuesTo(target : Dictionary<string, AttributeValue>) =
         for kv in __.Values do target.[kv.Key] <- FsAttributeValue.ToAttributeValue kv.Value
-
-
-let updateExprsToString (getAttrId : AttributePath -> string) (getValueId : FsAttributeValue -> string) (uexprs : UpdateExpr list) =
-    let opStr op = match op with Attribute id -> getAttrId id | Value id -> getValueId id
-    let valStr value = 
-        match value with 
-        | Operand op -> opStr op 
-        | Op_Addition(l, r) -> sprintf "%s + %s" (opStr l) (opStr r)
-        | Op_Subtraction(l, r) -> sprintf "%s - %s" (opStr l) (opStr r)
-        | List_Append(l,r) -> sprintf "(list_append(%s, %s))" (opStr l) (opStr r)
-
-    let sb = new System.Text.StringBuilder()
-    let append (s:string) = sb.Append s |> ignore
-    let toggle = let b = ref false in fun () -> if !b then append " " else b := true
-    match uexprs |> List.choose (function Set(id, v) -> Some(id,v) | _ -> None) with 
-    | [] -> () 
-    | (id, v) :: tail -> 
-        toggle()
-        sprintf "SET %s = %s" (getAttrId id) (valStr v) |> append
-        for id,v in tail do sprintf ", %s = %s" (getAttrId id) (valStr v) |> append
-
-    match uexprs |> List.choose (function Add(id, v) -> Some(id,v) | _ -> None) with
-    | [] -> ()
-    | (id, o) :: tail ->
-        toggle()
-        sprintf "ADD %s %s" (getAttrId id) (opStr o) |> append
-        for id, o in tail do sprintf ", %s %s" (getAttrId id) (opStr o) |> append
-
-    match uexprs |> List.choose (function Delete(id, v) -> Some(id,v) | _ -> None) with
-    | [] -> ()
-    | (id, o) :: tail ->
-        toggle()
-        sprintf "DELETE %s %s" (getAttrId id) (opStr o) |> append
-        for id, o in tail do sprintf ", %s %s" (getAttrId id) (opStr o) |> append
-
-    match uexprs |> List.choose (function Remove id -> Some id | _ -> None) with
-    | [] -> ()
-    | id :: tail ->
-        toggle()
-        sprintf "REMOVE %s" (getAttrId id) |> append
-        for id in tail do sprintf ", %s" (getAttrId id) |> append
-
-    sb.ToString()
         
 
-let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecord>) =
+let extractUpdateExprs (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecord>) =
     if not expr.IsClosed then invalidArg "expr" "supplied update expression contains free variables."
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
@@ -228,8 +185,58 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
                 | Operand op when op.IsUndefinedValue -> Some(Remove parent)
                 | uv -> Some(Set(parent, uv))
 
-        let updateExprs = updateExprs |> List.choose (fun (rp,e) -> tryExtractUpdateExpr (Root rp) e)
+        updateExprs |> List.choose (fun (rp,e) -> tryExtractUpdateExpr (Root rp) e)
+    | _ -> invalidExpr()
 
+
+let updateExprsToString (getAttrId : AttributePath -> string) 
+                        (getValueId : FsAttributeValue -> string) (uexprs : UpdateExpr list) =
+
+    let opStr op = match op with Attribute id -> getAttrId id | Value id -> getValueId id
+    let valStr value = 
+        match value with 
+        | Operand op -> opStr op 
+        | Op_Addition(l, r) -> sprintf "%s + %s" (opStr l) (opStr r)
+        | Op_Subtraction(l, r) -> sprintf "%s - %s" (opStr l) (opStr r)
+        | List_Append(l,r) -> sprintf "(list_append(%s, %s))" (opStr l) (opStr r)
+
+    let sb = new System.Text.StringBuilder()
+    let append (s:string) = sb.Append s |> ignore
+    let toggle = let b = ref false in fun () -> if !b then append " " else b := true
+    match uexprs |> List.choose (function Set(id, v) -> Some(id,v) | _ -> None) with 
+    | [] -> () 
+    | (id, v) :: tail -> 
+        toggle()
+        sprintf "SET %s = %s" (getAttrId id) (valStr v) |> append
+        for id,v in tail do sprintf ", %s = %s" (getAttrId id) (valStr v) |> append
+
+    match uexprs |> List.choose (function Add(id, v) -> Some(id,v) | _ -> None) with
+    | [] -> ()
+    | (id, o) :: tail ->
+        toggle()
+        sprintf "ADD %s %s" (getAttrId id) (opStr o) |> append
+        for id, o in tail do sprintf ", %s %s" (getAttrId id) (opStr o) |> append
+
+    match uexprs |> List.choose (function Delete(id, v) -> Some(id,v) | _ -> None) with
+    | [] -> ()
+    | (id, o) :: tail ->
+        toggle()
+        sprintf "DELETE %s %s" (getAttrId id) (opStr o) |> append
+        for id, o in tail do sprintf ", %s %s" (getAttrId id) (opStr o) |> append
+
+    match uexprs |> List.choose (function Remove id -> Some id | _ -> None) with
+    | [] -> ()
+    | id :: tail ->
+        toggle()
+        sprintf "REMOVE %s" (getAttrId id) |> append
+        for id in tail do sprintf ", %s" (getAttrId id) |> append
+
+    sb.ToString()
+
+let extractUpdateExpression (recordInfo : RecordInfo) (expr : Expr<'Record -> 'Record>) =
+    match extractUpdateExprs recordInfo expr with
+    | [] -> invalidArg "expr" "No update clauses found in expression"
+    | updateExprs ->
         let attrs = new Dictionary<string, string> ()
         let getAttrId (attr : AttributePath) =
             let ok,found = attrs.TryGetValue attr.RootId
@@ -255,5 +262,3 @@ let extractUpdateExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecor
             Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
             Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Map.ofSeq
         }
-
-    | _ -> invalidExpr()
