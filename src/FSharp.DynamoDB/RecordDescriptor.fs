@@ -26,8 +26,8 @@ type internal RecordDescriptor<'Record> internal () =
     member __.ExtractKey(record : 'Record) = 
         KeyStructure.ExtractKey(keyStructure, converter.RecordInfo, record)
 
-    member __.ExtractConditional(expr : Expr<'Record -> bool>) : ConditionalExpression<'Record> =
-        new ConditionalExpression<'Record>(extractConditionalExpr converter.RecordInfo expr, expr)
+    member __.ExtractConditional(expr : Expr<'Record -> bool>) : ConditionExpression<'Record> =
+        new ConditionExpression<'Record>(extractConditionalExpr converter.RecordInfo expr, expr)
 
     member __.ExtractUpdater(expr : Expr<'Record -> 'Record>) : UpdateExpression<'Record> =
         new UpdateExpression<'Record>(extractUpdateExpression converter.RecordInfo expr, expr)
@@ -48,5 +48,6 @@ type internal RecordDescriptor<'Record> internal () =
 type internal RecordDescriptor private () =
     static let descriptors = new ConcurrentDictionary<Type, Lazy<obj>>()
     static member Create<'TRecord> () =
-        let rd = lazy(new RecordDescriptor<'TRecord>() :> obj)
-        descriptors.GetOrAdd(typeof<'TRecord>, rd).Value :?> RecordDescriptor<'TRecord>
+        let mkRd _ =  lazy(new RecordDescriptor<'TRecord>() :> obj)
+        let v = descriptors.GetOrAdd(typeof<'TRecord>, mkRd)
+        v.Value :?> RecordDescriptor<'TRecord>

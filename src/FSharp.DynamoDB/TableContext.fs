@@ -12,6 +12,10 @@ open FSharp.DynamoDB.RecordSchema
 
 type ConditionalCheckFailedException = Amazon.DynamoDBv2.Model.ConditionalCheckFailedException
 
+type UpdateReturnValue =
+    | Old = 1
+    | New = 2
+
 type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : string, record : RecordDescriptor<'TRecord>) =
 
     member __.Client = client
@@ -34,15 +38,15 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.ExtractUpdateExpr(expr : Expr<'TRecord -> 'TRecord>) =
         record.ExtractUpdater expr
 
-    member __.PutItemAsync(item : 'TRecord, ?precondition : ConditionalExpression<'TRecord>) : Async<TableKey> = async {
+    member __.PutItemAsync(item : 'TRecord, ?precondition : ConditionExpression<'TRecord>) : Async<TableKey> = async {
         let attrValues = record.ToAttributeValues(item)
         let request = new PutItemRequest(tableName, attrValues)
         request.ReturnValues <- ReturnValue.NONE
         match precondition with
         | Some pc ->
             let cond = pc.Conditional
-            request.ExpressionAttributeNames |> cond.AppendAttributesTo
-            request.ExpressionAttributeValues |> cond.AppendValuesTo
+            cond.WriteAttributesTo request.ExpressionAttributeNames 
+            cond.WriteValuesTo request.ExpressionAttributeValues
             request.ConditionExpression <- cond.Expression
         | _ -> ()
 
@@ -77,22 +81,28 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return items |> Array.map record.ExtractKey
     }
 
-    member __.UpdateItemAsync(key : TableKey, updater : UpdateExpression<'TRecord>, 
-                                ?precondition : ConditionalExpression<'TRecord>) : Async<'TRecord> = async {
+    member __.UpdateItemUEAsync(key : TableKey, updater : UpdateExpression<'TRecord>, 
+                                ?returnValue : UpdateReturnValue, 
+                                ?precondition : ConditionExpression<'TRecord>) : Async<'TRecord> = async {
 
         let kav = record.ToAttributeValues(key)
         let request = new UpdateItemRequest()
         request.Key <- kav
         request.TableName <- tableName
         request.UpdateExpression <- updater.Updater.Expression
-        request.ExpressionAttributeNames |> updater.Updater.AppendAttributesTo
-        request.ExpressionAttributeValues |> updater.Updater.AppendValuesTo
-        request.ReturnValues <- ReturnValue.ALL_NEW
+        updater.Updater.WriteAttributesTo request.ExpressionAttributeNames
+        updater.Updater.WriteValuesTo request.ExpressionAttributeValues
+        request.ReturnValues <- 
+            match defaultArg returnValue UpdateReturnValue.New with 
+            | UpdateReturnValue.New -> ReturnValue.ALL_NEW
+            | UpdateReturnValue.Old -> ReturnValue.ALL_OLD
+            | _ -> invalidArg "returnValue" "invalid update return value."
+
         match precondition with
         | Some pc ->
             let cond = pc.Conditional
-            request.ExpressionAttributeNames |> cond.AppendAttributesTo
-            request.ExpressionAttributeValues |> cond.AppendValuesTo
+            cond.WriteAttributesTo request.ExpressionAttributeNames
+            cond.WriteValuesTo request.ExpressionAttributeValues
             request.ConditionExpression <- cond.Expression
         | _ -> ()
 
@@ -104,10 +114,12 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return record.OfAttributeValues response.Attributes
     }
 
-    member __.UpdateItemAsync(key : TableKey, updateExpr : Expr<'TRecord -> 'TRecord>, ?preconditionExpr : Expr<'TRecord -> bool>) = async {
+    member __.UpdateItemAsync(key : TableKey, updateExpr : Expr<'TRecord -> 'TRecord>, 
+                                ?returnValue : UpdateReturnValue,
+                                ?precondition : Expr<'TRecord -> bool>) = async {
         let updater = __.ExtractUpdateExpr updateExpr
-        let precondition = preconditionExpr |> Option.map __.ExtractConditionalExpr
-        return! __.UpdateItemAsync(key, updater, ?precondition = precondition)
+        let precondition = precondition |> Option.map __.ExtractConditionalExpr
+        return! __.UpdateItemUEAsync(key, updater, ?returnValue = returnValue, ?precondition = precondition)
     }
 
     member __.ContainsKeyAsync(key : TableKey) = async {

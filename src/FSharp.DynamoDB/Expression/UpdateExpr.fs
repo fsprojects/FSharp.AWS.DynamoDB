@@ -19,9 +19,10 @@ open FSharp.DynamoDB.ExprCommon
 
 type Operand =
     | Attribute of AttributePath
-    | Value of FsAttributeValue
+    | Value of AttributeValue
+    | Undefined
 with
-    member op.IsUndefinedValue = match op with Value Undefined -> true | _ -> false
+    member op.IsUndefinedValue = match op with Undefined -> true | _ -> false
 
 type UpdateValue =
     | Operand of Operand
@@ -39,16 +40,15 @@ type UpdateExpression =
     {
         UpdateExprs : UpdateExpr list
         Expression : string
-        Attributes : Map<string, string>
-        Values     : Map<string, FsAttributeValue>
+        Attributes : (string * string) []
+        Values     : (string * AttributeValue) []
     }
 with
-    member __.AppendAttributesTo(target : Dictionary<string, string>) =
-        for kv in __.Attributes do target.[kv.Key] <- kv.Value
+    member __.WriteAttributesTo(target : Dictionary<string,string>) =
+        for k,v in __.Attributes do target.[k] <- v
 
-    member __.AppendValuesTo(target : Dictionary<string, AttributeValue>) =
-        for kv in __.Values do target.[kv.Key] <- FsAttributeValue.ToAttributeValue kv.Value
-        
+    member __.WriteValuesTo(target : Dictionary<string, AttributeValue>) =
+        for k,v in __.Values do target.[k] <- v
 
 let extractUpdateExprs (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecord>) =
     if not expr.IsClosed then invalidArg "expr" "supplied update expression contains free variables."
@@ -57,7 +57,7 @@ let extractUpdateExprs (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TReco
     let getValue (conv : FieldConverter) (expr : Expr) =
         match expr |> evalRaw |> conv.Coerce with
         | None -> Undefined
-        | Some av -> FsAttributeValue.FromAttributeValue av
+        | Some av -> Value av
 
     match expr with
     | Lambda(r,body) ->
@@ -84,7 +84,7 @@ let extractUpdateExprs (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TReco
 
         let rec extractOperand (conv : FieldConverter) (expr : Expr) =
             match expr with
-            | _ when expr.IsClosed -> let av = getValue conv expr in Value av
+            | _ when expr.IsClosed -> getValue conv expr
             | PipeRight e | PipeLeft e -> extractOperand conv e
             | AttributeGet attr -> Attribute attr
             | _ -> invalidExpr()
@@ -190,9 +190,14 @@ let extractUpdateExprs (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TReco
 
 
 let updateExprsToString (getAttrId : AttributePath -> string) 
-                        (getValueId : FsAttributeValue -> string) (uexprs : UpdateExpr list) =
+                        (getValueId : AttributeValue -> string) (uexprs : UpdateExpr list) =
 
-    let opStr op = match op with Attribute id -> getAttrId id | Value id -> getValueId id
+    let opStr op = 
+        match op with 
+        | Attribute id -> getAttrId id 
+        | Value id -> getValueId id
+        | Undefined -> invalidOp "internal error: attempting to reference undefined value in update expression."
+
     let valStr value = 
         match value with 
         | Operand op -> opStr op 
@@ -245,13 +250,13 @@ let extractUpdateExpression (recordInfo : RecordInfo) (expr : Expr<'Record -> 'R
                 attrs.Add(attr.RootId, attr.RootName)
                 attr.Id
 
-        let values = new Dictionary<FsAttributeValue, string>()
-        let getValueId (fsv : FsAttributeValue) =
-            let ok,found = values.TryGetValue fsv
+        let values = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
+        let getValueId (av : AttributeValue) =
+            let ok,found = values.TryGetValue av
             if ok then found
             else
                 let id = sprintf ":uval%d" values.Count
-                values.Add(fsv, id)
+                values.Add(av, id)
                 id
 
         let exprString = updateExprsToString getAttrId getValueId updateExprs
@@ -259,6 +264,6 @@ let extractUpdateExpression (recordInfo : RecordInfo) (expr : Expr<'Record -> 'R
         {
             UpdateExprs = updateExprs
             Expression = exprString
-            Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
-            Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Map.ofSeq
+            Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray
+            Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.toArray
         }

@@ -12,24 +12,30 @@ open FSharp.DynamoDB.UpdateExpr
 module private ExprUtils =
     let comparer = new ExprEqualityComparer() :> IEqualityComparer<Expr>
 
-type ConditionalExpression<'Record> internal (cond : ConditionalExpression, expr : Expr) =
-    member __.Expr = expr
+type ConditionExpression<'Record> internal (cond : ConditionalExpression, expr : Expr) =
+    member __.Source = expr
+    member __.Expression = cond.Expression
+    member __.Attributes = cond.Attributes
+    member __.Values = cond.Values |> Array.map (fun (k,v) -> k, v.Print())
     member internal __.Conditional = cond
 
     override __.Equals(other : obj) =
         match other with
-        | :? ConditionalExpression<'Record> as other -> comparer.Equals(expr, other.Expr)
+        | :? ConditionExpression<'Record> as other -> comparer.Equals(expr, other.Source)
         | _ -> false
 
     override __.GetHashCode() = comparer.GetHashCode expr
 
 type UpdateExpression<'Record> internal (updater : UpdateExpression, expr : Expr) =
-    member __.Expr = expr
+    member __.Source = expr
+    member __.Expression = updater.Expression
+    member __.Attributes = updater.Attributes
+    member __.Values = updater.Values |> Array.map (fun (k,v) -> k, v.Print())
     member internal __.Updater = updater
 
     override __.Equals(other : obj) =
         match other with
-        | :? UpdateExpression<'Record> as other -> comparer.Equals(expr, other.Expr)
+        | :? UpdateExpression<'Record> as other -> comparer.Equals(expr, other.Source)
         | _ -> false
 
     override __.GetHashCode() = comparer.GetHashCode expr

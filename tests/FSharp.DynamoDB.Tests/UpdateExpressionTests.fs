@@ -246,6 +246,27 @@ type ``Update Expression Tests`` () =
         let item' = table.UpdateItemAsync(key, <@ fun r -> { r with Map = r.Map |> Map.remove "C" } @>) |> run
         item'.Map.Count |> should equal 2
 
+    [<Fact>]
+    let ``Combined update with succesful precondition`` () =
+        let item = mkItem()
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemAsync(key, <@ fun r -> { r with Value = r.Value + 1L } @>,
+                                               precondition = <@ fun r -> r.Value = item.Value @>) |> run
+
+        item'.Value |> should equal (item.Value + 1L)
+
+    [<Fact>]
+    let ``Combined update with failed precondition`` () =
+        let item = mkItem()
+        let key = table.PutItemAsync item |> run
+        fun () -> table.UpdateItemAsync(key, <@ fun r -> { r with Value = r.Value + 1L } @>,
+                                               precondition = <@ fun r -> r.Value = item.Value + 1L @>) |> run
+
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+        let item' = table.GetItemAsync key |> run
+        item'.Value |> should equal item.Value
+
     interface IDisposable with
         member __.Dispose() =
             ignore <| client.DeleteTable(tableName)

@@ -24,9 +24,10 @@ module internal Utils =
         d
 
     let inline isNull o = obj.ReferenceEquals(o, null)
+    let inline notNull o = not <| obj.ReferenceEquals(o, null)
 
     /// taken from mscorlib's Tuple.GetHashCode() implementation
-    let inline private combineHash (h1 : int) (h2 : int) =
+    let inline combineHash (h1 : int) (h2 : int) =
         ((h1 <<< 5) + h1) ^^^ h2
 
     /// pair hashcode generation without tuple allocation

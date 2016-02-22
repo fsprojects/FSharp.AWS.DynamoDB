@@ -40,26 +40,27 @@ and Comparator =
     | LE
     | GE
 
-and Operand = 
-    | Value of FsAttributeValue
+and Operand =
+    | Undefined
+    | Value of AttributeValue
     | Attribute of AttributePath
     | SizeOf of AttributePath
 with
-    member o.IsUndefinedValue = match o with Value Undefined -> true | _ -> false
+    member op.IsUndefinedValue = match op with Undefined -> true | _ -> false
 
 type ConditionalExpression =
     {
         QueryExpr : QueryExpr
         Expression : string
-        Attributes : Map<string, string>
-        Values : Map<string, FsAttributeValue>
+        Attributes : (string * string) []
+        Values : (string * AttributeValue) []
     }
 with
-    member __.AppendAttributesTo(target : Dictionary<string, string>) =
-        for kv in __.Attributes do target.[kv.Key] <- kv.Value
+    member __.WriteAttributesTo(target : Dictionary<string,string>) =
+        for k,v in __.Attributes do target.[k] <- v
 
-    member __.AppendValuesTo(target : Dictionary<string, AttributeValue>) =
-        for kv in __.Values do target.[kv.Key] <- FsAttributeValue.ToAttributeValue kv.Value
+    member __.WriteValuesTo(target : Dictionary<string, AttributeValue>) =
+        for k,v in __.Values do target.[k] <- v
 
 let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
     if not expr.IsClosed then invalidArg "expr" "supplied query is not a closed expression."
@@ -69,9 +70,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
     | Lambda(r, body) ->
 
         let getAttrValue (conv : FieldConverter) (expr : Expr) =
-            match expr |> evalRaw |> conv.Coerce with
-            | None -> Undefined
-            | Some av -> FsAttributeValue.FromAttributeValue av
+            expr |> evalRaw |> conv.Coerce
 
         let (|AttributeGet|_|) e = 
             match AttributePath.Extract r recordInfo e with
@@ -87,29 +86,38 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             match expr with
             | _ when expr.IsClosed ->
                 let conv = match conv with Some c -> c | None -> FieldConverter.resolveUntyped expr.Type
-                let id = getAttrValue conv expr
-                Value id
+                match getAttrValue conv expr with
+                | None -> Undefined
+                | Some av -> Value av
 
             | PipeLeft e
             | PipeRight e -> extractOperand conv e
 
             | AttributeGet attr -> Attribute attr
 
-            | SpecificProperty <@ fun (s : string) -> s.Length @> (Some (AttributeGet attr), _, []) -> SizeOf attr
+            | SpecificProperty <@ fun (s : string) -> s.Length @> (Some (AttributeGet attr), _, []) -> 
+                SizeOf attr
 
-            | SpecificProperty <@ fun (l : _ list) -> l.Length @> (Some (AttributeGet attr), _, []) -> SizeOf attr
+            | SpecificProperty <@ fun (l : _ list) -> l.Length @> (Some (AttributeGet attr), _, []) -> 
+                SizeOf attr
 
-            | SpecificCall2 <@ List.length @> (None, _, _, [AttributeGet attr]) -> SizeOf attr
+            | SpecificCall2 <@ List.length @> (None, _, _, [AttributeGet attr]) -> 
+                SizeOf attr
 
-            | SpecificProperty <@ fun (s : Set<_>) -> s.Count @> (Some (AttributeGet attr), _, []) -> SizeOf attr
+            | SpecificProperty <@ fun (s : Set<_>) -> s.Count @> (Some (AttributeGet attr), _, []) -> 
+                SizeOf attr
 
-            | SpecificCall2 <@ Set.count @> (None, _, _, [AttributeGet attr]) -> SizeOf attr
+            | SpecificCall2 <@ Set.count @> (None, _, _, [AttributeGet attr]) -> 
+                SizeOf attr
 
-            | SpecificProperty <@ fun (m : Map<_,_>) -> m.Count @> (Some (AttributeGet attr), _, []) -> SizeOf attr
+            | SpecificProperty <@ fun (m : Map<_,_>) -> m.Count @> (Some (AttributeGet attr), _, []) -> 
+                SizeOf attr
 
-            | SpecificProperty <@ fun (a : _ []) -> a.Length @> (Some (AttributeGet attr), _, []) -> SizeOf attr
+            | SpecificProperty <@ fun (a : _ []) -> a.Length @> (Some (AttributeGet attr), _, []) -> 
+                SizeOf attr
 
-            | SpecificCall2 <@ Array.length @> (None, _, _, [AttributeGet attr]) -> SizeOf attr
+            | SpecificCall2 <@ Array.length @> (None, _, _, [AttributeGet attr]) -> 
+                SizeOf attr
 
             | _ -> invalidQuery()
 
@@ -162,7 +170,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             | PipeLeft e
             | PipeRight e -> extractQuery e
 
-            | AttributeGet attr -> Compare(EQ, Attribute attr, Value (Bool true))
+            | AttributeGet attr -> Compare(EQ, Attribute attr, Value (AttributeValue(BOOL = true)))
 
             | Comparison <@ (=) @> [left; right] -> extractComparison EQ left right
             | Comparison <@ (<>) @> [left; right] -> extractComparison NE left right
@@ -223,12 +231,13 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
 
 
 let queryExprToString (getAttrId : AttributePath -> string) 
-                        (getValueId : FsAttributeValue -> string) (qExpr : QueryExpr) =
+                        (getValueId : AttributeValue -> string) (qExpr : QueryExpr) =
 
     let sb = new System.Text.StringBuilder()
     let inline (!) (p:string) = sb.Append p |> ignore
     let inline writeOp o = 
         match o with 
+        | Undefined -> invalidOp "internal error: attempting to reference undefined value in query expression."
         | Value v -> !(getValueId v) 
         | Attribute a -> !(getAttrId a) 
         | SizeOf a -> ! "( size ( " ; !(getAttrId a) ; ! " ))"
@@ -272,13 +281,13 @@ let extractConditionalExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bo
             attrs.Add(attr.RootId, attr.RootName)
             attr.Id
 
-    let values = new Dictionary<FsAttributeValue, string>()
-    let getValueId (fsv : FsAttributeValue) =
-        let ok,found = values.TryGetValue fsv
+    let values = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
+    let getValueId (av : AttributeValue) =
+        let ok,found = values.TryGetValue av
         if ok then found
         else
             let id = sprintf ":cval%d" values.Count
-            values.Add(fsv, id)
+            values.Add(av, id)
             id
 
     let exprString = queryExprToString getAttrId getValueId query
@@ -286,6 +295,6 @@ let extractConditionalExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bo
     {
         QueryExpr = query
         Expression = exprString
-        Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
-        Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Map.ofSeq
+        Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray
+        Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.toArray
     }
