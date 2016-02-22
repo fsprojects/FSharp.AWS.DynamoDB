@@ -9,7 +9,6 @@ open Microsoft.FSharp.Quotations
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.FieldConverter
 open FSharp.DynamoDB.RecordSchema
 open FSharp.DynamoDB.ConditionalExpr
 open FSharp.DynamoDB.UpdateExpr

@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal FSharp.DynamoDB.FieldConverter.PrimitiveConverters
+module internal FSharp.DynamoDB.PrimitiveConverters
 
 open System
 open System.Collections

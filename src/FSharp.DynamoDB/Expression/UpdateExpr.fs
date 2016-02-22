@@ -14,7 +14,6 @@ open Swensen.Unquote
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.FieldConverter
 open FSharp.DynamoDB.ExprCommon
 
 // http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.Modifying.html#Expressions.Modifying.UpdateExpressions

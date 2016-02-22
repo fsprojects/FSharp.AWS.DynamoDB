@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal FSharp.DynamoDB.FieldConverter.RecordConverter
+module internal FSharp.DynamoDB.RecordConverter
 
 open System
 open System.Text.RegularExpressions
@@ -14,7 +14,6 @@ open Amazon.Util
 open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
-open FSharp.DynamoDB.FieldConverter
 
 let private fieldNameRegex = new Regex("^[0-9a-zA-Z]+", RegexOptions.Compiled)
 let isValidFieldName (name : string) =

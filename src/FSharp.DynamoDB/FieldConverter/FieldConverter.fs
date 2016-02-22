@@ -1,4 +1,5 @@
-﻿namespace FSharp.DynamoDB.FieldConverter
+﻿[<AutoOpen>]
+module internal FSharp.DynamoDB.FieldConverter
 
 open System
 open System.IO

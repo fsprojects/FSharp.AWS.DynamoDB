@@ -1,4 +1,4 @@
-﻿namespace FSharp.DynamoDB.FieldConverter
+﻿namespace FSharp.DynamoDB
 
 open System
 open System.Collections
@@ -136,7 +136,7 @@ module private ResolverImpl =
             member __.Resolve<'T> () = resolve typeof<'T> :?> FieldConverter<'T>
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module FieldConverter =
+module internal FieldConverter =
 
     let resolveUntyped (t : Type) = CachedResolver.Create().Resolve t
     let resolve<'T> () = CachedResolver.Create().Resolve<'T> ()

@@ -42,22 +42,3 @@ let key = table.PutItemAsync(value) |> Async.RunSynchronously
 table.GetItemAsync key |> Async.RunSynchronously
 
 table.UpdateItemOpExprAsync(key, <@ fun r -> DELETE r.Set.[1] [1L;2L;3L] @>) |> Async.RunSynchronously
-
-let expr = table.ExtractOpExprUpdater <@ fun r -> ADD r.Bytes "42" @>
-expr
-
-table.PutItemAsync({ value with Value2 = None}, <@ fun r -> r.String.Value.StartsWith r.HashKey @>) |> Async.RunSynchronously
-
-
-
-
-
-
-type UpdateOp =
-    
-
-let (:=) (x : 'T) (v : 'T) : UpdateOp = failwith ""
-let set (x : 'T) (v : 'T) : UpdateOp = failwith ""
-let add (x : 'T) (v : 'a) : UpdateOp = failwith ""
-
-//<@ fun (r : Test) -> set r.Value 42 &&& set r.Bytes [|"test"|] &&& set r.@>

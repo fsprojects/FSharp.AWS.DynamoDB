@@ -10,8 +10,6 @@ open Microsoft.FSharp.Quotations.ExprShape
 
 open Swensen.Unquote
 
-open FSharp.DynamoDB.FieldConverter
-
 type AttributePath =
     | Root of RecordPropertyInfo
     | Nested of RecordPropertyInfo * parent:AttributePath

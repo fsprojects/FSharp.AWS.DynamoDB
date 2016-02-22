@@ -6,8 +6,6 @@ open System.Collections.Generic
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.FieldConverter
-
 type KeyStructure =
     | HashKeyOnly of hashKeyProperty:RecordPropertyInfo
     | Combined of hashKeyProperty:RecordPropertyInfo * rangeKeyProperty:RecordPropertyInfo
