@@ -69,22 +69,6 @@ module private ResolverImpl =
                         let tconv = resolver.Resolve<'T>()
                         new ListConverter<'T list, 'T>(List.ofSeq, [], tconv) :> _ }
 
-        | ShapeResizeArray s ->
-            s.Accept {
-                new IResizeArrayVisitor<FieldConverter> with
-                    member __.VisitResizeArray<'T> () =
-                        let tconv = resolver.Resolve<'T>()
-                        new ListConverter<ResizeArray<'T>, 'T>(rlist, null, tconv) :> _ }
-
-        | ShapeHashSet s ->
-            s.Accept {
-                new IHashSetVisitor<FieldConverter> with
-                    member __.VisitHashSet<'T when 'T : equality> () =
-                        if typeof<'T> = typeof<byte []> then
-                            BytesSetConverter<HashSet<byte []>>(HashSet, null) :> _
-                        else
-                            mkSetConverter<_,'T> HashSet null (resolver.Resolve()) :> _ }
-
         | ShapeFSharpSet s ->
             s.Accept {
                 new IFSharpSetVisitor<FieldConverter> with
@@ -93,15 +77,6 @@ module private ResolverImpl =
                             BytesSetConverter<Set<byte []>>(Set.ofSeq, Set.empty) :> _
                         else
                             mkSetConverter<_,'T> Set.ofSeq Set.empty (resolver.Resolve()) :> _ }
-
-        | ShapeDictionary s ->
-            s.Accept {
-                new IDictionaryVisitor<FieldConverter> with
-                    member __.VisitDictionary<'K, 'V when 'K : equality> () =
-                        if typeof<'K> <> typeof<string> then
-                            UnSupportedField.Raise(t, "Dictionary types must have key of type string.")
-
-                        new MapConverter<Dictionary<string, 'V>, 'V>(cdict, null, resolver.Resolve()) :> _ }
 
         | ShapeFSharpMap s ->
             s.Accept { 
@@ -114,20 +89,6 @@ module private ResolverImpl =
                             kvs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
 
                         new MapConverter<Map<string,'V>, 'V>(mkMap, Map.empty, resolver.Resolve()) :> _ }
-
-        | ShapeCollection s ->
-            s.Accept {
-                new ICollectionVisitor<FieldConverter> with
-                    member __.VisitCollection<'T> () =
-                        let tconv = resolver.Resolve<'T>()
-                        new ListConverter<ICollection<'T>, 'T>(Seq.toArray >> unbox, null, tconv) :> _ }
-
-        | ShapeEnumerable s ->
-            s.Accept {
-                new IEnumerableVisitor<FieldConverter> with
-                    member __.VisitEnumerable<'T> () =
-                        let tconv = resolver.Resolve<'T>()
-                        new ListConverter<seq<'T>, 'T>(Seq.toArray >> unbox, null, tconv) :> _ }
 
         | ShapeTuple as s ->
             s.Accept {
