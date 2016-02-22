@@ -17,6 +17,7 @@ type ConditionExpression<'Record> internal (cond : ConditionalExpression, expr :
     member __.Expression = cond.Expression
     member __.Attributes = cond.Attributes
     member __.Values = cond.Values |> Array.map (fun (k,v) -> k, v.Print())
+    member __.IsQueryCompatible = cond.IsQueryCompatible
     member internal __.Conditional = cond
 
     override __.Equals(other : obj) =

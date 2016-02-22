@@ -41,4 +41,6 @@ let key = table.PutItemAsync(value) |> Async.RunSynchronously
 
 table.GetItemAsync key |> Async.RunSynchronously
 
+table.QueryAsync <@ fun r -> r.HashKey = "1" && r.RangeKey >= "2" && r.RangeKey = "3" @> |> Async.RunSynchronously
+
 table.UpdateItemOpExprAsync(key, <@ fun r -> DELETE r.Set.[1] [1L;2L;3L] @>) |> Async.RunSynchronously

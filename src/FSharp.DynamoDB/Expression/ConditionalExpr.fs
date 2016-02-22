@@ -50,6 +50,7 @@ with
 type ConditionalExpression =
     {
         Expression : string
+        IsQueryCompatible : bool
         Attributes : (string * string) []
         Values : (string * AttributeValue) []
     }
@@ -259,12 +260,15 @@ let extractConditionalExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bo
     | False | True -> invalidArg "expr" "supplied query is tautological."
     | query ->
 
+    let mutable usingKeyOnly = true
     let attrs = new Dictionary<string, string> ()
     let getAttrId (attr : AttributePath) =
-        let ok,found = attrs.TryGetValue attr.RootId
+        let rp = attr.RootProperty
+        let ok,found = attrs.TryGetValue rp.AttrId
         if ok then attr.Id
         else
-            attrs.Add(attr.RootId, attr.RootName)
+            if not (rp.IsHashKey || rp.IsRangeKey) then usingKeyOnly <- false
+            attrs.Add(rp.AttrId, rp.Name)
             attr.Id
 
     let values = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
@@ -277,9 +281,11 @@ let extractConditionalExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bo
             id
 
     let exprString = queryExprToString getAttrId getValueId query
+    let isQueryCompatible = usingKeyOnly
 
     {
         Expression = exprString
+        IsQueryCompatible = usingKeyOnly
         Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray
         Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.toArray
     }

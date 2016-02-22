@@ -33,9 +33,6 @@ with
 
         aux ap
 
-    member ap.RootId = sprintf "#ATTR%d" ap.RootProperty.Index
-    member ap.RootName = ap.RootProperty.Name
-
     member ap.Tokens =
         let rec getTokens acc ap =
             match ap with
@@ -115,6 +112,9 @@ with
             | _ -> None
 
         extractProps [] e
+
+type RecordPropertyInfo with
+    member rp.AttrId = sprintf "#ATTR%d" rp.Index
 
 
 type private AttributeNode = { Value : string ; Children : ResizeArray<AttributeNode> }

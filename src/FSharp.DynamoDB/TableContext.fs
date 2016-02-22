@@ -199,6 +199,94 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
             failwithf "PutItem request returned error %O" response.HttpStatusCode    
     }
 
+    member __.QueryAsync(keyCondition : ConditionExpression<'TRecord>, ?filterCondition : ConditionExpression<'TRecord>, 
+                            ?limit: int, ?consistentRead : bool, ?scanIndexForward : bool) : Async<'TRecord []> = async {
+
+        if not keyCondition.IsQueryCompatible then 
+            invalidArg "keyCondition" "key condition should only access key attributes."
+
+        let downloaded = new ResizeArray<_>()
+        let rec aux last = async {
+            let request = new QueryRequest(tableName)
+            let cond = keyCondition.Conditional
+            request.KeyConditionExpression <- cond.Expression
+            cond.WriteAttributesTo request.ExpressionAttributeNames
+            cond.WriteValuesTo request.ExpressionAttributeValues
+            match filterCondition with
+            | Some fc ->
+                let cond = fc.Conditional
+                request.FilterExpression <- cond.Expression
+                cond.WriteAttributesTo request.ExpressionAttributeNames
+                cond.WriteValuesTo request.ExpressionAttributeValues
+            | None -> ()
+
+            limit |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
+            consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
+            scanIndexForward |> Option.iter (fun sif -> request.ScanIndexForward <- sif)
+            last |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
+
+            let! ct = Async.CancellationToken
+            let! response = client.QueryAsync(request, ct) |> Async.AwaitTaskCorrect
+            if response.HttpStatusCode <> HttpStatusCode.OK then
+                failwithf "Query request returned error %O" response.HttpStatusCode
+                
+            downloaded.AddRange response.Items
+            if response.LastEvaluatedKey.Count > 0 &&
+               limit |> Option.forall (fun l -> downloaded.Count < l)
+            then 
+                do! aux (Some response.LastEvaluatedKey)
+        } 
+
+        do! aux None
+        
+        return downloaded |> Seq.map record.OfAttributeValues |> Seq.toArray
+    }
+
+    member __.QueryAsync(keyCondition : Expr<'TRecord -> bool>, ?filterCondition : Expr<'TRecord -> bool>, 
+                            ?limit : int, ?consistentRead : bool, ?scanIndexForward : bool) : Async<'TRecord []> = async {
+
+        let kc = __.ExtractConditionalExpr keyCondition
+        let fc = filterCondition |> Option.map __.ExtractConditionalExpr 
+        return! __.QueryAsync(kc, ?filterCondition = fc, ?limit = limit, ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+    }
+
+    member __.ScanAsync(filterCondition : ConditionExpression<'TRecord>, ?limit : int, ?consistentRead : bool) : Async<'TRecord []> = async {
+
+        let downloaded = new ResizeArray<_>()
+        let rec aux last = async {
+            let request = new ScanRequest(tableName)
+            let cond = filterCondition.Conditional
+            request.FilterExpression <- cond.Expression
+            cond.WriteAttributesTo request.ExpressionAttributeNames
+            cond.WriteValuesTo request.ExpressionAttributeValues
+
+            limit |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
+            consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
+            last |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
+
+            let! ct = Async.CancellationToken
+            let! response = client.ScanAsync(request, ct) |> Async.AwaitTaskCorrect
+            if response.HttpStatusCode <> HttpStatusCode.OK then
+                failwithf "Query request returned error %O" response.HttpStatusCode
+                
+            downloaded.AddRange response.Items
+            if response.LastEvaluatedKey.Count > 0 &&
+                limit |> Option.forall (fun l -> downloaded.Count < l)
+            then 
+                do! aux (Some response.LastEvaluatedKey)
+        } 
+
+        do! aux None
+        
+        return downloaded |> Seq.map record.OfAttributeValues |> Seq.toArray
+    }
+
+    member __.ScanAsync(filterExpr : Expr<'TRecord -> bool>, ?limit : int, ?consistentRead : bool) : Async<'TRecord []> = async {
+        let cond = __.ExtractConditionalExpr filterExpr
+        return! __.ScanAsync(cond, ?limit = limit, ?consistentRead = consistentRead)
+    }
+
+
 type TableContext =
 
     static member GetTableContext<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?createIfNotExists : bool, ?provisionedThroughPut : ProvisionedThroughput) = async {

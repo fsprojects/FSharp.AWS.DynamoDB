@@ -313,12 +313,13 @@ let extractUpdateExpression (assignments : UpdateExprs) =
 
     let attrs = new Dictionary<string, string> ()
     let getAttrId (attr : AttributePath) =
-        if attr.RootProperty.IsHashKey then invalidArg "expr" "update expression cannot update hash key."
-        if attr.RootProperty.IsRangeKey then invalidArg "expr" "update expression cannot update range key."
-        let ok,found = attrs.TryGetValue attr.RootId
+        let rp = attr.RootProperty
+        if rp.IsHashKey then invalidArg "expr" "update expression cannot update hash key."
+        if rp.IsRangeKey then invalidArg "expr" "update expression cannot update range key."
+        let ok,found = attrs.TryGetValue rp.AttrId
         if ok then attr.Id
         else
-            attrs.Add(attr.RootId, attr.RootName)
+            attrs.Add(rp.AttrId, rp.Name)
             attr.Id
 
     let values = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
