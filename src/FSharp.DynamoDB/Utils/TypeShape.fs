@@ -1,4 +1,4 @@
-﻿namespace FSharp.DynamoDB.TypeShape
+﻿module internal FSharp.DynamoDB.TypeShape
 
 open System
 open System.Collections.Generic

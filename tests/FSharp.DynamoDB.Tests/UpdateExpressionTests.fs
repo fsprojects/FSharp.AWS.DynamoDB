@@ -270,12 +270,48 @@ type ``Update Expression Tests`` () =
         let item' = table.GetItemAsync key |> run
         item'.Value |> should equal item.Value
 
+
+    [<Fact>]
+    let ``SET an attribute`` () =
+        let item = mkItem()
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemOpExprAsync(key, <@ fun r -> SET r.NestedList.[0].NV item.HashKey &&&
+                                                                 SET r.NestedList.[1] { NV = item.HashKey ; NE = Enum.C } @>) |> run
+
+        item'.NestedList.[0].NV |> should equal item.HashKey
+        item'.NestedList.[1].NV |> should equal item.HashKey
+
+    [<Fact>]
+    let ``REMOVE an attribute`` () =
+        let item = { mkItem() with NestedList = [{NV = "foo" ; NE = Enum.A}] }
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemOpExprAsync(key, <@ fun r -> REMOVE r.NestedList.[0] @>) |> run
+
+        item'.NestedList.Length |> should equal 0
+
+    [<Fact>]
+    let ``ADD to set`` () =
+        let item = mkItem()
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemOpExprAsync(key, <@ fun r -> ADD r.Set [42L] @>) |> run
+
+        item'.Set.Contains 42L |> should equal true
+
+    [<Fact>]
+    let ``DELETE from set`` () =
+        let item = { mkItem() with Set = set [1L ; 42L] }
+        let key = table.PutItemAsync item |> run
+        let item' = table.UpdateItemOpExprAsync(key, <@ fun r -> DELETE r.Set [42L] @>) |> run
+
+        item'.Set.Contains 42L |> should equal false
+        item'.Set.Count |> should equal 1
+
     [<Fact>]
     let ``Detect overlapping paths`` () =
         let item = mkItem()
         let key = table.PutItemAsync item |> run
         fun () -> table.UpdateItemOpExprAsync(key, <@ fun r -> SET r.NestedList.[0].NV "foo" &&& 
-                                                               SET r.NestedList [] @>) |> run
+                                                               REMOVE r.NestedList @>) |> run
 
         |> shouldFailwith<_, ArgumentException>
 
