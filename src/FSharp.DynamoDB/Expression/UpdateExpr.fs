@@ -99,6 +99,7 @@ let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr<'TRecord -> Upd
     match expr with
     | Lambda(r,body) ->
         let (|AttributeGet|_|) (e : Expr) = AttributePath.Extract r recordInfo e
+        let attrs = new ResizeArray<AttributePath>()
         let assignments = new ResizeArray<AttributePath * Expr> ()
         let updateOps = new ResizeArray<UpdateOperation> ()
         let rec extract e =
@@ -107,22 +108,34 @@ let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr<'TRecord -> Upd
                 extract l ; extract r
 
             | SpecificCall2 <@ SET @> (None, _, _, [AttributeGet attr; value]) ->
+                attrs.Add attr
                 assignments.Add(attr, value)
 
             | SpecificCall2 <@ REMOVE @> (None, _, _, [AttributeGet attr]) ->
+                attrs.Add attr
                 updateOps.Add (Remove attr)
 
             | SpecificCall2 <@ ADD @> (None, _, _, [AttributeGet attr; value]) ->
                 let op = getValue attr.Converter value
+                attrs.Add attr
                 updateOps.Add (Add (attr, op))
 
             | SpecificCall2 <@ DELETE @> (None, _, _, [AttributeGet attr; value]) ->
                 let op = getValue attr.Converter value
+                attrs.Add attr
                 updateOps.Add (Delete (attr, op))
 
             | _ -> invalidExpr()
 
         do extract body
+
+        match tryFindConflictingPaths attrs with
+        | Some (p1,p2) -> 
+            let msg = sprintf "found conflicting paths '%s' and '%s' being accessed in update expression." p1 p2
+            invalidArg "expr" msg
+
+        | None -> ()
+
         let assignments = assignments |> Seq.toList
         let updateOps = updateOps |> Seq.toList
 

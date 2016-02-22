@@ -270,6 +270,18 @@ type ``Update Expression Tests`` () =
         let item' = table.GetItemAsync key |> run
         item'.Value |> should equal item.Value
 
+    [<Fact>]
+    let ``Detect overlapping paths`` () =
+        let item = mkItem()
+        let key = table.PutItemAsync item |> run
+        fun () -> table.UpdateItemOpExprAsync(key, <@ fun r -> SET r.NestedList.[0].NV "foo" &&& 
+                                                               SET r.NestedList [] @>) |> run
+
+        |> shouldFailwith<_, ArgumentException>
+
+        let item' = table.GetItemAsync key |> run
+        item'.Value |> should equal item.Value
+
     interface IDisposable with
         member __.Dispose() =
             ignore <| client.DeleteTable(tableName)

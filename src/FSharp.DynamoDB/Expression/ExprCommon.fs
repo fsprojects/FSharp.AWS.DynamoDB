@@ -38,6 +38,16 @@ with
     member ap.RootId = sprintf "#ATTR%d" ap.RootProperty.Index
     member ap.RootName = ap.RootProperty.Name
 
+    member ap.Tokens =
+        let rec getTokens acc ap =
+            match ap with
+            | Root rp -> rp.Name :: acc
+            | Nested (rp,p) -> getTokens ("." + rp.Name :: acc) p
+            | Item(i,_,p) -> getTokens (sprintf ".[%d]" i :: acc) p
+            | Suffix(id,p) -> getTokens ("." + id :: acc) p
+
+        getTokens [] ap
+
     member ap.Id =
         let rec getTokens acc ap =
             match ap with
@@ -107,3 +117,46 @@ with
             | _ -> None
 
         extractProps [] e
+
+
+type private AttributeNode = { Value : string ; Children : ResizeArray<AttributeNode> }
+let tryFindConflictingPaths (attrs : seq<AttributePath>) =
+    let root = new ResizeArray<AttributeNode>()
+    let tryAppendPath (attr : AttributePath) =
+        let tokens = attr.Tokens :> seq<string>
+        let enum = tokens.GetEnumerator()
+        let mutable ctx = root
+        let mutable isNodeAdded = false
+        let mutable isLeafFound = false
+        let acc = new ResizeArray<_>()
+        while not isLeafFound && enum.MoveNext() do
+            let t = enum.Current
+            let child =
+                match ctx.FindIndex(fun n -> n.Value = t) with
+                | -1 -> 
+                    isNodeAdded <- true
+                    let ch = { Value = t ; Children = new ResizeArray<_>() }
+                    ctx.Add ch
+                    ch
+
+                | i ->
+                    let ch = ctx.[i]
+                    if ch.Children.Count = 0 then isLeafFound <- true
+                    ch
+
+            acc.Add t
+            ctx <- child.Children
+
+        let concat xs = String.concat "" xs
+        if isLeafFound then Some(concat tokens, concat acc)
+        elif not isNodeAdded then
+            while ctx.Count > 0 do
+                let ch = ctx.[0]
+                acc.Add ch.Value
+                ctx <- ch.Children
+
+            Some(concat tokens, concat acc)
+
+        else None
+
+    attrs |> Seq.tryPick tryAppendPath
