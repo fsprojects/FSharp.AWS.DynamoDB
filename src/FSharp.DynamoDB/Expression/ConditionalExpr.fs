@@ -196,11 +196,6 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 let op = extractOperand (Some econv) elem
                 Contains(attr, op)
 
-            | SpecificCall2 <@ fun (x : HashSet<_>) y -> x.Contains y @> (Some(AttributeGet attr), _, _, [elem]) ->
-                let econv = getEconv attr.Converter
-                let op = extractOperand (Some econv) elem
-                Contains(attr, op)
-
             | SpecificCall2 <@ Map.containsKey @> (None, _, _, [key; AttributeGet attr]) when key.IsClosed ->
                 let key = evalRaw key
                 if not <| isValidFieldName key then
@@ -209,13 +204,6 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 Attribute_Exists (Suffix(key, attr))
 
             | SpecificCall2 <@ fun (x : Map<_,_>) y -> x.ContainsKey y @> (Some(AttributeGet attr), _, _, [key]) when key.IsClosed ->
-                let key = evalRaw key
-                if not <| isValidFieldName key then
-                    invalidArg key "map key must be alphanumeric not starting with a digit"
-
-                Attribute_Exists (Suffix(key, attr))
-
-            | SpecificCall2 <@ fun (x : Dictionary<_,_>) y -> x.ContainsKey y @> (Some(AttributeGet attr), _, _, [key]) when key.IsClosed ->
                 let key = evalRaw key
                 if not <| isValidFieldName key then
                     invalidArg key "map key must be alphanumeric not starting with a digit"

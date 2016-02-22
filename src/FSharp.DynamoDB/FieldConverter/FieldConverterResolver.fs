@@ -76,32 +76,11 @@ module private ResolverImpl =
                         let tconv = resolver.Resolve<'T>()
                         new ListConverter<ResizeArray<'T>, 'T>(rlist, null, tconv) :> _ }
 
-        | ShapeHashSet s ->
-            s.Accept {
-                new IHashSetVisitor<FieldConverter> with
-                    member __.VisitHashSet<'T when 'T : equality> () =
-                        if typeof<'T> = typeof<byte []> then
-                            BytesSetConverter<HashSet<byte []>>(HashSet, null) :> _
-                        else
-                            mkSetConverter<_,'T> HashSet null (resolver.Resolve()) :> _ }
-
         | ShapeFSharpSet s ->
             s.Accept {
                 new IFSharpSetVisitor<FieldConverter> with
                     member __.VisitFSharpSet<'T when 'T : comparison> () =
-                        if typeof<'T> = typeof<byte []> then
-                            BytesSetConverter<Set<byte []>>(Set.ofSeq, Set.empty) :> _
-                        else
-                            mkSetConverter<_,'T> Set.ofSeq Set.empty (resolver.Resolve()) :> _ }
-
-        | ShapeDictionary s ->
-            s.Accept {
-                new IDictionaryVisitor<FieldConverter> with
-                    member __.VisitDictionary<'K, 'V when 'K : equality> () =
-                        if typeof<'K> <> typeof<string> then
-                            UnSupportedField.Raise(t, "Dictionary types must have key of type string.")
-
-                        new MapConverter<Dictionary<string, 'V>, 'V>(cdict, null, resolver.Resolve()) :> _ }
+                        mkSetConverter<'T>(resolver.Resolve()) :> _ }
 
         | ShapeFSharpMap s ->
             s.Accept { 
@@ -110,10 +89,7 @@ module private ResolverImpl =
                         if typeof<'K> <> typeof<string> then
                             UnSupportedField.Raise(t, "Map types must have key of type string.")
 
-                        let mkMap (kvs : seq<KeyValuePair<string,'V>>) =
-                            kvs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Map.ofSeq
-
-                        new MapConverter<Map<string,'V>, 'V>(mkMap, Map.empty, resolver.Resolve()) :> _ }
+                        new MapConverter<'V>(resolver.Resolve()) :> _ }
 
         | ShapeCollection s ->
             s.Accept {

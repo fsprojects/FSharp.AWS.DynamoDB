@@ -150,8 +150,8 @@ module ``Record Generation Tests`` =
             [<RangeKey>]RangeKey : float
 
             Values : byte [][]
-            Map : System.Collections.Generic.Dictionary<string, decimal>
-            Set : System.Collections.Generic.HashSet<string> ref
+            Map : Map<string, decimal>
+            Set : Set<string> ref
 
             Nested : NestedRecord
 
@@ -188,7 +188,7 @@ module ``Record Generation Tests`` =
             Guid : Guid
             Enum : System.Reflection.BindingFlags
             EnumArray : System.Reflection.BindingFlags []
-            GuidArray : System.Collections.Generic.HashSet<Guid>
+            GuidSet : Set<Guid>
             Nullable : Nullable<int64>
             Optional : string option
             Bytess : Set<byte[]>

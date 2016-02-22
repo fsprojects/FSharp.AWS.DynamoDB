@@ -40,11 +40,11 @@ type ListConverter<'List, 'T when 'List :> seq<'T>>(ctor : seq<'T> -> 'List, nul
     interface ICollectionConverter with
         member __.ElementConverter = tconv :> _
 
-type BytesSetConverter<'BSet when 'BSet :> seq<byte[]>>(ctor : seq<byte []> -> 'BSet, nullV) =
-    inherit FieldConverter<'BSet>()
+type BytesSetConverter() =
+    inherit FieldConverter<Set<byte[]>>()
     override __.Representation = FieldRepresentation.BytesSet
     override __.ConverterType = ConverterType.Value
-    override __.DefaultValue = ctor [||]
+    override __.DefaultValue = Set.empty
     override __.Coerce obj =
         match obj with
         | null -> Some <| AttributeValue(NULL = true)
@@ -66,16 +66,16 @@ type BytesSetConverter<'BSet when 'BSet :> seq<byte[]>>(ctor : seq<byte []> -> '
     override __.OfField bss = __.Coerce bss
 
     override __.ToField a =
-        if a.NULL then nullV
-        elif a.IsBSSet then a.BS |> Seq.map (fun ms -> ms.ToArray()) |> ctor
+        if a.NULL then Set.empty
+        elif a.IsBSSet then a.BS |> Seq.map (fun ms -> ms.ToArray()) |> set
         else invalidCast a
 
     interface ICollectionConverter with
         member __.ElementConverter = new BytesConverter() :> _
 
-type NumSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, nullV, tconv : NumRepresentableFieldConverter<'T>) =
-    inherit FieldConverter<'Set>()
-    override __.DefaultValue = ctor [||]
+type NumSetConverter<'T when 'T : comparison> (tconv : NumRepresentableFieldConverter<'T>) =
+    inherit FieldConverter<Set<'T>>()
+    override __.DefaultValue = Set.empty
     override __.Representation = FieldRepresentation.NumberSet
     override __.ConverterType = ConverterType.Value
     override __.Coerce obj =
@@ -90,16 +90,16 @@ type NumSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, nul
     override __.OfField set = __.Coerce set
 
     override __.ToField a =
-        if a.NULL then nullV
-        elif a.IsNSSet then a.NS |> Seq.map tconv.Parse |> ctor
+        if a.NULL then Set.empty
+        elif a.IsNSSet then a.NS |> Seq.map tconv.Parse |> set
         else invalidCast a
 
     interface ICollectionConverter with
         member __.ElementConverter = tconv :> _
 
-type StringSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, nullV, tconv : StringRepresentableFieldConverter<'T>) =
-    inherit FieldConverter<'Set>()
-    override __.DefaultValue = ctor [||]
+type StringSetConverter<'T when 'T : comparison> (tconv : StringRepresentableFieldConverter<'T>) =
+    inherit FieldConverter<Set<'T>>()
+    override __.DefaultValue = Set.empty
     override __.Representation = FieldRepresentation.StringSet
     override __.ConverterType = ConverterType.Value
     override __.Coerce obj =
@@ -114,69 +114,43 @@ type StringSetConverter<'Set, 'T when 'Set :> seq<'T>> (ctor : seq<'T> -> 'Set, 
     override __.OfField set = __.Coerce set
 
     override __.ToField a =
-        if a.NULL then nullV
-        elif a.IsSSSet then a.SS |> Seq.map tconv.Parse |> ctor
+        if a.NULL then Set.empty
+        elif a.IsSSSet then a.SS |> Seq.map tconv.Parse |> set
         else invalidCast a
 
     interface ICollectionConverter with
         member __.ElementConverter = tconv :> _
 
-let mkSetConverter<'Set, 'T when 'Set :> seq<'T>> ctor nullV (tconv : FieldConverter<'T>) : FieldConverter<'Set> =
+let mkSetConverter<'T when 'T : comparison>(tconv : FieldConverter<'T>) : FieldConverter<Set<'T>> =
+    if typeof<'T> = typeof<byte[]> then BytesSetConverter() |> unbox else
     match tconv with
-    | :? NumRepresentableFieldConverter<'T> as tc -> NumSetConverter<'Set, 'T>(ctor, nullV, tc) :> _
-    | :? StringRepresentableFieldConverter<'T> as tc -> StringSetConverter<'Set, 'T>(ctor, nullV, tc) :> _
-    | _ -> UnSupportedField.Raise typeof<'Set>
+    | :? NumRepresentableFieldConverter<'T> as tc -> NumSetConverter<'T>(tc) :> _
+    | :? StringRepresentableFieldConverter<'T> as tc -> StringSetConverter<'T>(tc) :> _
+    | _ -> UnSupportedField.Raise typeof<Set<'T>>
 
-type MapConverter<'Map, 'Value when 'Map :> seq<KeyValuePair<string, 'Value>>>
-                    (ctor : seq<KeyValuePair<string, 'Value>> -> 'Map, nullV,
-                        vconv : FieldConverter<'Value>) =
-
-    inherit FieldConverter<'Map>()
+type MapConverter<'Value>(vconv : FieldConverter<'Value>) =
+    inherit FieldConverter<Map<string,'Value>>()
     override __.Representation = FieldRepresentation.Map
     override __.ConverterType = ConverterType.Value
-    override __.DefaultValue = ctor [||]
-    override __.Coerce obj =
-        match obj with
-        | null -> Some <| AttributeValue(NULL = true)
-        | :? KeyValuePair<string, 'Value> as kv ->
-            match vconv.OfField kv.Value with
-            | None -> None
-            | Some av -> Some <| AttributeValue(M = cdict [|keyVal kv.Key av|])
-
-        | :? (string * 'Value) as kv ->
-            match vconv.OfField (snd kv) with
-            | None -> None
-            | Some av -> Some <| AttributeValue(M = cdict [|keyVal (fst kv) av|])
-
-        | :? seq<KeyValuePair<string, 'Value>> as kvs ->
+    override __.DefaultValue = Map.empty
+    override __.OfField map =
+        if isNull map then AttributeValue(NULL = true) |> Some
+        elif map.Count = 0 then None
+        else
             let m = 
-                kvs |> Seq.choose (fun kv -> 
+                map 
+                |> Seq.choose (fun kv -> 
                     match vconv.OfField kv.Value with 
                     | None -> None 
                     | Some av -> Some (keyVal kv.Key av)) 
                 |> cdict
 
-            if m.Count = 0 then None
-            else Some <| AttributeValue(M = m)
-
-        | :? seq<string * 'Value> as kvs ->
-            let m = 
-                kvs |> Seq.choose (fun (k,v) -> 
-                    match vconv.OfField v with 
-                    | None -> None 
-                    | Some av -> Some (keyVal k av)) 
-                |> cdict
-
-            if m.Count = 0 then None
-            else Some <| AttributeValue(M = m)
-
-        | _ -> raise <| InvalidCastException()
-
-    override __.OfField map = __.Coerce map
+            AttributeValue(M = m) |> Some
+            
 
     override __.ToField a =
-        if a.NULL then nullV
-        elif a.IsMSet then a.M |> Seq.map (fun kv -> keyVal kv.Key (vconv.ToField kv.Value)) |> ctor
+        if a.NULL then Map.empty
+        elif a.IsMSet then a.M |> Seq.map (fun kv -> kv.Key, vconv.ToField kv.Value) |> Map.ofSeq
         else invalidCast a
 
     interface ICollectionConverter with
