@@ -340,6 +340,14 @@ type ``Conditional Expression Tests`` () =
         results.Length |> should equal 100
 
     [<Fact>]
+    let ``Fail on identical comparands`` () =
+        fun () -> table.ExtractConditionalExpr <@ fun r -> r.Guid < r.Guid @>
+        |> shouldFailwith<_, ArgumentException>
+
+        fun () -> table.ExtractConditionalExpr <@ fun r -> r.Bytes.Length = r.Bytes.Length @>
+        |> shouldFailwith<_, ArgumentException>
+
+    [<Fact>]
     let ``Detect incompatible key conditions`` () =
         let test outcome q = table.ExtractConditionalExpr(q).IsQueryCompatible |> should equal outcome
 

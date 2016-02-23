@@ -129,6 +129,8 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             | _ -> None
 
         let extractComparison (cmp : Comparator) (left : Operand) (right : Operand) =
+            if left = right then invalidArg "expr" "conditional expression contains comparison with identical operands"
+
             let defAttr =
                 if left.IsUndefinedValue then Some(match right with Attribute attr -> attr | _ -> invalidOp "internal error")
                 elif right.IsUndefinedValue then Some(match left with Attribute attr -> attr | _ -> invalidOp "internal error")
