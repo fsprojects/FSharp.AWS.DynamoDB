@@ -48,7 +48,6 @@
     <Compile Include="Types.fs" />
     <Compile Include="Utils\Utils.fs" />
     <Compile Include="Utils\DynamoUtils.fs" />
-    <Compile Include="Utils\ExprEqualityComparer.fs" />
     <Compile Include="Utils\TypeShape.fs" />
     <Compile Include="FieldConverter\FieldConverter.fs" />
     <Compile Include="FieldConverter\PrimitiveConverters.fs" />

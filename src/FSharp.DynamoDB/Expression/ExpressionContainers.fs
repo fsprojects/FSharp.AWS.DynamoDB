@@ -8,12 +8,7 @@ open Microsoft.FSharp.Quotations
 open FSharp.DynamoDB.ConditionalExpr
 open FSharp.DynamoDB.UpdateExpr
 
-[<AutoOpen>]
-module private ExprUtils =
-    let comparer = new ExprEqualityComparer() :> IEqualityComparer<Expr>
-
-type ConditionExpression<'Record> internal (cond : ConditionalExpression, expr : Expr) =
-    member __.Source = expr
+type ConditionExpression<'Record> internal (cond : ConditionalExpression) =
     member __.Expression = cond.Expression
     member __.Attributes = cond.Attributes
     member __.Values = cond.Values |> Array.map (fun (k,v) -> k, v.Print())
@@ -22,13 +17,12 @@ type ConditionExpression<'Record> internal (cond : ConditionalExpression, expr :
 
     override __.Equals(other : obj) =
         match other with
-        | :? ConditionExpression<'Record> as other -> comparer.Equals(expr, other.Source)
+        | :? ConditionExpression<'Record> as other -> cond = other.Conditional
         | _ -> false
 
-    override __.GetHashCode() = comparer.GetHashCode expr
+    override __.GetHashCode() = hash cond
 
-type UpdateExpression<'Record> internal (updater : UpdateExpression, expr : Expr) =
-    member __.Source = expr
+type UpdateExpression<'Record> internal (updater : UpdateExpression) =
     member __.Expression = updater.Expression
     member __.Attributes = updater.Attributes
     member __.Values = updater.Values |> Array.map (fun (k,v) -> k, v.Print())
@@ -36,7 +30,7 @@ type UpdateExpression<'Record> internal (updater : UpdateExpression, expr : Expr
 
     override __.Equals(other : obj) =
         match other with
-        | :? UpdateExpression<'Record> as other -> comparer.Equals(expr, other.Source)
+        | :? UpdateExpression<'Record> as other -> updater = other.Updater
         | _ -> false
 
-    override __.GetHashCode() = comparer.GetHashCode expr
+    override __.GetHashCode() = hash updater

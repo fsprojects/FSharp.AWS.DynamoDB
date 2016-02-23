@@ -45,19 +45,6 @@ type UpdateExprs =
         UpdateOps : UpdateOperation list
     }
 
-type UpdateExpression =
-    {
-        Expression : string
-        Attributes : (string * string) []
-        Values     : (string * AttributeValue) []
-    }
-with
-    member __.WriteAttributesTo(target : Dictionary<string,string>) =
-        for k,v in __.Attributes do target.[k] <- v
-
-    member __.WriteValuesTo(target : Dictionary<string, AttributeValue>) =
-        for k,v in __.Values do target.[k] <- v
-
 let extractRecordExprUpdaters (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'TRecord>) =
     if not expr.IsClosed then invalidArg "expr" "supplied update expression contains free variables."
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
@@ -307,34 +294,69 @@ let updateExprsToString (getAttrId : AttributePath -> string)
 
     sb.ToString()
 
-let extractUpdateExpression (assignments : UpdateExprs) =
-    let updateOps = extractUpdateOps assignments @ assignments.UpdateOps
-    if updateOps.IsEmpty then invalidArg "expr" "No update clauses found in expression"
+let private attrValueCmp = new AttributeValueComparer() :> IEqualityComparer<_>
 
-    let attrs = new Dictionary<string, string> ()
-    let getAttrId (attr : AttributePath) =
-        let rp = attr.RootProperty
-        if rp.IsHashKey then invalidArg "expr" "update expression cannot update hash key."
-        if rp.IsRangeKey then invalidArg "expr" "update expression cannot update range key."
-        let ok,found = attrs.TryGetValue rp.AttrId
-        if ok then attr.Id
-        else
-            attrs.Add(rp.AttrId, rp.Name)
-            attr.Id
-
-    let values = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
-    let getValueId (av : AttributeValue) =
-        let ok,found = values.TryGetValue av
-        if ok then found
-        else
-            let id = sprintf ":uval%d" values.Count
-            values.Add(av, id)
-            id
-
-    let exprString = updateExprsToString getAttrId getValueId updateOps
-
+[<CustomEquality; NoComparison>]
+type UpdateExpression =
     {
-        Expression = exprString
-        Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray
-        Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.toArray
+        UpdateOps  : UpdateOperation list
+        Expression : string
+        Attributes : (string * string) []
+        Values     : (string * AttributeValue) []
     }
+with
+    member __.WriteAttributesTo(target : Dictionary<string,string>) =
+        for k,v in __.Attributes do target.[k] <- v
+
+    member __.WriteValuesTo(target : Dictionary<string, AttributeValue>) =
+        for k,v in __.Values do target.[k] <- v
+
+    static member Extract (assignments : UpdateExprs) =
+        let updateOps = extractUpdateOps assignments @ assignments.UpdateOps
+        if updateOps.IsEmpty then invalidArg "expr" "No update clauses found in expression"
+
+        let attrs = new Dictionary<string, string> ()
+        let getAttrId (attr : AttributePath) =
+            let rp = attr.RootProperty
+            if rp.IsHashKey then invalidArg "expr" "update expression cannot update hash key."
+            if rp.IsRangeKey then invalidArg "expr" "update expression cannot update range key."
+            let ok,found = attrs.TryGetValue rp.AttrId
+            if ok then attr.Id
+            else
+                attrs.Add(rp.AttrId, rp.Name)
+                attr.Id
+
+        let values = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
+        let getValueId (av : AttributeValue) =
+            let ok,found = values.TryGetValue av
+            if ok then found
+            else
+                let id = sprintf ":uval%d" values.Count
+                values.Add(av, id)
+                id
+
+        let exprString = updateExprsToString getAttrId getValueId updateOps
+
+        {
+            UpdateOps = updateOps
+            Expression = exprString
+            Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.sortBy fst |> Seq.toArray
+            Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.sortBy fst |> Seq.toArray
+        }
+
+    override uexpr.Equals obj =
+        match obj with
+        | :? UpdateExpression as uexpr' ->
+            uexpr.Expression = uexpr'.Expression &&
+            uexpr.Values.Length = uexpr'.Values.Length &&
+            let eq (k,v) (k',v') = k = k' && attrValueCmp.Equals(v,v') in
+            Array.forall2 eq uexpr.Values uexpr'.Values
+        | _ -> false
+
+    override uexpr.GetHashCode() =
+        let mutable vhash = 0
+        for k,v in uexpr.Values do
+            let th = combineHash (hash k) (attrValueCmp.GetHashCode v)
+            vhash <- combineHash vhash th
+
+        hash2 uexpr.Expression vhash

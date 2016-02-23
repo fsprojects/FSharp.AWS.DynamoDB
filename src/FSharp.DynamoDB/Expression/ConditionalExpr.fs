@@ -280,7 +280,9 @@ let isKeyConditionCompatible (qExpr : QueryExpr) =
     if aux qExpr then !hashKeyRefs = 1 && !rangeKeyRefs <= 1
     else false
 
+let private attrValueCmp = new AttributeValueComparer() :> IEqualityComparer<_>
 
+[<CustomEquality; NoComparison>]
 type ConditionalExpression =
     {
         QueryExpr : QueryExpr
@@ -310,7 +312,7 @@ with
                 attrs.Add(rp.AttrId, rp.Name)
                 attr.Id
 
-        let values = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
+        let values = new Dictionary<AttributeValue, string>(attrValueCmp)
         let getValueId (av : AttributeValue) =
             let ok,found = values.TryGetValue av
             if ok then found
@@ -326,8 +328,8 @@ with
             QueryExpr = query
             Expression = exprString
             IsQueryCompatible = isQueryCompatible
-            Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray
-            Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.toArray
+            Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.sortBy fst |> Seq.toArray
+            Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.sortBy fst |> Seq.toArray
         }
 
     member cexpr.BuildAppendedConditional(attrs : Dictionary<string, string>, values : Dictionary<string, AttributeValue>) : string =
@@ -339,7 +341,7 @@ with
                 attrs.Add(rp.AttrId, rp.Name)
                 attr.Id
 
-        let lvals = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
+        let lvals = new Dictionary<AttributeValue, string>(attrValueCmp)
         let getValueId (av : AttributeValue) =
             let ok,found = lvals.TryGetValue av
             if ok then found
@@ -350,3 +352,20 @@ with
                 id
 
         queryExprToString getAttrId getValueId cexpr.QueryExpr
+
+    override cexpr.Equals obj =
+        match obj with
+        | :? ConditionalExpression as cexpr' ->
+            cexpr.Expression = cexpr'.Expression &&
+            cexpr.Values.Length = cexpr'.Values.Length &&
+            let eq (k,v) (k',v') = k = k' && attrValueCmp.Equals(v,v') in
+            Array.forall2 eq cexpr.Values cexpr'.Values
+        | _ -> false
+
+    override cexpr.GetHashCode() =
+        let mutable vhash = 0
+        for k,v in cexpr.Values do
+            let th = combineHash (hash k) (attrValueCmp.GetHashCode v)
+            vhash <- combineHash vhash th
+
+        hash2 cexpr.Expression vhash
