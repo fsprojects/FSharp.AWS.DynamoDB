@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal FSharp.DynamoDB.FieldConverter
+module internal FSharp.DynamoDB.Pickler
 
 open System
 open System.IO
@@ -11,7 +11,7 @@ open FSharp.DynamoDB
 
 type RestObject = Dictionary<string, AttributeValue>
 
-type FieldRepresentation =
+type PickleType =
     | Number        = 01
     | String        = 02
     | Bool          = 03
@@ -22,7 +22,7 @@ type FieldRepresentation =
     | List          = 08
     | Map           = 09
 
-type ConverterType =
+type PicklerType =
     | Value         = 01
     | Wrapper       = 02
     | Record        = 03
@@ -30,66 +30,66 @@ type ConverterType =
     | Serialized    = 05
 
 [<AbstractClass>]
-type FieldConverter() =
+type Pickler() =
     abstract Type : Type
-    abstract Representation : FieldRepresentation
-    abstract ConverterType  : ConverterType
+    abstract PickleType : PickleType
+    abstract PicklerType  : PicklerType
 
     abstract DefaultValueUntyped : obj
-    abstract OfFieldUntyped : obj -> AttributeValue option
-    abstract ToFieldUntyped : AttributeValue -> obj
+    abstract PickleUntyped   : obj -> AttributeValue option
+    abstract UnPickleUntyped : AttributeValue -> obj
 
     abstract Coerce : obj -> AttributeValue option
-    default __.Coerce obj = __.OfFieldUntyped obj
+    default __.Coerce obj = __.PickleUntyped obj
 
     member __.IsScalar = 
-        match __.Representation with
-        | FieldRepresentation.Number
-        | FieldRepresentation.String
-        | FieldRepresentation.Bytes
-        | FieldRepresentation.Bool -> true
+        match __.PickleType with
+        | PickleType.Number
+        | PickleType.String
+        | PickleType.Bytes
+        | PickleType.Bool -> true
         | _ -> false
 
 [<AbstractClass>]
-type FieldConverter<'T>() =
-    inherit FieldConverter()
+type Pickler<'T>() =
+    inherit Pickler()
 
     abstract DefaultValue : 'T
-    abstract OfField : 'T -> AttributeValue option
-    abstract ToField : AttributeValue -> 'T
+    abstract Pickle   : 'T -> AttributeValue option
+    abstract UnPickle : AttributeValue -> 'T
 
     override __.Type = typeof<'T>
     override __.DefaultValueUntyped = __.DefaultValue :> obj
-    override __.OfFieldUntyped o = __.OfField(o :?> 'T)
-    override __.ToFieldUntyped av = __.ToField av :> obj
+    override __.PickleUntyped o = __.Pickle(o :?> 'T)
+    override __.UnPickleUntyped av = __.UnPickle av :> obj
 
 [<AbstractClass>]
-type StringRepresentableFieldConverter<'T>() =
-    inherit FieldConverter<'T>()
+type StringRepresentablePickler<'T>() =
+    inherit Pickler<'T>()
     abstract Parse : string -> 'T
     abstract UnParse : 'T -> string
 
 [<AbstractClass>]
-type NumRepresentableFieldConverter<'T>() =
-    inherit StringRepresentableFieldConverter<'T> ()
+type NumRepresentablePickler<'T>() =
+    inherit StringRepresentablePickler<'T> ()
 
-type ICollectionConverter =
-    abstract ElementConverter : FieldConverter
+type ICollectionPickler =
+    abstract ElementConverter : Pickler
 
-type IFieldConverterResolver =
-    abstract Resolve : Type -> FieldConverter
-    abstract Resolve<'T> : unit -> FieldConverter<'T>
+type IPicklerResolver =
+    abstract Resolve : Type -> Pickler
+    abstract Resolve<'T> : unit -> Pickler<'T>
 
 [<AutoOpen>]
-module internal FieldConveterUtils =
+module internal PicklerUtils =
 
     let inline invalidCast (av:AttributeValue) : 'T = 
         let msg = sprintf "could not convert value %A to type '%O'" (av.Print()) typeof<'T>
         raise <| new InvalidCastException(msg)
 
-    let getEconv (conv : FieldConverter) = (unbox<ICollectionConverter> conv).ElementConverter
+    let getElemPickler (pickler : Pickler) = (unbox<ICollectionPickler> pickler).ElementConverter
 
-    type UnSupportedField =
+    type UnSupportedType =
         static member Raise(fieldType : Type, ?reason : string) =
             let message = 
                 match reason with

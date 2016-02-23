@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal FSharp.DynamoDB.UnionConverter
+module internal FSharp.DynamoDB.UnionPickler
 
 open System
 open System.Text.RegularExpressions
@@ -22,8 +22,8 @@ type private UnionCaseData =
         Properties : RecordPropertyInfo []
     }
 
-type UnionConverter<'U>(resolver : IFieldConverterResolver) =
-    inherit FieldConverter<'U>()
+type UnionPickler<'U>(resolver : IPicklerResolver) =
+    inherit Pickler<'U>()
     
     let caseAttr = "Union_Case"
     let ucis = FSharpType.GetUnionCases(typeof<'U>, true)
@@ -42,7 +42,7 @@ type UnionConverter<'U>(resolver : IFieldConverterResolver) =
         values.Add(caseAttr, AttributeValue(case.UCI.Name))
         for prop in case.Properties do
             let field = prop.PropertyInfo.GetValue union
-            match prop.Converter.OfFieldUntyped field with
+            match prop.Pickler.PickleUntyped field with
             | None -> ()
             | Some av -> values.Add(prop.Name, av)            
 
@@ -69,20 +69,20 @@ type UnionConverter<'U>(resolver : IFieldConverterResolver) =
             for i = 0 to values.Length - 1 do
                 let prop = case.Properties.[i]
                 let ok, av = ro.TryGetValue prop.Name
-                if ok then values.[i] <- prop.Converter.ToFieldUntyped av
+                if ok then values.[i] <- prop.Pickler.UnPickleUntyped av
                 elif prop.NoDefaultValue then notFound prop.Name
-                else values.[i] <- prop.Converter.DefaultValueUntyped
+                else values.[i] <- prop.Pickler.DefaultValueUntyped
 
             case.CaseCtor.Invoke(null, values) :?> 'U
 
-    override __.ConverterType = ConverterType.Union
-    override __.Representation = FieldRepresentation.Map
+    override __.PicklerType = PicklerType.Union
+    override __.PickleType = PickleType.Map
     override __.DefaultValue = invalidOp <| sprintf "default values not supported for records."
 
-    override __.OfField (union : 'U) =
+    override __.Pickle (union : 'U) =
         let ro = __.OfUnion union 
         Some <| AttributeValue(M = ro)
 
-    override __.ToField a =
+    override __.UnPickle a =
         if a.IsMSet then __.ToUnion a.M
         else invalidCast a

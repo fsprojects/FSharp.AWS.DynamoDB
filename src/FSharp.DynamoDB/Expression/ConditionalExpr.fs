@@ -55,29 +55,29 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
     match expr with
     | Lambda(r, body) ->
 
-        let getAttrValue (conv : FieldConverter) (expr : Expr) =
-            expr |> evalRaw |> conv.Coerce
+        let getAttrValue (pickler : Pickler) (expr : Expr) =
+            expr |> evalRaw |> pickler.Coerce
 
         let (|AttributeGet|_|) e = 
             match AttributePath.Extract r recordInfo e with
             | None -> None
             | Some attr as aopt ->
-                attr.Iter (fun conv -> 
-                    if conv.ConverterType = ConverterType.Serialized then 
+                attr.Iter (fun pickler -> 
+                    if pickler.PicklerType = PicklerType.Serialized then 
                         invalidArg "expr" "cannot perform queries on serialized attributes.")
 
                 aopt
 
-        let rec extractOperand (conv : FieldConverter option) (expr : Expr) =
+        let rec extractOperand (pickler : Pickler option) (expr : Expr) =
             match expr with
             | _ when expr.IsClosed ->
-                let conv = match conv with Some c -> c | None -> FieldConverter.resolveUntyped expr.Type
-                match getAttrValue conv expr with
+                let pickler = match pickler with Some c -> c | None -> Pickler.resolveUntyped expr.Type
+                match getAttrValue pickler expr with
                 | None -> Undefined
                 | Some av -> Value av
 
             | PipeLeft e
-            | PipeRight e -> extractOperand conv e
+            | PipeRight e -> extractOperand pickler e
 
             | AttributeGet attr -> Attribute attr
 
@@ -110,8 +110,8 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
         let (|Comparison|_|) (pat : Expr) (expr : Expr) =
             match expr with
             | SpecificCall pat (None, _, args) ->
-                let conv = args |> List.tryPick (|AttributeGet|_|) |> Option.map (fun a -> a.Converter)
-                args |> List.map (extractOperand conv) |> Some
+                let pickler = args |> List.tryPick (|AttributeGet|_|) |> Option.map (fun a -> a.Pickler)
+                args |> List.map (extractOperand pickler) |> Some
 
             | _ -> None
 
@@ -177,12 +177,12 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 Contains(attr, op)
 
             | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; AttributeGet attr]) ->
-                let econv = getEconv attr.Converter
+                let econv = getElemPickler attr.Pickler
                 let op = extractOperand (Some econv) elem
                 Contains(attr, op)
 
             | SpecificCall2 <@ fun (x:Set<_>) e -> x.Contains e @> (Some(AttributeGet attr), _, _, [elem]) ->
-                let econv = getEconv attr.Converter
+                let econv = getElemPickler attr.Pickler
                 let op = extractOperand (Some econv) elem
                 Contains(attr, op)
 
@@ -201,9 +201,9 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 Attribute_Exists (Suffix(key, attr))
 
             | SpecificCall2 <@ BETWEEN @> (None, _, _, [value ; lower; upper]) ->
-                let conv = FieldConverter.resolveUntyped value.Type
-                if conv.IsScalar then
-                    let sc = Some conv
+                let pickler = Pickler.resolveUntyped value.Type
+                if pickler.IsScalar then
+                    let sc = Some pickler
                     let vOp = extractOperand sc value
                     let lOp = extractOperand sc lower
                     let uOp = extractOperand sc upper

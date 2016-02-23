@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal FSharp.DynamoDB.RecordConverter
+module internal FSharp.DynamoDB.RecordPickler
 
 open System
 open System.Text.RegularExpressions
@@ -39,7 +39,7 @@ and [<CustomEquality; NoComparison>]
         Name : string
         Index : int
         PropertyInfo : PropertyInfo
-        Converter : FieldConverter
+        Pickler : Pickler
         NoDefaultValue : bool
         IsHashKey : bool
         IsRangeKey : bool
@@ -57,11 +57,11 @@ with
 
     override r.GetHashCode() = hash r.PropertyInfo
 
-    static member FromPropertyInfo (resolver : IFieldConverterResolver) (attrId : int) (prop : PropertyInfo) =
+    static member FromPropertyInfo (resolver : IPicklerResolver) (attrId : int) (prop : PropertyInfo) =
         let attributes = prop.GetAttributes()
-        let converter = 
+        let pickler = 
             match tryGetAttribute<PropertySerializerAttribute> attributes with
-            | Some serializer -> new SerializerConverter(prop, serializer, resolver) :> FieldConverter
+            | Some serializer -> new SerializerAttributePickler(prop, serializer, resolver) :> Pickler
             | None -> resolver.Resolve prop.PropertyType
 
         let name =
@@ -76,19 +76,19 @@ with
             Name = name
             Index = attrId
             PropertyInfo = prop
-            Converter = converter
+            Pickler = pickler
             IsHashKey = containsAttribute<HashKeyAttribute> attributes
             IsRangeKey = containsAttribute<RangeKeyAttribute> attributes
             NoDefaultValue = containsAttribute<NoDefaultValueAttribute> attributes
-            NestedRecord = match box converter with :? IRecordConverter as rc -> Some rc.RecordInfo | _ -> None
+            NestedRecord = match box pickler with :? IRecordPickler as rc -> Some rc.RecordInfo | _ -> None
             Attributes = attributes
         }
 
-and IRecordConverter =
+and IRecordPickler =
     abstract RecordInfo : RecordInfo
 
-type RecordConverter<'T>(ctorInfo : ConstructorInfo, properties : RecordPropertyInfo []) =
-    inherit FieldConverter<'T> ()
+type RecordPickler<'T>(ctorInfo : ConstructorInfo, properties : RecordPropertyInfo []) =
+    inherit Pickler<'T> ()
 
     let recordInfo = { Type = typeof<'T> ; Properties = properties ; ConstructorInfo = ctorInfo }
 
@@ -97,7 +97,7 @@ type RecordConverter<'T>(ctorInfo : ConstructorInfo, properties : RecordProperty
         let values = new RestObject()
         for prop in properties do
             let field = prop.PropertyInfo.GetValue value
-            match prop.Converter.OfFieldUntyped field with
+            match prop.Pickler.PickleUntyped field with
             | None -> ()
             | Some av -> values.Add(prop.Name, av)
 
@@ -109,36 +109,36 @@ type RecordConverter<'T>(ctorInfo : ConstructorInfo, properties : RecordProperty
             let prop = properties.[i]
             let notFound() = raise <| new KeyNotFoundException(sprintf "attribute %A not found." prop.Name)
             let ok, av = ro.TryGetValue prop.Name
-            if ok then values.[i] <- prop.Converter.ToFieldUntyped av
+            if ok then values.[i] <- prop.Pickler.UnPickleUntyped av
             elif prop.NoDefaultValue then notFound()
-            else values.[i] <- prop.Converter.DefaultValueUntyped
+            else values.[i] <- prop.Pickler.DefaultValueUntyped
 
         ctorInfo.Invoke values :?> 'T
 
-    interface IRecordConverter with
+    interface IRecordPickler with
         member __.RecordInfo = recordInfo
 
-    override __.ConverterType = ConverterType.Record
-    override __.Representation = FieldRepresentation.Map
+    override __.PicklerType = PicklerType.Record
+    override __.PickleType = PickleType.Map
     override __.DefaultValue = invalidOp <| sprintf "default values not supported for records."
 
-    override __.OfField (record : 'T) =
+    override __.Pickle (record : 'T) =
         let ro = __.OfRecord record 
         if ro.Count = 0 then None
         else Some <| AttributeValue(M = ro)
 
-    override __.ToField a =
+    override __.UnPickle a =
         if a.IsMSet then __.ToRecord a.M
         else invalidCast a
 
-let mkTupleConverter<'T> (resolver : IFieldConverterResolver) =
+let mkTuplePickler<'T> (resolver : IPicklerResolver) =
     let ctor, rest = FSharpValue.PreComputeTupleConstructorInfo(typeof<'T>)
     if Option.isSome rest then invalidArg (string typeof<'T>) "Tuples of arity > 7 not supported"
     let properties = typeof<'T>.GetProperties() |> Array.mapi (RecordPropertyInfo.FromPropertyInfo resolver)
-    new RecordConverter<'T>(ctor, properties)
+    new RecordPickler<'T>(ctor, properties)
 
-let mkFSharpRecordConverter<'T> (resolver : IFieldConverterResolver) =
+let mkFSharpRecordPickler<'T> (resolver : IPicklerResolver) =
     let ctor = FSharpValue.PreComputeRecordConstructorInfo(typeof<'T>, true)
     let properties = FSharpType.GetRecordFields(typeof<'T>, true) |> Array.mapi (RecordPropertyInfo.FromPropertyInfo resolver)
     let mkRecord values = ctor.Invoke values :?> 'T
-    new RecordConverter<'T>(ctor, properties)
+    new RecordPickler<'T>(ctor, properties)

@@ -13,15 +13,15 @@ open Swensen.Unquote
 type AttributePath =
     | Root of RecordPropertyInfo
     | Nested of RecordPropertyInfo * parent:AttributePath
-    | Item of index:int * conv:FieldConverter * parent:AttributePath
+    | Item of index:int * pickler:Pickler * parent:AttributePath
     | Suffix of id:string * parent:AttributePath
 with
-    member ap.Converter =
+    member ap.Pickler =
         match ap with
-        | Root rp -> rp.Converter
-        | Nested (rp,_) -> rp.Converter
-        | Item(_,conv,_) -> conv
-        | _ -> invalidArg "ap" "internal error: no converter found here"
+        | Root rp -> rp.Pickler
+        | Nested (rp,_) -> rp.Pickler
+        | Item(_,pickler,_) -> pickler
+        | _ -> invalidArg "ap" "internal error: no pickler found here"
 
     member ap.RootProperty =
         let rec aux ap =
@@ -53,12 +53,12 @@ with
 
         getTokens [] ap |> String.concat ""
 
-    member ap.Iter(f : FieldConverter -> unit) =
+    member ap.Iter(f : Pickler -> unit) =
         let rec aux ap =
             match ap with
-            | Root rp -> f rp.Converter
-            | Nested (rp,p) -> f rp.Converter ; aux p
-            | Item(_,conv,p) -> f conv ; aux p
+            | Root rp -> f rp.Pickler
+            | Nested (rp,p) -> f rp.Pickler ; aux p
+            | Item(_,pickler,p) -> f pickler ; aux p
             | Suffix(_,p) -> aux p
 
         aux ap
@@ -67,9 +67,9 @@ with
         let tryGetPropInfo (info : RecordInfo) isFinalProp (p : PropertyInfo) =
             match info.Properties |> Array.tryFind (fun rp -> rp.PropertyInfo = p) with
             | None -> None
-            | Some rp when rp.Converter.ConverterType = ConverterType.Serialized && not isFinalProp ->
+            | Some rp when rp.Pickler.PicklerType = PicklerType.Serialized && not isFinalProp ->
                 invalidArg "expr" "cannot access nested properties of serialized fields."
-            | Some rp when rp.Converter.ConverterType = ConverterType.Union && not isFinalProp ->
+            | Some rp when rp.Pickler.PicklerType = PicklerType.Union && not isFinalProp ->
                 invalidArg "expr" "cannot access nested properties of union fields."
             | Some _ as r -> r
 
@@ -106,10 +106,10 @@ with
                 | Some rp -> mkAttrPath (Nested(rp, acc)) rp.NestedRecord tail
 
             | Choice2Of2 (et, ie) :: tail, None ->
-                let conv = FieldConverter.resolveUntyped et
+                let pickler = Pickler.resolveUntyped et
                 let i = evalRaw ie
-                let ctx = match box conv with :? IRecordConverter as rc -> Some rc.RecordInfo | _ -> None
-                mkAttrPath (Item(i, conv, acc)) ctx tail
+                let ctx = match box pickler with :? IRecordPickler as rc -> Some rc.RecordInfo | _ -> None
+                mkAttrPath (Item(i, pickler, acc)) ctx tail
 
             | _ -> None
 

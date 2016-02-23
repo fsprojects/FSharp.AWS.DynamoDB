@@ -9,28 +9,28 @@ open Amazon.DynamoDBv2.Model
 type KeyStructure =
     | HashKeyOnly of hashKeyProperty:RecordPropertyInfo
     | Combined of hashKeyProperty:RecordPropertyInfo * rangeKeyProperty:RecordPropertyInfo
-    | DefaultHashKey of hkName:string * hkValue:obj * hkConverter:FieldConverter * rangeKeyProperty:RecordPropertyInfo
+    | DefaultHashKey of hkName:string * hkValue:obj * hkPickler:Pickler * rangeKeyProperty:RecordPropertyInfo
 with
     static member ExtractKey(keyStructure : KeyStructure, key : TableKey) =
         let dict = new Dictionary<string, AttributeValue> ()
-        let extractKey name (conv : FieldConverter) (value:obj) =
+        let extractKey name (pickler : Pickler) (value:obj) =
             if obj.ReferenceEquals(value, null) then invalidArg name "Key value was not specified."
-            let av = conv.OfFieldUntyped value |> Option.get
+            let av = pickler.PickleUntyped value |> Option.get
             dict.Add(name, av)
 
         match keyStructure with
-        | HashKeyOnly hkp -> extractKey hkp.Name hkp.Converter key.HashKey
+        | HashKeyOnly hkp -> extractKey hkp.Name hkp.Pickler key.HashKey
         | Combined(hkp,rkp) ->
-            extractKey hkp.Name hkp.Converter key.HashKey
-            extractKey rkp.Name rkp.Converter key.RangeKey
-        | DefaultHashKey(name, value, conv, rkp) ->
+            extractKey hkp.Name hkp.Pickler key.HashKey
+            extractKey rkp.Name rkp.Pickler key.RangeKey
+        | DefaultHashKey(name, value, pickler, rkp) ->
             if key.IsHashKeySpecified then
-                extractKey name conv key.HashKey
+                extractKey name pickler key.HashKey
             else
-                let av = value |> conv.OfFieldUntyped |> Option.get
+                let av = value |> pickler.PickleUntyped |> Option.get
                 dict.Add(name, av)
 
-            extractKey rkp.Name rkp.Converter key.RangeKey
+            extractKey rkp.Name rkp.Pickler key.RangeKey
 
         dict
 
@@ -71,8 +71,8 @@ with
                 if recordInfo.Properties |> Array.exists(fun p -> p.Name = hkca.Name) then
                     invalidArg (string recordInfo.Type) "Default HashKey attribute contains conflicting name."
 
-                let converter = FieldConverter.resolveUntyped hkca.HashKeyType
-                DefaultHashKey(hkca.Name, hkca.HashKey, converter, rangeKeyP)
+                let pickler = Pickler.resolveUntyped hkca.HashKeyType
+                DefaultHashKey(hkca.Name, hkca.HashKey, pickler, rangeKeyP)
 
             | _ -> invalidArg (string recordInfo.Type) "Found more than one record fields carrying the RangeKey attribute."
 
@@ -84,23 +84,23 @@ with
 type TableKeySchema with
     static member OfKeyStructure(ks : KeyStructure) =
         let mkTableKeySchema h r = { HashKey = h ; RangeKey = r }
-        let mkKeySchema (name : string) (conv : FieldConverter) =
-            if conv.ConverterType <> ConverterType.Value then
+        let mkKeySchema (name : string) (pickler : Pickler) =
+            if pickler.PicklerType <> PicklerType.Value then
                 invalidArg name <| "DynamoDB Key attributes do not support serialization attributes."
 
             let keyType =
-                match conv.Representation with
-                | FieldRepresentation.String -> ScalarAttributeType.S
-                | FieldRepresentation.Number -> ScalarAttributeType.N
-                | FieldRepresentation.Bytes -> ScalarAttributeType.B
-                | _ -> invalidArg name <| sprintf "Unsupported type '%O' for DynamoDB Key attribute." conv.Type
+                match pickler.PickleType with
+                | PickleType.String -> ScalarAttributeType.S
+                | PickleType.Number -> ScalarAttributeType.N
+                | PickleType.Bytes -> ScalarAttributeType.B
+                | _ -> invalidArg name <| sprintf "Unsupported type '%O' for DynamoDB Key attribute." pickler.Type
 
             { AttributeName = name ; KeyType = keyType }
 
         match ks with
-        | HashKeyOnly rp -> mkTableKeySchema (mkKeySchema rp.Name rp.Converter) None
-        | Combined(hk, rk) -> mkTableKeySchema (mkKeySchema hk.Name hk.Converter) (Some (mkKeySchema rk.Name rk.Converter))
-        | DefaultHashKey(name,_,conv,rk) -> mkTableKeySchema (mkKeySchema name conv) (Some (mkKeySchema rk.Name rk.Converter))
+        | HashKeyOnly rp -> mkTableKeySchema (mkKeySchema rp.Name rp.Pickler) None
+        | Combined(hk, rk) -> mkTableKeySchema (mkKeySchema hk.Name hk.Pickler) (Some (mkKeySchema rk.Name rk.Pickler))
+        | DefaultHashKey(name,_,pickler,rk) -> mkTableKeySchema (mkKeySchema name pickler) (Some (mkKeySchema rk.Name rk.Pickler))
 
     static member OfTableDescription (td : TableDescription) =
         let mkKeySchema (kse : KeySchemaElement) =
