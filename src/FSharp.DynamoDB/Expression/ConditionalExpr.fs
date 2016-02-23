@@ -47,20 +47,6 @@ and Operand =
 with
     member op.IsUndefinedValue = match op with Undefined -> true | _ -> false
 
-type ConditionalExpression =
-    {
-        Expression : string
-        IsQueryCompatible : bool
-        Attributes : (string * string) []
-        Values : (string * AttributeValue) []
-    }
-with
-    member __.WriteAttributesTo(target : Dictionary<string,string>) =
-        for k,v in __.Attributes do target.[k] <- v
-
-    member __.WriteValuesTo(target : Dictionary<string, AttributeValue>) =
-        for k,v in __.Values do target.[k] <- v
-
 let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
     if not expr.IsClosed then invalidArg "expr" "supplied query is not a closed expression."
     let invalidQuery() = invalidArg "expr" <| sprintf "Supplied expression is not a valid conditional."
@@ -129,7 +115,8 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             | _ -> None
 
         let extractComparison (cmp : Comparator) (left : Operand) (right : Operand) =
-            if left = right then invalidArg "expr" "conditional expression contains comparison with identical operands"
+            if left = right then
+                invalidArg "expr" "conditional expression contains comparison with identical operands"
 
             let defAttr =
                 if left.IsUndefinedValue then Some(match right with Attribute attr -> attr | _ -> invalidOp "internal error")
@@ -294,35 +281,72 @@ let isKeyConditionCompatible (qExpr : QueryExpr) =
     else false
 
 
-let extractConditionalExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
-    match extractQueryExpr recordInfo expr with
-    | False | True -> invalidArg "expr" "supplied query is tautological."
-    | query ->
-
-    let attrs = new Dictionary<string, string> ()
-    let getAttrId (attr : AttributePath) =
-        let rp = attr.RootProperty
-        let ok,found = attrs.TryGetValue rp.AttrId
-        if ok then attr.Id
-        else
-            attrs.Add(rp.AttrId, rp.Name)
-            attr.Id
-
-    let values = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
-    let getValueId (av : AttributeValue) =
-        let ok,found = values.TryGetValue av
-        if ok then found
-        else
-            let id = sprintf ":cval%d" values.Count
-            values.Add(av, id)
-            id
-
-    let exprString = queryExprToString getAttrId getValueId query
-    let isQueryCompatible = isKeyConditionCompatible query
-
+type ConditionalExpression =
     {
-        Expression = exprString
-        IsQueryCompatible = isQueryCompatible
-        Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray
-        Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.toArray
+        QueryExpr : QueryExpr
+        Expression : string
+        IsQueryCompatible : bool
+        Attributes : (string * string) []
+        Values : (string * AttributeValue) []
     }
+with
+    member __.WriteAttributesTo(target : Dictionary<string,string>) =
+        for k,v in __.Attributes do target.[k] <- v
+
+    member __.WriteValuesTo(target : Dictionary<string, AttributeValue>) =
+        for k,v in __.Values do target.[k] <- v
+
+    static member Extract (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
+        match extractQueryExpr recordInfo expr with
+        | False | True -> invalidArg "expr" "supplied query is tautological."
+        | query ->
+
+        let attrs = new Dictionary<string, string> ()
+        let getAttrId (attr : AttributePath) =
+            let rp = attr.RootProperty
+            let ok,found = attrs.TryGetValue rp.AttrId
+            if ok then attr.Id
+            else
+                attrs.Add(rp.AttrId, rp.Name)
+                attr.Id
+
+        let values = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
+        let getValueId (av : AttributeValue) =
+            let ok,found = values.TryGetValue av
+            if ok then found
+            else
+                let id = sprintf ":cval%d" values.Count
+                values.Add(av, id)
+                id
+
+        let exprString = queryExprToString getAttrId getValueId query
+        let isQueryCompatible = isKeyConditionCompatible query
+
+        {
+            QueryExpr = query
+            Expression = exprString
+            IsQueryCompatible = isQueryCompatible
+            Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray
+            Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.toArray
+        }
+
+    member cexpr.BuildAppendedConditional(attrs : Dictionary<string, string>, values : Dictionary<string, AttributeValue>) : string =
+        let getAttrId (attr : AttributePath) =
+            let rp = attr.RootProperty
+            let ok,found = attrs.TryGetValue rp.AttrId
+            if ok then attr.Id
+            else
+                attrs.Add(rp.AttrId, rp.Name)
+                attr.Id
+
+        let lvals = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
+        let getValueId (av : AttributeValue) =
+            let ok,found = lvals.TryGetValue av
+            if ok then found
+            else
+                let id = sprintf ":cval%d" values.Count
+                lvals.Add(av, id)
+                values.Add(id, av)
+                id
+
+        queryExprToString getAttrId getValueId cexpr.QueryExpr

@@ -220,12 +220,13 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
             request.KeyConditionExpression <- cond.Expression
             cond.WriteAttributesTo request.ExpressionAttributeNames
             cond.WriteValuesTo request.ExpressionAttributeValues
+
             match filterCondition with
             | Some fc ->
                 let cond = fc.Conditional
-                request.FilterExpression <- cond.Expression
-                cond.WriteAttributesTo request.ExpressionAttributeNames
-                cond.WriteValuesTo request.ExpressionAttributeValues
+                request.FilterExpression <- 
+                    cond.BuildAppendedConditional(request.ExpressionAttributeNames, 
+                                                    request.ExpressionAttributeValues)
             | None -> ()
 
             limit |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)

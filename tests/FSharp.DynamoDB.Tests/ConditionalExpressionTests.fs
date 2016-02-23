@@ -312,6 +312,15 @@ type ``Conditional Expression Tests`` () =
 
 
     [<Fact>]
+    let ``Fail on identical comparands`` () =
+        fun () -> table.ExtractConditionalExpr <@ fun r -> r.Guid < r.Guid @>
+        |> shouldFailwith<_, ArgumentException>
+
+        fun () -> table.ExtractConditionalExpr <@ fun r -> r.Bytes.Length = r.Bytes.Length @>
+        |> shouldFailwith<_, ArgumentException>
+
+
+    [<Fact>]
     let ``Serializable precondition`` () =
         let item = mkItem()
         let key = table.PutItemAsync item |> run
@@ -340,12 +349,20 @@ type ``Conditional Expression Tests`` () =
         results.Length |> should equal 100
 
     [<Fact>]
-    let ``Fail on identical comparands`` () =
-        fun () -> table.ExtractConditionalExpr <@ fun r -> r.Guid < r.Guid @>
-        |> shouldFailwith<_, ArgumentException>
+    let ``Simple Query/Filter Expression`` () =
+        let hKey = guid()
 
-        fun () -> table.ExtractConditionalExpr <@ fun r -> r.Bytes.Length = r.Bytes.Length @>
-        |> shouldFailwith<_, ArgumentException>
+        seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; RangeKey = int64 i ; Bool = i % 2 = 0}}
+        |> Seq.splitInto 25
+        |> Seq.map table.PutItemsAsync
+        |> Async.Parallel
+        |> Async.Ignore
+        |> run
+
+        let results = table.QueryAsync(<@ fun r -> r.HashKey = hKey && r.RangeKey <= 100L @>,
+                                        filterCondition = <@ fun r -> r.Bool = true @>) |> run
+
+        results.Length |> should equal 50
 
     [<Fact>]
     let ``Detect incompatible key conditions`` () =
@@ -361,6 +378,20 @@ type ``Conditional Expression Tests`` () =
         test false <@ fun r -> r.HashKey = "2" || r.RangeKey = 2L @>
         test false <@ fun r -> r.HashKey = "2" && not (r.RangeKey = 2L) @>
         test false <@ fun r -> r.HashKey = "2" && r.Bool = true @>
+
+    [<Fact>]
+    let ``Simple Scan Expression`` () =
+        let hKey = guid()
+
+        seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; RangeKey = int64 i ; Bool = i % 2 = 0}}
+        |> Seq.splitInto 25
+        |> Seq.map table.PutItemsAsync
+        |> Async.Parallel
+        |> Async.Ignore
+        |> run
+
+        let results = table.ScanAsync(<@ fun r -> r.HashKey = hKey && r.RangeKey <= 100L && r.Bool = true @>) |> run
+        results.Length |> should equal 50
 
     interface IDisposable with
         member __.Dispose() =

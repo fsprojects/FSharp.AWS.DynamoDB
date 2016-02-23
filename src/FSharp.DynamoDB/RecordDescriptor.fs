@@ -26,7 +26,8 @@ type internal RecordDescriptor<'Record> internal () =
         KeyStructure.ExtractKey(keyStructure, converter.RecordInfo, record)
 
     member __.ExtractConditional(expr : Expr<'Record -> bool>) : ConditionExpression<'Record> =
-        new ConditionExpression<'Record>(extractConditionalExpr converter.RecordInfo expr, expr)
+        let cexpr = ConditionalExpression.Extract converter.RecordInfo expr
+        new ConditionExpression<'Record>(cexpr, expr)
 
     member __.ExtractRecExprUpdater(expr : Expr<'Record -> 'Record>) : UpdateExpression<'Record> =
         let aexpr = extractRecordExprUpdaters converter.RecordInfo expr
