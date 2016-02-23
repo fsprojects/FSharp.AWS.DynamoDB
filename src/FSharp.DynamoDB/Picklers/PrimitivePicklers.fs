@@ -151,7 +151,7 @@ type OptionPickler<'T>(tp : Pickler<'T>) =
     override __.Pickle topt = match topt with None -> None | Some t -> tp.Pickle t
     override __.UnPickle a = if a.NULL then None else Some(tp.UnPickle a)
 
-type SerializerAttributePickler(propertyInfo : PropertyInfo, serializer : PropertySerializerAttribute, resolver : IPicklerResolver) =
+type SerializerAttributePickler(propertyInfo : PropertyInfo, serializer : IPropertySerializer, resolver : IPicklerResolver) =
     inherit Pickler()
 
     let picklePickler = resolver.Resolve serializer.PickleType
@@ -163,9 +163,9 @@ type SerializerAttributePickler(propertyInfo : PropertyInfo, serializer : Proper
         raise <| NotSupportedException("Default values not supported in serialized types.")
 
     override __.PickleUntyped value = 
-        let pickle = serializer.SerializeUntyped value
+        let pickle = serializer.Serialize value
         picklePickler.PickleUntyped pickle
 
     override __.UnPickleUntyped a =
         let pickle = picklePickler.UnPickleUntyped a
-        serializer.DeserializeUntyped pickle
+        serializer.Deserialize pickle

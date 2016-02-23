@@ -7,10 +7,22 @@ open System.Runtime.Serialization.Formatters.Binary
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
+/// Declares that the carrying property contains the HashKey
+/// for the record instance. Property type must be of type
+/// string, number or byte array.
 [<Sealed; AttributeUsage(AttributeTargets.Property)>]
 type HashKeyAttribute() =
     inherit Attribute()
 
+/// Declares that the carrying property contains the RangeKey
+/// for the record instance. Property type must be of type
+/// string, number or byte array.
+[<Sealed; AttributeUsage(AttributeTargets.Property)>]
+type RangeKeyAttribute() =
+    inherit Attribute()
+
+/// Declares a constant HashKey attribute for the given record.
+/// Records carrying this attribute should specify a RangeKey attribute.
 [<Sealed; AttributeUsage(AttributeTargets.Class)>]
 type HashKeyConstantAttribute(name : string, hashkey : obj) =
     inherit Attribute()
@@ -22,38 +34,43 @@ type HashKeyConstantAttribute(name : string, hashkey : obj) =
     member __.HashKey = hashkey
     member __.HashKeyType = hashkey.GetType()
 
-[<Sealed; AttributeUsage(AttributeTargets.Property)>]
-type RangeKeyAttribute() =
-    inherit Attribute()
-
+/// Specify a custom DynamoDB attribute name for the given record field.
 [<AttributeUsage(AttributeTargets.Property)>]
 type CustomNameAttribute(name : string) =
     inherit System.Attribute()
     do if name = null then raise <| ArgumentNullException("'Name' parameter cannot be null.")
     member __.Name = name
 
+/// Specifies that record deserialization should fail if not corresponding attribute
+/// was fetched from the table.
 [<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Class)>]
 type NoDefaultValueAttribute() =
     inherit System.Attribute()
 
-[<AbstractClass; AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Property)>]
-type PropertySerializerAttribute() =
-    inherit Attribute()
+/// Declares that the given property should be serialized using the given
+/// Serialization/Deserialization methods before being uploaded to the table.
+type internal IPropertySerializer =
     abstract PickleType : Type
-    abstract SerializeUntyped : value:obj -> obj
-    abstract DeserializeUntyped : pickle:obj -> obj
+    abstract Serialize   : value:obj -> obj
+    abstract Deserialize : pickle:obj -> obj
 
-[<AbstractClass; AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Property)>]
+/// Declares that the given property should be serialized using the given
+/// Serialization/Deserialization methods before being uploaded to the table.
+[<AbstractClass; AttributeUsage(AttributeTargets.Property)>]
 type PropertySerializerAttribute<'PickleType>() =
-    inherit PropertySerializerAttribute()
-    override __.PickleType = typeof<'PickleType>
-    override __.SerializeUntyped value = __.Serialize value :> obj
-    override __.DeserializeUntyped pickle = __.Deserialize (pickle :?> 'PickleType)
+    inherit Attribute()
+    /// Serializes a value to the given pickle type
+    abstract Serialize   :  obj -> 'PickleType
+    /// Deserializes a value from the given pickle type
+    abstract Deserialize : 'PickleType -> obj
 
-    abstract Serialize   : value:obj -> 'PickleType
-    abstract Deserialize : pickle:'PickleType -> obj
+    interface IPropertySerializer with
+        member __.PickleType = typeof<'PickleType>
+        member __.Serialize value = __.Serialize value :> obj
+        member __.Deserialize pickle = __.Deserialize (pickle :?> 'PickleType)
 
-[<AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Property)>]
+/// Declares that the given property should be serialized using BinaryFormatter
+[<AttributeUsage(AttributeTargets.Property)>]
 type BinaryFormatterAttribute() =
     inherit PropertySerializerAttribute<byte[]>()
 
@@ -68,24 +85,27 @@ type BinaryFormatterAttribute() =
         use m = new MemoryStream(pickle)
         bfs.Deserialize(m)
 
-type KeySchema = 
+/// Metadata on a table key attribute 
+type KeyAttributeSchema = 
     {
         AttributeName : string
         KeyType : ScalarAttributeType 
     }
 
+/// Metadata on a table schema
 type TableKeySchema = 
     { 
-        HashKey : KeySchema
-        RangeKey : KeySchema option 
+        HashKey : KeyAttributeSchema
+        RangeKey : KeyAttributeSchema option 
     }
 
-[<Struct; StructuredFormatDisplay("{Format}")>]
+/// Table entry key identifier
+[<Struct; CustomEquality; NoComparison; StructuredFormatDisplay("{Format}")>]
 type TableKey private (hashKey : obj, rangeKey : obj) =
     member __.HashKey = hashKey
     member __.RangeKey = rangeKey
-    member __.IsRangeKeySpecified = not <| obj.ReferenceEquals(rangeKey, null)
-    member __.IsHashKeySpecified = not <| obj.ReferenceEquals(hashKey, null)
+    member __.IsRangeKeySpecified = notNull rangeKey
+    member __.IsHashKeySpecified = notNull hashKey
     member private __.Format =
         match rangeKey with
         | null -> sprintf "{ HashKey = %A }" hashKey
@@ -96,39 +116,58 @@ type TableKey private (hashKey : obj, rangeKey : obj) =
 
     override __.ToString() = __.Format
 
+    override tk.Equals o =
+        match o with
+        | :? TableKey as tk' -> hashKey = tk'.HashKey && rangeKey = tk'.RangeKey
+        | _ -> false
+
+    override tk.GetHashCode() = hash2 hashKey rangeKey
+
+    /// Defines a table key using provided HashKey
     static member Hash<'HashKey>(hashKey : 'HashKey) = 
-        if obj.ReferenceEquals(hashKey, null) then raise <| new ArgumentNullException("HashKey must not be null")
+        if isNull hashKey then raise <| new ArgumentNullException("HashKey must not be null")
         TableKey(hashKey, null)
 
+    /// Defines a table key using provided RangeKey
     static member Range<'RangeKey>(rangeKey : 'RangeKey) =
-        if obj.ReferenceEquals(rangeKey, null) then raise <| new ArgumentNullException("RangeKey must not be null")
+        if isNull rangeKey then raise <| new ArgumentNullException("RangeKey must not be null")
         TableKey(null, rangeKey)
 
+    /// Defines a table key using combined HashKey and RangeKey
     static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey) = 
-        if obj.ReferenceEquals(hashKey, null) then raise <| new ArgumentNullException("HashKey must not be null")
+        if isNull hashKey then raise <| new ArgumentNullException("HashKey must not be null")
         new TableKey(hashKey, rangeKey)
 
+/// Conditional expression special operators
 [<AutoOpen>]
 module ConditionalOperators =
 
+    /// Decides whether parameter lies within given range
     let BETWEEN (x : 'T) (lower : 'T) (upper : 'T) : bool =
         lower <= x && x <= upper
 
+/// Update expression special operators
 [<AutoOpen>]
 module UpdateOperators =
 
+    /// Table Update operation placeholder type 
     type UpdateOp =
+        /// Combines two update operations into one
         static member (&&&) (left : UpdateOp, right : UpdateOp) : UpdateOp =
             invalidOp "Update combiner reserved for quoted update expressions."
 
+    /// Assigns a record attribute path to given value
     let SET (path : 'T) (value : 'T) : UpdateOp =
         invalidOp "SET operation reserved for quoted update expressions."
 
+    /// Removes a record attribute path from entry
     let REMOVE (path : 'T) : UpdateOp =
         invalidOp "REMOVE operation reserved for quoted update expressions."
 
+    /// Adds given set of values to set attribute path
     let ADD (path : Set<'T>) (values : seq<'T>) : UpdateOp =
         invalidOp "ADD operation reserved for quoted update expressions."
 
+    /// Deletes given set of values to set attribute path
     let DELETE (path : Set<'T>) (values : seq<'T>) : UpdateOp =
         invalidOp "DELETE operation reserved for quoted update expressions."

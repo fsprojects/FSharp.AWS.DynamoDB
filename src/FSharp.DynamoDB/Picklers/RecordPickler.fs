@@ -60,7 +60,7 @@ with
     static member FromPropertyInfo (resolver : IPicklerResolver) (attrId : int) (prop : PropertyInfo) =
         let attributes = prop.GetAttributes()
         let pickler = 
-            match tryGetAttribute<PropertySerializerAttribute> attributes with
+            match attributes |> Seq.tryPick (fun a -> match box a with :? IPropertySerializer as ps -> Some ps | _ -> None) with
             | Some serializer -> new SerializerAttributePickler(prop, serializer, resolver) :> Pickler
             | None -> resolver.Resolve prop.PropertyType
 

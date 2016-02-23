@@ -113,7 +113,7 @@ type TableKeySchema with
 
     member schema.CreateCreateTableRequest (tableName : string, provisionedThroughput : ProvisionedThroughput) =
         let ctr = new CreateTableRequest(TableName = tableName)
-        let addKey kt (ks : KeySchema) =
+        let addKey kt (ks : KeyAttributeSchema) =
             ctr.KeySchema.Add <| new KeySchemaElement(ks.AttributeName, kt)
             ctr.AttributeDefinitions.Add <| new AttributeDefinition(ks.AttributeName, ks.KeyType)
 
