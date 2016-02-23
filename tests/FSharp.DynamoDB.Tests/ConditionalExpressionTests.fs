@@ -20,7 +20,7 @@ module CondExprTypes =
             [<HashKey>]
             HashKey : string
             [<RangeKey>]
-            RangeKey : string
+            RangeKey : int64
 
             Value : int64
 
@@ -62,7 +62,7 @@ type ``Conditional Expression Tests`` () =
     let rand = let r = Random() in fun () -> int64 <| r.Next()
     let mkItem() = 
         { 
-            HashKey = guid() ; RangeKey = guid() ; 
+            HashKey = guid() ; RangeKey = rand() ; 
             Value = rand() ; Tuple = rand(), rand() ;
             TimeSpan = TimeSpan.FromTicks(rand()) ; DateTimeOffset = DateTimeOffset.Now ; Guid = Guid.NewGuid()
             Bool = false ; Optional = Some (guid()) ; Ref = ref (guid()) ; Bytes = Guid.NewGuid().ToByteArray()
@@ -324,6 +324,35 @@ type ``Conditional Expression Tests`` () =
         let key = table.PutItemAsync item |> run
         table.PutItemAsync(item, <@ fun r -> false || r.HashKey = item.HashKey && not(not(r.RangeKey = item.RangeKey || r.Bool = item.Bool)) @>) |> run |> ignore
         table.PutItemAsync(item, <@ fun r -> r.HashKey = item.HashKey || (true && r.RangeKey = item.RangeKey) @>) |> run |> ignore
+
+    [<Fact>]
+    let ``Simple Query Expression`` () =
+        let hKey = guid()
+
+        seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; RangeKey = int64 i }}
+        |> Seq.splitInto 25
+        |> Seq.map table.PutItemsAsync
+        |> Async.Parallel
+        |> Async.Ignore
+        |> run
+
+        let results = table.QueryAsync(<@ fun r -> r.HashKey = hKey && r.RangeKey <= 100L @>) |> run
+        results.Length |> should equal 100
+
+    [<Fact>]
+    let ``Detect incompatible key conditions`` () =
+        let test outcome q = table.ExtractConditionalExpr(q).IsQueryCompatible |> should equal outcome
+
+        test true <@ fun r -> r.HashKey = "2" @>
+        test true <@ fun r -> r.HashKey = "2" && r.RangeKey < 2L @>
+        test false <@ fun r -> r.HashKey < "2" @>
+        test false <@ fun r -> r.HashKey >= "2" @>
+        test false <@ fun r -> r.HashKey = "2" && r.HashKey = "4" @>
+        test false <@ fun r -> r.RangeKey = 2L @>
+        test false <@ fun r -> r.HashKey = "2" && r.RangeKey = 2L && r.RangeKey < 10L @>
+        test false <@ fun r -> r.HashKey = "2" || r.RangeKey = 2L @>
+        test false <@ fun r -> r.HashKey = "2" && not (r.RangeKey = 2L) @>
+        test false <@ fun r -> r.HashKey = "2" && r.Bool = true @>
 
     interface IDisposable with
         member __.Dispose() =

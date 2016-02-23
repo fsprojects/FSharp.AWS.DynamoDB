@@ -254,20 +254,55 @@ let queryExprToString (getAttrId : AttributePath -> string)
     aux qExpr
     sb.ToString()
 
+// A DynamoDB key condition expression must satisfy the following conditions:
+// 1. Must only reference HashKey & RangeKey attributes.
+// 2. Must reference HashKey attribute exactly once.
+// 3. Must reference RangeKey attribute at most once.
+// 4. HashKey comparison must be equality comparison only.
+// 5. Must not contain OR and NOT clauses.
+// 6. Must not contain nested operands.
+let isKeyConditionCompatible (qExpr : QueryExpr) =
+    let hashKeyRefs  = ref 0
+    let rangeKeyRefs = ref 0
+    let rec aux qExpr =
+        match qExpr with
+        | False | True
+        | Attribute_Exists _
+        | Attribute_Not_Exists _
+        | Contains _
+        | Between _
+        | Not _
+        | Or _ -> false
+        | And(l,r) -> aux l && aux r
+        | BeginsWith(ap,_) when ap.RootProperty.IsHashKey -> false
+        | BeginsWith(ap,_) when ap.RootProperty.IsRangeKey -> incr rangeKeyRefs ; true
+        | BeginsWith _ -> false
+        | Compare(cmp, Attribute ap, Value _)
+        | Compare(cmp, Value _, Attribute ap) ->
+            if ap.RootProperty.IsHashKey then
+                incr hashKeyRefs ; cmp = EQ
+            elif ap.RootProperty.IsRangeKey then
+                incr rangeKeyRefs ; true
+            else
+                false
+
+        | Compare _ -> false
+
+    if aux qExpr then !hashKeyRefs = 1 && !rangeKeyRefs <= 1
+    else false
+
 
 let extractConditionalExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
     match extractQueryExpr recordInfo expr with
     | False | True -> invalidArg "expr" "supplied query is tautological."
     | query ->
 
-    let mutable usingKeyOnly = true
     let attrs = new Dictionary<string, string> ()
     let getAttrId (attr : AttributePath) =
         let rp = attr.RootProperty
         let ok,found = attrs.TryGetValue rp.AttrId
         if ok then attr.Id
         else
-            if not (rp.IsHashKey || rp.IsRangeKey) then usingKeyOnly <- false
             attrs.Add(rp.AttrId, rp.Name)
             attr.Id
 
@@ -281,11 +316,11 @@ let extractConditionalExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bo
             id
 
     let exprString = queryExprToString getAttrId getValueId query
-    let isQueryCompatible = usingKeyOnly
+    let isQueryCompatible = isKeyConditionCompatible query
 
     {
         Expression = exprString
-        IsQueryCompatible = usingKeyOnly
+        IsQueryCompatible = isQueryCompatible
         Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray
         Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.toArray
     }

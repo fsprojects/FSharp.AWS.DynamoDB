@@ -203,7 +203,15 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                             ?limit: int, ?consistentRead : bool, ?scanIndexForward : bool) : Async<'TRecord []> = async {
 
         if not keyCondition.IsQueryCompatible then 
-            invalidArg "keyCondition" "key condition should only access key attributes."
+            invalidArg "keyCondition" 
+                """key conditions must satisfy the following constraints:
+* Must only reference HashKey & RangeKey attributes.
+* Must reference HashKey attribute exactly once.
+* Must reference RangeKey attribute at most once.
+* HashKey comparison must be equality comparison only.
+* Must not contain OR and NOT clauses.
+* Must not contain nested operands.              
+"""
 
         let downloaded = new ResizeArray<_>()
         let rec aux last = async {
