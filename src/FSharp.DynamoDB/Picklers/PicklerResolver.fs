@@ -39,8 +39,8 @@ module private ResolverImpl =
             s.Accept {
                 new IEnumVisitor<Pickler> with
                     member __.VisitEnum<'E, 'U when 'E : enum<'U>> () =
-                        let uconv = resolver.Resolve<'U>() :?> NumRepresentablePickler<'U>
-                        new EnumerationPickler<'E, 'U>(uconv) :> _ }
+                        let up = resolver.Resolve<'U>() :?> NumRepresentablePickler<'U>
+                        new EnumerationPickler<'E, 'U>(up) :> _ }
 
         | ShapeNullable s ->
             s.Accept {
@@ -52,29 +52,29 @@ module private ResolverImpl =
             s.Accept {
                 new IFSharpOptionVisitor<Pickler> with
                     member __.VisitFSharpOption<'T> () =
-                        let tconv = resolver.Resolve<'T>()
-                        new OptionPickler<'T>(tconv) :> _ }
+                        let tp = resolver.Resolve<'T>()
+                        new OptionPickler<'T>(tp) :> _ }
 
         | ShapeArray s ->
             s.Accept {
                 new IArrayVisitor<Pickler> with
                     member __.VisitArray<'T> () =
-                        let tconv = resolver.Resolve<'T>()
-                        new ListPickler<'T [], 'T>(Seq.toArray, null, tconv) :> _ }
+                        let tp = resolver.Resolve<'T>()
+                        new ListPickler<'T [], 'T>(Seq.toArray, null, tp) :> _ }
 
         | ShapeFSharpList s ->
             s.Accept {
                 new IFSharpListVisitor<Pickler> with
                     member __.VisitFSharpList<'T> () =
-                        let tconv = resolver.Resolve<'T>()
-                        new ListPickler<'T list, 'T>(List.ofSeq, [], tconv) :> _ }
+                        let tp = resolver.Resolve<'T>()
+                        new ListPickler<'T list, 'T>(List.ofSeq, [], tp) :> _ }
 
         | ShapeResizeArray s ->
             s.Accept {
                 new IResizeArrayVisitor<Pickler> with
                     member __.VisitResizeArray<'T> () =
-                        let tconv = resolver.Resolve<'T>()
-                        new ListPickler<ResizeArray<'T>, 'T>(rlist, null, tconv) :> _ }
+                        let tp = resolver.Resolve<'T>()
+                        new ListPickler<ResizeArray<'T>, 'T>(rlist, null, tp) :> _ }
 
         | ShapeFSharpSet s ->
             s.Accept {
@@ -95,15 +95,15 @@ module private ResolverImpl =
             s.Accept {
                 new ICollectionVisitor<Pickler> with
                     member __.VisitCollection<'T> () =
-                        let tconv = resolver.Resolve<'T>()
-                        new ListPickler<ICollection<'T>, 'T>(Seq.toArray >> unbox, null, tconv) :> _ }
+                        let tp = resolver.Resolve<'T>()
+                        new ListPickler<ICollection<'T>, 'T>(Seq.toArray >> unbox, null, tp) :> _ }
 
         | ShapeEnumerable s ->
             s.Accept {
                 new IEnumerableVisitor<Pickler> with
                     member __.VisitEnumerable<'T> () =
-                        let tconv = resolver.Resolve<'T>()
-                        new ListPickler<seq<'T>, 'T>(Seq.toArray >> unbox, null, tconv) :> _ }
+                        let tp = resolver.Resolve<'T>()
+                        new ListPickler<seq<'T>, 'T>(Seq.toArray >> unbox, null, tp) :> _ }
 
         | ShapeTuple as s ->
             s.Accept {

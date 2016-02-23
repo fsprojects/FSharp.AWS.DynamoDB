@@ -78,7 +78,7 @@ let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr<'TRecord -> Upd
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
     let getValue (pickler : Pickler) (expr : Expr) =
-        match expr |> evalRaw |> pickler.Coerce with
+        match expr |> evalRaw |> pickler.PickleCoerced with
         | None -> Undefined
         | Some av -> Value av
 
@@ -135,7 +135,7 @@ let extractUpdateOps (exprs : UpdateExprs) =
     let (|AttributeGet|_|) (e : Expr) = AttributePath.Extract exprs.RVar exprs.RecordInfo e
 
     let getValue (pickler : Pickler) (expr : Expr) =
-        match expr |> evalRaw |> pickler.Coerce with
+        match expr |> evalRaw |> pickler.PickleCoerced with
         | None -> Undefined
         | Some av -> Value av
 
@@ -227,8 +227,8 @@ let extractUpdateOps (exprs : UpdateExprs) =
         | SpecificCall2 <@ Map.add @> (None, _, _, [keyE; value; AttributeGet attr]) when attr = parent ->
             let key = evalRaw keyE
             let attr = Suffix(key, parent)
-            let econv = unbox<ICollectionPickler>(parent.Pickler).ElementConverter
-            match extractUpdateValue econv value with
+            let ep = getElemPickler parent.Pickler
+            match extractUpdateValue ep value with
             | Operand op when op.IsUndefinedValue -> Some(Remove attr)
             | uv -> Some(Set(attr, uv))
 

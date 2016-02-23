@@ -56,7 +56,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
     | Lambda(r, body) ->
 
         let getAttrValue (pickler : Pickler) (expr : Expr) =
-            expr |> evalRaw |> pickler.Coerce
+            expr |> evalRaw |> pickler.PickleCoerced
 
         let (|AttributeGet|_|) e = 
             match AttributePath.Extract r recordInfo e with
@@ -177,13 +177,13 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
                 Contains(attr, op)
 
             | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; AttributeGet attr]) ->
-                let econv = getElemPickler attr.Pickler
-                let op = extractOperand (Some econv) elem
+                let ep = getElemPickler attr.Pickler
+                let op = extractOperand (Some ep) elem
                 Contains(attr, op)
 
             | SpecificCall2 <@ fun (x:Set<_>) e -> x.Contains e @> (Some(AttributeGet attr), _, _, [elem]) ->
-                let econv = getElemPickler attr.Pickler
-                let op = extractOperand (Some econv) elem
+                let ep = getElemPickler attr.Pickler
+                let op = extractOperand (Some ep) elem
                 Contains(attr, op)
 
             | SpecificCall2 <@ Map.containsKey @> (None, _, _, [key; AttributeGet attr]) when key.IsClosed ->

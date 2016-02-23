@@ -39,8 +39,8 @@ type Pickler() =
     abstract PickleUntyped   : obj -> AttributeValue option
     abstract UnPickleUntyped : AttributeValue -> obj
 
-    abstract Coerce : obj -> AttributeValue option
-    default __.Coerce obj = __.PickleUntyped obj
+    abstract PickleCoerced : obj -> AttributeValue option
+    default __.PickleCoerced obj = __.PickleUntyped obj
 
     member __.IsScalar = 
         match __.PickleType with
@@ -74,7 +74,7 @@ type NumRepresentablePickler<'T>() =
     inherit StringRepresentablePickler<'T> ()
 
 type ICollectionPickler =
-    abstract ElementConverter : Pickler
+    abstract ElementPickler : Pickler
 
 type IPicklerResolver =
     abstract Resolve : Type -> Pickler
@@ -87,7 +87,7 @@ module internal PicklerUtils =
         let msg = sprintf "could not convert value %A to type '%O'" (av.Print()) typeof<'T>
         raise <| new InvalidCastException(msg)
 
-    let getElemPickler (pickler : Pickler) = (unbox<ICollectionPickler> pickler).ElementConverter
+    let getElemPickler (pickler : Pickler) = (unbox<ICollectionPickler> pickler).ElementPickler
 
     type UnSupportedType =
         static member Raise(fieldType : Type, ?reason : string) =

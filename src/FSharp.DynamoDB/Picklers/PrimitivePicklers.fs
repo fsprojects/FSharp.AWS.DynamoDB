@@ -124,32 +124,32 @@ type TimeSpanPickler() =
         if not <| isNull a.N then TimeSpan.FromTicks(int64 a.N) 
         else invalidCast a
 
-type EnumerationPickler<'E, 'U when 'E : enum<'U>>(uconv : NumRepresentablePickler<'U>) =
+type EnumerationPickler<'E, 'U when 'E : enum<'U>>(up : NumRepresentablePickler<'U>) =
     inherit NumRepresentablePickler<'E> ()
     override __.PickleType = PickleType.Number
     override __.PicklerType = PicklerType.Value
 
     override __.DefaultValue = Unchecked.defaultof<'E>
-    override __.Pickle e = let u = EnumToValue<'E,'U> e in uconv.Pickle u
-    override __.UnPickle a = EnumOfValue<'U, 'E>(uconv.UnPickle a)
-    override __.Parse s = uconv.Parse s |> EnumOfValue<'U, 'E>
-    override __.UnParse e = EnumToValue<'E, 'U> e |> uconv.UnParse
+    override __.Pickle e = let u = EnumToValue<'E,'U> e in up.Pickle u
+    override __.UnPickle a = EnumOfValue<'U, 'E>(up.UnPickle a)
+    override __.Parse s = up.Parse s |> EnumOfValue<'U, 'E>
+    override __.UnParse e = EnumToValue<'E, 'U> e |> up.UnParse
 
-type NullablePickler<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct>(tconv : Pickler<'T>) =
+type NullablePickler<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct>(tp : Pickler<'T>) =
     inherit Pickler<Nullable<'T>> ()
-    override __.PickleType = tconv.PickleType
+    override __.PickleType = tp.PickleType
     override __.PicklerType = PicklerType.Wrapper
     override __.DefaultValue = Nullable<'T>()
-    override __.Pickle n = if n.HasValue then tconv.Pickle n.Value else AttributeValue(NULL = true) |> Some
-    override __.UnPickle a = if a.NULL then Nullable<'T> () else new Nullable<'T>(tconv.UnPickle a)
+    override __.Pickle n = if n.HasValue then tp.Pickle n.Value else AttributeValue(NULL = true) |> Some
+    override __.UnPickle a = if a.NULL then Nullable<'T> () else new Nullable<'T>(tp.UnPickle a)
 
-type OptionPickler<'T>(tconv : Pickler<'T>) =
+type OptionPickler<'T>(tp : Pickler<'T>) =
     inherit Pickler<'T option> ()
-    override __.PickleType = tconv.PickleType
+    override __.PickleType = tp.PickleType
     override __.PicklerType = PicklerType.Wrapper
     override __.DefaultValue = None
-    override __.Pickle topt = match topt with None -> None | Some t -> tconv.Pickle t
-    override __.UnPickle a = if a.NULL then None else Some(tconv.UnPickle a)
+    override __.Pickle topt = match topt with None -> None | Some t -> tp.Pickle t
+    override __.UnPickle a = if a.NULL then None else Some(tp.UnPickle a)
 
 type SerializerAttributePickler(propertyInfo : PropertyInfo, serializer : PropertySerializerAttribute, resolver : IPicklerResolver) =
     inherit Pickler()
