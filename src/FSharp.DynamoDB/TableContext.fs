@@ -330,3 +330,11 @@ type TableContext =
 
         return new TableContext<'TRecord>(client, tableName, rd)
     }
+
+
+[<AutoOpen>]
+module TableContextUtils =
+    
+    let inline cond (ctx : TableContext<'TRecord>) expr = ctx.ExtractConditionalExpr expr
+    let inline updateOp (ctx : TableContext<'TRecord>) expr = ctx.ExtractOpExprUpdater expr
+    let inline updateRec (ctx : TableContext<'TRecord>) expr = ctx.ExtractRecExprUpdater expr
