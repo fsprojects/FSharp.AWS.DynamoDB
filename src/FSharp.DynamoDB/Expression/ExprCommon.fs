@@ -69,6 +69,8 @@ with
             | None -> None
             | Some rp when rp.Converter.ConverterType = ConverterType.Serialized && not isFinalProp ->
                 invalidArg "expr" "cannot access nested properties of serialized fields."
+            | Some rp when rp.Converter.ConverterType = ConverterType.Union && not isFinalProp ->
+                invalidArg "expr" "cannot access nested properties of union fields."
             | Some _ as r -> r
 
         let rec extractProps props e =

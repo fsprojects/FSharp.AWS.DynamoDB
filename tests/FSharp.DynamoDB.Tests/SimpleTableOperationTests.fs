@@ -8,28 +8,33 @@ open FsUnit.Xunit
 
 open FSharp.DynamoDB
 
-type SimpleRecord =
-    {
-        [<HashKey>]
-        HashKey : string
-        [<RangeKey>]
-        RangeKey : string
+[<AutoOpen>]
+module SimpleTableTypes =
 
-        Value : int64
+    type SimpleRecord =
+        {
+            [<HashKey>]
+            HashKey : string
+            [<RangeKey>]
+            RangeKey : string
 
-        Tuple : int64 * int64
+            Value : int64
 
-        Map : Map<string, int64>
-    }
+            Tuple : int64 * int64
 
-[<HashKeyConstant("HashKey", "compatible")>]
-type CompatibleRecord =
-    {
-        [<RangeKey; CustomName("RangeKey")>]
-        Id : string
+            Map : Map<string, int64>
 
-        Values : Set<int>
-    }
+            Unions : Choice<string, int64, byte[]> list
+        }
+
+    [<HashKeyConstant("HashKey", "compatible")>]
+    type CompatibleRecord =
+        {
+            [<RangeKey; CustomName("RangeKey")>]
+            Id : string
+
+            Values : Set<int>
+        }
 
 type ``Simple Table Operation Tests`` () =
 
@@ -42,6 +47,7 @@ type ``Simple Table Operation Tests`` () =
             HashKey = guid() ; RangeKey = guid() ; 
             Value = rand() ; Tuple = rand(), rand() ;
             Map = seq { for i in 0L .. rand() % 5L -> guid(), rand() } |> Map.ofSeq 
+            Unions = [Choice1Of3 (guid()) ; Choice2Of3(rand()) ; Choice3Of3(Guid.NewGuid().ToByteArray())]
         }
 
     let run = Async.RunSynchronously

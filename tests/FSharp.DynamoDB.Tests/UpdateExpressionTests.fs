@@ -15,6 +15,8 @@ module UpdateExprTypes =
 
     type Nested = { NV : string ; NE : Enum }
 
+    type Union = UA of int64 | UB of string
+
     type UpdateExprRecord =
         {
             [<HashKey>]
@@ -43,6 +45,10 @@ module UpdateExprTypes =
             Bytes : byte[]
 
             Ref : string ref
+
+            Union : Union
+
+            Unions : Union list
 
             Optional : string option
 
@@ -76,6 +82,8 @@ type ``Update Expression Tests`` () =
             Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq 
             Set = seq { for i in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
             List = [for i in 0L .. rand() % 5L -> rand() ]
+            Union = if rand() % 2L = 0L then UA (rand()) else UB(guid())
+            Unions = [for i in 0L .. rand() % 5L -> if rand() % 2L = 0L then UA (rand()) else UB(guid()) ]
             Serialized = rand(), guid() ; Serialized2 = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
         }
 
@@ -156,6 +164,14 @@ type ``Update Expression Tests`` () =
         let key = table.PutItemAsync item |> run
         let item' = table.UpdateItemRecExprAsync(key, <@ fun r -> { r with String = r.Nested.NV } @>) |> run
         item'.String |> should equal item.Nested.NV
+
+    [<Fact>]
+    let ``Update using nested union values`` () =
+        let item = mkItem()
+        let key = table.PutItemAsync item |> run
+        let u = UB(guid())
+        let item' = table.UpdateItemRecExprAsync(key, <@ fun r -> { r with Union = u } @>) |> run
+        item'.Union |> should equal u
 
     [<Fact>]
     let ``Update using nested list`` () =
@@ -287,6 +303,16 @@ type ``Update Expression Tests`` () =
 
         item'.NestedList.[0].NV |> should equal item.HashKey
         item'.NestedList.[1].NV |> should equal item.HashKey
+
+    [<Fact>]
+    let ``SET a union attribute`` () =
+        let item = { mkItem() with Unions = [UB(guid())] }
+        let key = table.PutItemAsync item |> run
+        let u = UA(rand())
+        let item' = table.UpdateItemOpExprAsync(key, <@ fun r -> SET r.Unions.[0] u @>) |> run
+
+        item'.Unions.Length |> should equal 1
+        item'.Unions.[0] |> should equal u
 
     [<Fact>]
     let ``REMOVE an attribute`` () =

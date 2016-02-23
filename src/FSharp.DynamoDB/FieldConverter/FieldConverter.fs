@@ -26,7 +26,8 @@ type ConverterType =
     | Value         = 01
     | Wrapper       = 02
     | Record        = 03
-    | Serialized    = 04
+    | Union         = 04
+    | Serialized    = 05
 
 [<AbstractClass>]
 type FieldConverter() =

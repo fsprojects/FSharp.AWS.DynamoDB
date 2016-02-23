@@ -15,6 +15,8 @@ module CondExprTypes =
 
     type Nested = { NV : string ; NE : Enum }
 
+    type Union = UA of int64 | UB of string
+
     type CondExprRecord =
         {
             [<HashKey>]
@@ -27,6 +29,8 @@ module CondExprTypes =
             Tuple : int64 * int64
 
             Nested : Nested
+
+            Union : Union
 
             NestedList : Nested list
 
@@ -71,6 +75,7 @@ type ``Conditional Expression Tests`` () =
             Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq 
             Set = seq { for i in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
             List = [for i in 0L .. rand() % 5L -> rand() ]
+            Union = if rand() % 2L = 0L then UA (rand()) else UB(guid())
             Serialized = rand(), guid()
         }
 
@@ -203,6 +208,15 @@ type ``Conditional Expression Tests`` () =
 
         let value = item.Nested.NE
         table.PutItemAsync(item, <@ fun r -> r.Nested.NE = value @>) |> run |> ignore
+
+    [<Fact>]
+    let ``Nested union precondition`` () =
+        let item = mkItem()
+        let key = table.PutItemAsync item |> run
+        fun () -> table.PutItemAsync(item, <@ fun r -> r.Union = UA (rand()) @>) |> run
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+        table.PutItemAsync(item, <@ fun r -> r.Union = item.Union @>) |> run |> ignore
 
     [<Fact>]
     let ``String-Contains precondition`` () =

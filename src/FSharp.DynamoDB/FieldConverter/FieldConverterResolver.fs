@@ -115,6 +115,11 @@ module private ResolverImpl =
                 new IFunc<FieldConverter> with
                     member __.Invoke<'T>() = mkFSharpRecordConverter<'T> resolver :> _   }
 
+        | s when FSharpType.IsUnion(t, true) ->
+            s.Accept {
+                new IFunc<FieldConverter> with
+                    member __.Invoke<'T>() = new UnionConverter<'T>(resolver) :> _   }
+
         | _ -> UnSupportedField.Raise t
 
     type CachedResolver private () as self =

@@ -144,6 +144,8 @@ module ``Record Generation Tests`` =
 
     type NestedRecord = { A : int ; B : string }
 
+    type NestedUnion = UA of int | UB of string | UC of byte[] * DateTimeOffset
+
     type ``Complex Record B`` = 
         { 
             [<HashKey>]HashKey : byte[]
@@ -154,6 +156,7 @@ module ``Record Generation Tests`` =
             Set : Set<string> ref
 
             Nested : NestedRecord
+            Union : NestedUnion
 
             [<BinaryFormatter>]
             BlobValue : (int * string) [][]
@@ -177,7 +180,7 @@ module ``Record Generation Tests`` =
             Double : double
             Decimal : decimal
 
-            Nested : NestedRecord * NestedRecord
+            Nested : NestedRecord * NestedUnion
         }
 
     type ``Complex Record D`` =
@@ -193,6 +196,7 @@ module ``Record Generation Tests`` =
             Optional : string option
             Bytess : Set<byte[]>
             Ref : byte[] ref ref ref
+            Unions : Choice<NestedUnion [], int>
         }
 
 

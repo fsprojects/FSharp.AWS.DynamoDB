@@ -53,6 +53,7 @@
     <Compile Include="FieldConverter\PrimitiveConverters.fs" />
     <Compile Include="FieldConverter\CollectionConverters.fs" />
     <Compile Include="FieldConverter\RecordConverter.fs" />
+    <Compile Include="FieldConverter\UnionConverter.fs" />
     <Compile Include="FieldConverter\FieldConverterResolver.fs" />
     <Compile Include="Expression\ExprCommon.fs" />
     <Compile Include="Expression\ConditionalExpr.fs" />
