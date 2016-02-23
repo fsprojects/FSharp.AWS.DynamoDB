@@ -345,7 +345,7 @@ type ``Conditional Expression Tests`` () =
         |> Async.Ignore
         |> run
 
-        let results = table.QueryAsync(<@ fun r -> r.HashKey = hKey && r.RangeKey <= 100L @>) |> run
+        let results = table.QueryAsync(<@ fun r -> r.HashKey = hKey && BETWEEN r.RangeKey 50L 149L @>) |> run
         results.Length |> should equal 100
 
     [<Fact>]
@@ -359,7 +359,7 @@ type ``Conditional Expression Tests`` () =
         |> Async.Ignore
         |> run
 
-        let results = table.QueryAsync(<@ fun r -> r.HashKey = hKey && r.RangeKey <= 100L @>,
+        let results = table.QueryAsync(<@ fun r -> r.HashKey = hKey && BETWEEN r.RangeKey 50L 149L @>,
                                         filterCondition = <@ fun r -> r.Bool = true @>) |> run
 
         results.Length |> should equal 50
@@ -370,14 +370,17 @@ type ``Conditional Expression Tests`` () =
 
         test true <@ fun r -> r.HashKey = "2" @>
         test true <@ fun r -> r.HashKey = "2" && r.RangeKey < 2L @>
+        test true <@ fun r -> r.HashKey = "2" && BETWEEN r.RangeKey 1L 2L @>
         test false <@ fun r -> r.HashKey < "2" @>
         test false <@ fun r -> r.HashKey >= "2" @>
+        test false <@ fun r -> BETWEEN r.HashKey "2" "3" @>
         test false <@ fun r -> r.HashKey = "2" && r.HashKey = "4" @>
         test false <@ fun r -> r.RangeKey = 2L @>
         test false <@ fun r -> r.HashKey = "2" && r.RangeKey = 2L && r.RangeKey < 10L @>
         test false <@ fun r -> r.HashKey = "2" || r.RangeKey = 2L @>
         test false <@ fun r -> r.HashKey = "2" && not (r.RangeKey = 2L) @>
         test false <@ fun r -> r.HashKey = "2" && r.Bool = true @>
+        test false <@ fun r -> r.HashKey = "2" && BETWEEN 1L r.RangeKey 2L @>
 
     [<Fact>]
     let ``Simple Scan Expression`` () =

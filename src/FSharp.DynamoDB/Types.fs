@@ -109,6 +109,12 @@ type TableKey private (hashKey : obj, rangeKey : obj) =
         new TableKey(hashKey, rangeKey)
 
 [<AutoOpen>]
+module ConditionalOperators =
+
+    let BETWEEN (x : 'T) (lower : 'T) (upper : 'T) : bool =
+        lower <= x && x <= upper
+
+[<AutoOpen>]
 module UpdateOperators =
 
     type UpdateOp =
@@ -116,13 +122,13 @@ module UpdateOperators =
             invalidOp "Update combiner reserved for quoted update expressions."
 
     let SET (path : 'T) (value : 'T) : UpdateOp =
-        invalidOp "Assignment operation reserved for quoted update expressions."
+        invalidOp "SET operation reserved for quoted update expressions."
 
     let REMOVE (path : 'T) : UpdateOp =
-        invalidOp "Remove operation reserved for quoted update expressions."
+        invalidOp "REMOVE operation reserved for quoted update expressions."
 
     let ADD (path : Set<'T>) (values : seq<'T>) : UpdateOp =
-        invalidOp "Remove operation reserved for quoted update expressions."
+        invalidOp "ADD operation reserved for quoted update expressions."
 
     let DELETE (path : Set<'T>) (values : seq<'T>) : UpdateOp =
-        invalidOp "Remove operation reserved for quoted update expressions."
+        invalidOp "DELETE operation reserved for quoted update expressions."

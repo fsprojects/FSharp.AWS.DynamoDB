@@ -327,7 +327,7 @@ type TableContext =
                     return! awaitReady (retries - 1)
             }
 
-            do! awaitReady 20
+            do! awaitReady 30
 
         return new TableContext<'TRecord>(client, tableName, rd)
     }

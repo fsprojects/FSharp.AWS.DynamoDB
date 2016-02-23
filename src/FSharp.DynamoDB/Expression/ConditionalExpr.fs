@@ -26,6 +26,7 @@ type QueryExpr =
     | Or of QueryExpr * QueryExpr
     | Compare of Comparator * Operand * Operand
     | Between of Operand * Operand * Operand
+    | In of Operand * Operand list
     | BeginsWith of AttributePath * Operand
     | Contains of AttributePath * Operand
     | Attribute_Exists of AttributePath
@@ -199,6 +200,17 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
 
                 Attribute_Exists (Suffix(key, attr))
 
+            | SpecificCall2 <@ BETWEEN @> (None, _, _, [value ; lower; upper]) ->
+                let conv = FieldConverter.resolveUntyped value.Type
+                if conv.IsScalar then
+                    let sc = Some conv
+                    let vOp = extractOperand sc value
+                    let lOp = extractOperand sc lower
+                    let uOp = extractOperand sc upper
+                    Between(vOp, lOp, uOp)
+                else
+                    invalidArg "expr" "BETWEEN predicate only applies to scalar attributes."
+
             | _ -> invalidQuery()
 
         extractQuery body
@@ -217,6 +229,12 @@ let queryExprToString (getAttrId : AttributePath -> string)
         | Value v -> !(getValueId v) 
         | Attribute a -> !(getAttrId a) 
         | SizeOf a -> ! "( size ( " ; !(getAttrId a) ; ! " ))"
+
+    let rec writeOps ops =
+        match ops with
+        | o :: [] -> writeOp o
+        | o :: tl -> writeOp o ; ! ", " ; writeOps tl
+        | [] -> invalidOp "Internal error: empty operand sequence."
 
     let inline writeCmp cmp =
         match cmp with
@@ -239,6 +257,7 @@ let queryExprToString (getAttrId : AttributePath -> string)
         | Contains (attr, op) -> ! "( contains ( " ; !(getAttrId attr) ; !", " ; writeOp op ; !" ))"
         | Attribute_Exists attr -> ! "( attribute_exists ( " ; !(getAttrId attr) ; ! "))"
         | Attribute_Not_Exists attr -> ! "( attribute_not_exists ( " ; !(getAttrId attr) ; ! "))"
+        | In(op,ops) -> ! "(" ; writeOp op ; ! " IN (" ; writeOps ops ; ! "))"
 
     aux qExpr
     sb.ToString()
@@ -259,13 +278,18 @@ let isKeyConditionCompatible (qExpr : QueryExpr) =
         | Attribute_Exists _
         | Attribute_Not_Exists _
         | Contains _
-        | Between _
+        | In _
         | Not _
         | Or _ -> false
         | And(l,r) -> aux l && aux r
         | BeginsWith(ap,_) when ap.RootProperty.IsHashKey -> false
         | BeginsWith(ap,_) when ap.RootProperty.IsRangeKey -> incr rangeKeyRefs ; true
         | BeginsWith _ -> false
+        | Between (Attribute ap, Value _, Value _) ->
+            if ap.RootProperty.IsRangeKey then incr rangeKeyRefs ; true
+            else false
+
+        | Between _ -> false
         | Compare(cmp, Attribute ap, Value _)
         | Compare(cmp, Value _, Attribute ap) ->
             if ap.RootProperty.IsHashKey then
