@@ -35,6 +35,7 @@ let client : IAmazonDynamoDB = ``your DynamoDB client instance``
 let table = TableContext.Create<WorkItemInfo>(client, tableName = "workItems", createIfNotExists = true)
 
 let workItem = { ProcessId = 0L ; WorkItemId = 1L ; Name = "Test" ; UUID = guid() ; Dependencies = ["mscorlib"] ; Started = None }
+
 let key : TableKey = table.PutItem(workItem)
 let workItem' = table.GetItem(key)
 ```
@@ -42,12 +43,15 @@ let workItem' = table.GetItem(key)
 Queries and scans can be performeds using quoted predicates
 
 ```fsharp
-let qResults = table.Query(keyCondition = <@ fun r -> r.ProcessId = 0 @>, filterCondition = <@ fun r -> r.Name = "test" @>)
+let qResults = table.Query(keyCondition = <@ fun r -> r.ProcessId = 0 @>, 
+                            filterCondition = <@ fun r -> r.Name = "test" @>)
+                            
 let sResults = table.Scan <@ fun r -> r.Started.Value < DateTimeOffset.Now - TimeSpan.FromMinutes 1.  @>
 ```
 
 Values can be updated using quoted update expressions
 
 ```fsharp
-let updated = table.UpdateItem(<@ fun r -> { r with Started = Some DateTimeOffset.Now } @>, preCondition = <@ fun r -> r.DateTimeOffset = None @>)
+let updated = table.UpdateItem(<@ fun r -> { r with Started = Some DateTimeOffset.Now } @>, 
+                                preCondition = <@ fun r -> r.DateTimeOffset = None @>)
 ```
