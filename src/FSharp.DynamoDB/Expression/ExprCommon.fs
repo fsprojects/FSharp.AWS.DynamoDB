@@ -26,6 +26,7 @@ type AttributePath =
     | Root of RecordPropertyInfo
     | Nested of RecordPropertyInfo * parent:AttributePath
     | Item of index:int * pickler:Pickler * parent:AttributePath
+    | Optional of pickler:Pickler * parent:AttributePath
     | Suffix of id:string * parent:AttributePath
 with
     /// Gets the pickler corresponding to the type pointed to by the attribute path
@@ -34,6 +35,7 @@ with
         | Root rp -> rp.Pickler
         | Nested (rp,_) -> rp.Pickler
         | Item(_,pickler,_) -> pickler
+        | Optional(p,_) -> p
         | _ -> invalidArg "ap" "internal error: no pickler found here"
 
     /// Gets the root record property of given attribute path
@@ -43,6 +45,7 @@ with
             | Root rp -> rp
             | Nested(_,p) -> aux p
             | Item(_,_,p) -> aux p
+            | Optional(_,p)-> aux p
             | Suffix(_,p) -> aux p
 
         aux ap
@@ -54,6 +57,7 @@ with
             | Root rp -> rp.Name :: acc
             | Nested (rp,p) -> getTokens ("." + rp.Name :: acc) p
             | Item(i,_,p) -> getTokens (sprintf ".[%d]" i :: acc) p
+            | Optional(_,p) -> getTokens acc p
             | Suffix(id,p) -> getTokens ("." + id :: acc) p
 
         getTokens [] ap
@@ -65,6 +69,7 @@ with
             | Root rp -> rp.AttrId :: acc
             | Nested (rp,p) -> getTokens ("." + rp.Name :: acc) p
             | Item(i,_,p) -> getTokens (sprintf "[%d]" i :: acc) p
+            | Optional(_,p) -> getTokens acc p
             | Suffix (id,p) -> getTokens ("." + id :: acc) p
 
         getTokens [] ap |> String.concat ""
@@ -76,6 +81,7 @@ with
             | Root rp -> f rp.Pickler
             | Nested (rp,p) -> f rp.Pickler ; aux p
             | Item(_,pickler,p) -> f pickler ; aux p
+            | Optional(pickler,p) -> f pickler; aux p
             | Suffix(_,p) -> aux p
 
         aux ap
@@ -98,32 +104,44 @@ with
                 | None -> None
                 | Some rp -> mkAttrPath (Root rp) rp.NestedRecord props
 
+            | SpecificProperty <@ fun (t : _ option) -> t.Value @> (Some e,[et],_) ->
+                extractProps (Choice2Of3 et :: props) e
+
             | SpecificProperty <@ fun (r : _ ref) -> r.Value @> (Some e,_,_) ->
                 let p = e.Type.GetProperty("contents")
-                extractProps (Choice1Of2 p :: props) e
+                extractProps (Choice1Of3 p :: props) e
 
-            | PropertyGet(Some e, p, []) -> extractProps (Choice1Of2 p :: props) e
+            | PropertyGet(Some e, p, []) -> extractProps (Choice1Of3 p :: props) e
 
             | SpecificCall2 <@ fst @> (None, _, _, [e]) -> 
                 let p = e.Type.GetProperty("Item1") 
-                extractProps (Choice1Of2 p :: props) e
+                extractProps (Choice1Of3 p :: props) e
 
             | SpecificCall2 <@ snd @> (None, _, _, [e]) -> 
                 let p = e.Type.GetProperty("Item2")
-                extractProps (Choice1Of2 p :: props) e
+                extractProps (Choice1Of3 p :: props) e
 
-            | IndexGet(e, et, i) when i.IsClosed -> extractProps (Choice2Of2 (et, i) :: props) e
+            | SpecificCall2 <@ Option.get @> (None, _, [et], [e]) ->
+                extractProps (Choice2Of3 et :: props) e
+
+            | IndexGet(e, et, i) when i.IsClosed -> 
+                extractProps (Choice3Of3 (et, i) :: props) e
+
             | _ -> None
 
         and mkAttrPath acc (ctx : RecordInfo option) rest =
             match rest, ctx with
             | [], _ -> Some acc
-            | Choice1Of2 p :: tail, Some rI ->
+            | Choice1Of3 p :: tail, Some rI ->
                 match tryGetPropInfo rI (List.isEmpty tail) p with
                 | None -> None
                 | Some rp -> mkAttrPath (Nested(rp, acc)) rp.NestedRecord tail
 
-            | Choice2Of2 (et, ie) :: tail, None ->
+            | Choice2Of3 opt :: tail, None ->
+                let pickler = Pickler.resolveUntyped opt
+                mkAttrPath (Optional(pickler, acc)) ctx tail
+
+            | Choice3Of3 (et, ie) :: tail, None ->
                 let pickler = Pickler.resolveUntyped et
                 let i = evalRaw ie
                 let ctx = match box pickler with :? IRecordPickler as rc -> Some rc.RecordInfo | _ -> None

@@ -167,6 +167,19 @@ type ``Conditional Expression Tests`` () =
         |> shouldFailwith<_, ConditionalCheckFailedException>
 
     [<Fact>]
+    let ``Optional-Value precondition`` () =
+        let item = { mkItem() with Optional = Some "foo" }
+        let key = table.PutItem item
+        fun () -> table.PutItem(item, <@ fun r -> r.Optional.Value = "bar" @>)
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+        let value = item.Optional
+        let _ = table.PutItem({ item with Optional = None }, <@ fun r -> r.Optional.Value = "foo" @>)
+
+        fun () -> table.PutItem(item, <@ fun r -> r.Optional.Value = "foo" @>)
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+    [<Fact>]
     let ``Ref precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
