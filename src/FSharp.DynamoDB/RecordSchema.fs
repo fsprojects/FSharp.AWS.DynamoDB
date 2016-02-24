@@ -15,12 +15,13 @@ type KeyStructure =
     | HashKeyOnly of hashKeyProperty:RecordPropertyInfo
     | Combined of hashKeyProperty:RecordPropertyInfo * rangeKeyProperty:RecordPropertyInfo
     | DefaultHashKey of hkName:string * hkValue:obj * hkPickler:Pickler * rangeKeyProperty:RecordPropertyInfo
+    | DefaultRangeKey of rkName:string * rkValue:obj * rkPickler:Pickler * hashKeyProperty:RecordPropertyInfo
 with
     /// Extracts given TableKey to AttributeValue form
     static member ExtractKey(keyStructure : KeyStructure, key : TableKey) =
         let dict = new Dictionary<string, AttributeValue> ()
         let extractKey name (pickler : Pickler) (value:obj) =
-            if obj.ReferenceEquals(value, null) then invalidArg name "Key value was not specified."
+            if isNull value then invalidArg name "Key value was not specified."
             let av = pickler.PickleUntyped value |> Option.get
             dict.Add(name, av)
 
@@ -38,6 +39,16 @@ with
 
             extractKey rkp.Name rkp.Pickler key.RangeKey
 
+        | DefaultRangeKey(name, value, pickler, hkp) ->
+            extractKey hkp.Name hkp.Pickler key.HashKey
+
+            if key.IsRangeKeySpecified then
+                extractKey name pickler key.RangeKey
+            else
+                let av = value |> pickler.PickleUntyped |> Option.get
+                dict.Add(name, av)
+
+
         dict
 
     /// Extracts key from given record instance
@@ -48,18 +59,39 @@ with
         | DefaultHashKey(_, hashKey, _, rkp) ->
             let rangeKey = getValue rkp
             TableKey.Combined(hashKey, rangeKey)
+        | DefaultRangeKey(_, rangeKey, _, hkp) ->
+            let hashKey = getValue hkp
+            TableKey.Combined(hashKey, rangeKey)
         | Combined(hkp,rkp) ->
             let hashKey = getValue hkp
             let rangeKey = getValue rkp
             TableKey.Combined(hashKey, rangeKey)
 
-    /// Builds key structures from supplied F# record info
+    /// Builds key structure from supplied F# record info
     static member FromRecordInfo (recordInfo : RecordInfo) =
         let hkcaOpt = recordInfo.Type.TryGetAttribute<HashKeyConstantAttribute> ()
+        let rkcaOpt = recordInfo.Type.TryGetAttribute<RangeKeyConstantAttribute> ()
+
+        if Option.isSome hkcaOpt && Option.isSome rkcaOpt then
+            invalidArg (string recordInfo.Type) "Cannot specify both HashKey and RangeKey constant attributes in record definition."
 
         match recordInfo.Properties |> Array.filter (fun p -> p.IsHashKey) with
         | [|hashKeyP|] when Option.isSome hkcaOpt ->
-            invalidArg (string recordInfo.Type) "Cannot attach HashKey attribute to records containing RangeKeyConstant attribute."
+            invalidArg (string recordInfo.Type) "Cannot attach HashKey attribute to records containing HashKeyConstant attribute."
+
+        | [|hashKeyP|] when Option.isSome rkcaOpt ->
+            let rkca = Option.get rkcaOpt
+            if not <| isValidFieldName rkca.Name then
+                invalidArg rkca.Name "invalid rangekey name; must be alphanumeric and should not begin with a number."
+
+            if recordInfo.Properties |> Array.exists(fun p -> p.Name = rkca.Name) then
+                invalidArg (string recordInfo.Type) "Default RangeKey attribute contains conflicting name."
+
+            if recordInfo.Properties |> Array.exists(fun p -> p.IsRangeKey) then
+                invalidArg (string recordInfo.Type) "Cannot attach RangeKey attribute to records containing RangeKeyConstant attribute."
+
+            let pickler = Pickler.resolveUntyped rkca.HashKeyType
+            DefaultRangeKey(rkca.Name, rkca.RangeKey, pickler, hashKeyP)
 
         | [|hashKeyP|] ->
             match recordInfo.Properties |> Array.filter (fun p -> p.IsRangeKey) with
@@ -108,6 +140,7 @@ type TableKeySchema with
         | HashKeyOnly rp -> mkTableKeySchema (mkKeySchema rp.Name rp.Pickler) None
         | Combined(hk, rk) -> mkTableKeySchema (mkKeySchema hk.Name hk.Pickler) (Some (mkKeySchema rk.Name rk.Pickler))
         | DefaultHashKey(name,_,pickler,rk) -> mkTableKeySchema (mkKeySchema name pickler) (Some (mkKeySchema rk.Name rk.Pickler))
+        | DefaultRangeKey(name,_,pickler,hk) -> mkTableKeySchema (mkKeySchema hk.Name hk.Pickler) (Some (mkKeySchema name pickler))
 
     /// Extract key schema from DynamoDB table description object
     static member OfTableDescription (td : TableDescription) =

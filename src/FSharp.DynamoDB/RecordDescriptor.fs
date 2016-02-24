@@ -55,6 +55,11 @@ type internal RecordDescriptor<'Record> internal () =
         | DefaultHashKey(name, hashKey, pickler, _) ->
             let av = hashKey |> pickler.PickleUntyped |> Option.get
             kv.Add(name, av)
+
+        | DefaultRangeKey(name, rangeKey, pickler, _) ->
+            let av = rangeKey |> pickler.PickleUntyped |> Option.get
+            kv.Add(name, av)
+
         | _ -> ()
 
         kv

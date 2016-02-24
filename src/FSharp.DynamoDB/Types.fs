@@ -22,7 +22,7 @@ type RangeKeyAttribute() =
     inherit Attribute()
 
 /// Declares a constant HashKey attribute for the given record.
-/// Records carrying this attribute should specify a RangeKey attribute.
+/// Records carrying this attribute should specify a RangeKey field.
 [<Sealed; AttributeUsage(AttributeTargets.Class)>]
 type HashKeyConstantAttribute(name : string, hashkey : obj) =
     inherit Attribute()
@@ -33,6 +33,19 @@ type HashKeyConstantAttribute(name : string, hashkey : obj) =
     member __.Name = name
     member __.HashKey = hashkey
     member __.HashKeyType = hashkey.GetType()
+
+/// Declares a constant RangeKey attribute for the given record.
+/// Records carrying this attribute should specify a HashKey field.
+[<Sealed; AttributeUsage(AttributeTargets.Class)>]
+type RangeKeyConstantAttribute(name : string, rangeKey : obj) =
+    inherit Attribute()
+    do 
+        if name = null then raise <| ArgumentNullException("'Name' parameter cannot be null.")
+        if rangeKey = null then raise <| ArgumentNullException("'HashKey' parameter cannot be null.")
+
+    member __.Name = name
+    member __.RangeKey = rangeKey
+    member __.HashKeyType = rangeKey.GetType()
 
 /// Specify a custom DynamoDB attribute name for the given record field.
 [<AttributeUsage(AttributeTargets.Property)>]

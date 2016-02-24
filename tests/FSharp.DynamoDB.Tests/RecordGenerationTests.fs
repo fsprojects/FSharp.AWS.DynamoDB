@@ -34,6 +34,9 @@ module ``Record Generation Tests`` =
     [<HashKeyConstant("HashKey", 42)>]
     type ``NS Constant HashKey Record`` = { [<RangeKey>] B1 : string }
 
+    [<RangeKeyConstant("RangeKey", "Constant")>]
+    type ``BS Constant RangeKey Record`` = { [<HashKey>] A1 : byte[] }
+
     type ``Custom HashKey Name Record`` = { [<HashKey; CustomName("CustomHashKeyName")>] B1 : string }
 
     [<Fact>]
@@ -84,6 +87,13 @@ module ``Record Generation Tests`` =
         rd.KeySchema.HashKey.AttributeName |> should equal "HashKey"
         rd.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.N
         rd.KeySchema.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.S })
+
+    [<Fact>]
+    let ``Generate correct schema for BS Constant RangeKey Record`` () =
+        let rd = RecordDescriptor.Create<``BS Constant RangeKey Record``> ()
+        rd.KeySchema.HashKey.AttributeName |> should equal "A1"
+        rd.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.B
+        rd.KeySchema.RangeKey |> should equal (Some { AttributeName = "RangeKey" ; KeyType = ScalarAttributeType.S })
 
     [<Fact>]
     let ``Generate correct schema for Custom HashKey Name Record`` () =
