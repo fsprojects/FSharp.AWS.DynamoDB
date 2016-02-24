@@ -46,7 +46,7 @@ type ``Simple Table Operation Tests`` () =
         { 
             HashKey = guid() ; RangeKey = guid() ; 
             Value = rand() ; Tuple = rand(), rand() ;
-            Map = seq { for i in 0L .. rand() % 5L -> guid(), rand() } |> Map.ofSeq 
+            Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq 
             Unions = [Choice1Of3 (guid()) ; Choice2Of3(rand()) ; Choice3Of3(Guid.NewGuid().ToByteArray())]
         }
 

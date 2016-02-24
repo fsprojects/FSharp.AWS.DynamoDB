@@ -10,12 +10,25 @@ open Microsoft.FSharp.Quotations.ExprShape
 
 open Swensen.Unquote
 
+//
+//  Implementation of recognizers for expressions of shape 'r.A.B.[0].C'
+//  where 'r' is an F# record.
+//
+
+
+type RecordPropertyInfo with
+    /// Gets an attribute Id for given record property that
+    /// is recognizable by DynamoDB
+    member rp.AttrId = sprintf "#ATTR%d" rp.Index
+
+/// Represents a nested field of an F# record type
 type AttributePath =
     | Root of RecordPropertyInfo
     | Nested of RecordPropertyInfo * parent:AttributePath
     | Item of index:int * pickler:Pickler * parent:AttributePath
     | Suffix of id:string * parent:AttributePath
 with
+    /// Gets the pickler corresponding to the type pointed to by the attribute path
     member ap.Pickler =
         match ap with
         | Root rp -> rp.Pickler
@@ -23,6 +36,7 @@ with
         | Item(_,pickler,_) -> pickler
         | _ -> invalidArg "ap" "internal error: no pickler found here"
 
+    /// Gets the root record property of given attribute path
     member ap.RootProperty =
         let rec aux ap =
             match ap with
@@ -33,6 +47,7 @@ with
 
         aux ap
 
+    /// Gets a list of string tokens that identify the attribute path
     member ap.Tokens =
         let rec getTokens acc ap =
             match ap with
@@ -43,16 +58,18 @@ with
 
         getTokens [] ap
 
+    /// Qualified path for attribute path recognizable by DynamoDB
     member ap.Id =
         let rec getTokens acc ap =
             match ap with
-            | Root rp -> sprintf "#ATTR%d" rp.Index :: acc
+            | Root rp -> rp.AttrId :: acc
             | Nested (rp,p) -> getTokens ("." + rp.Name :: acc) p
             | Item(i,_,p) -> getTokens (sprintf "[%d]" i :: acc) p
             | Suffix (id,p) -> getTokens ("." + id :: acc) p
 
         getTokens [] ap |> String.concat ""
 
+    /// Iterates through all resolved picklers of a given attribute path
     member ap.Iter(f : Pickler -> unit) =
         let rec aux ap =
             match ap with
@@ -63,7 +80,8 @@ with
 
         aux ap
 
-    static member Extract (record : Var) (info : RecordInfo) (e : Expr) =
+    /// Attempt to extract an attribute path for given record info and expression
+    static member TryExtract (record : Var) (info : RecordInfo) (e : Expr) =
         let tryGetPropInfo (info : RecordInfo) isFinalProp (p : PropertyInfo) =
             match info.Properties |> Array.tryFind (fun rp -> rp.PropertyInfo = p) with
             | None -> None
@@ -115,11 +133,11 @@ with
 
         extractProps [] e
 
-type RecordPropertyInfo with
-    member rp.AttrId = sprintf "#ATTR%d" rp.Index
-
-
+// Detects conflicts in a collection of attribute paths
+// e.g. 'r.Foo.Bar.[0]' and 'r.Foo' are conflicting
+// however 'r.Foo.Bar.[0]' and 'r.Foo.Bar.[1]' are not conflicting
 type private AttributeNode = { Value : string ; Children : ResizeArray<AttributeNode> }
+/// Detects conflicts in a collection of attribute paths
 let tryFindConflictingPaths (attrs : seq<AttributePath>) =
     let root = new ResizeArray<AttributeNode>()
     let tryAppendPath (attr : AttributePath) =

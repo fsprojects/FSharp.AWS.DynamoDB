@@ -13,6 +13,10 @@ open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
 
+//
+//  Pickler implementations for primitive types
+//
+
 type BoolPickler() =
     inherit StringRepresentablePickler<bool>()
     override __.PickleType = PickleType.Bool

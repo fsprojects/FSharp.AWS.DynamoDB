@@ -16,11 +16,15 @@ open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB.ExprCommon
 
-// http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html#ConditionExpressionReference
+//
+//  Converts an F# quotation into an appropriate DynamoDB conditional expression.
+//
+//  see http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html
 
+/// DynamoDB query expression
 type QueryExpr =
-    | False
-    | True
+    | False // True & False not part of the DynamoDB spec;
+    | True  // used here for simplifying and identifying tautological conditions
     | Not of QueryExpr
     | And of QueryExpr * QueryExpr
     | Or of QueryExpr * QueryExpr
@@ -45,10 +49,9 @@ and Operand =
     | Value of AttributeValue
     | Attribute of AttributePath
     | SizeOf of AttributePath
-with
-    member op.IsUndefinedValue = match op with Undefined -> true | _ -> false
 
-let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
+/// Extracts a query expression from a quoted F# predicate
+let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) : QueryExpr =
     if not expr.IsClosed then invalidArg "expr" "supplied query is not a closed expression."
     let invalidQuery() = invalidArg "expr" <| sprintf "Supplied expression is not a valid conditional."
 
@@ -59,7 +62,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
             expr |> evalRaw |> pickler.PickleCoerced
 
         let (|AttributeGet|_|) e = 
-            match AttributePath.Extract r recordInfo e with
+            match AttributePath.TryExtract r recordInfo e with
             | None -> None
             | Some attr as aopt ->
                 attr.Iter (fun pickler -> 
@@ -117,20 +120,24 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
 
         let extractComparison (cmp : Comparator) (left : Operand) (right : Operand) =
             if left = right then
-                invalidArg "expr" "conditional expression contains comparison with identical operands"
-
-            let defAttr =
-                if left.IsUndefinedValue then Some(match right with Attribute attr -> attr | _ -> invalidOp "internal error")
-                elif right.IsUndefinedValue then Some(match left with Attribute attr -> attr | _ -> invalidOp "internal error")
-                else None
-
-            match defAttr with
-            | None -> Compare(cmp, left, right)
-            | Some attr ->
                 match cmp with
-                | NE -> Attribute_Exists attr
-                | EQ -> Attribute_Not_Exists attr
-                | _ -> True
+                | LE | EQ | GE -> True
+                | LT | NE | GT -> False
+            else
+
+            let assignUndefined op =
+                match op with
+                | Attribute attr ->
+                    match cmp with
+                    | NE -> Attribute_Exists attr
+                    | EQ -> Attribute_Not_Exists attr
+                    | _ -> True
+                | _ -> invalidOp "internal error; assigning undefined value to non attribute path."
+
+            if left = Undefined then assignUndefined right
+            elif right = Undefined then assignUndefined left
+            else 
+                Compare(cmp, left, right)
 
         let rec extractQuery (expr : Expr) =
             match expr with
@@ -217,7 +224,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
 
     | _ -> invalidQuery()
 
-
+/// prints a query expression to string recognizable by the DynamoDB APIs
 let queryExprToString (getAttrId : AttributePath -> string) 
                         (getValueId : AttributeValue -> string) (qExpr : QueryExpr) =
 
@@ -304,15 +311,22 @@ let isKeyConditionCompatible (qExpr : QueryExpr) =
     if aux qExpr then !hashKeyRefs = 1 && !rangeKeyRefs <= 1
     else false
 
+
 let private attrValueCmp = new AttributeValueComparer() :> IEqualityComparer<_>
 
+/// Conditional expression parsed form holder
 [<CustomEquality; NoComparison>]
 type ConditionalExpression =
     {
+        /// Query conditional expression
         QueryExpr : QueryExpr
-        Expression : string
+        /// Specifies whether this query is compatible with DynamoDB key conditions
         IsQueryCompatible : bool
+        /// Expression string
+        Expression : string
+        /// Expression attribute names
         Attributes : (string * string) []
+        /// Expression attribute values
         Values : (string * AttributeValue) []
     }
 with
@@ -322,6 +336,7 @@ with
     member __.WriteValuesTo(target : Dictionary<string, AttributeValue>) =
         for k,v in __.Values do target.[k] <- v
 
+    /// Extracts condition expression from given quoted F# predicate
     static member Extract (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
         match extractQueryExpr recordInfo expr with
         | False | True -> invalidArg "expr" "supplied query is tautological."
@@ -356,6 +371,8 @@ with
             Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.sortBy fst |> Seq.toArray
         }
 
+    /// Append expression variables to existing state, while building a new expression string
+    /// Used for combined key and filter conditions
     member cexpr.BuildAppendedConditional(attrs : Dictionary<string, string>, values : Dictionary<string, AttributeValue>) : string =
         let getAttrId (attr : AttributePath) =
             let rp = attr.RootProperty

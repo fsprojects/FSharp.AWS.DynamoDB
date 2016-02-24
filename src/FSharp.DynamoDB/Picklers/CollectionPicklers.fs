@@ -12,6 +12,10 @@ open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
 
+//
+//  Pickler implementations for collection types
+//
+
 type ListPickler<'List, 'T when 'List :> seq<'T>>(ctor : seq<'T> -> 'List, nullV : 'List, tp : Pickler<'T>) =
     inherit Pickler<'List>()
     override __.PickleType = PickleType.List
@@ -39,6 +43,8 @@ type ListPickler<'List, 'T when 'List :> seq<'T>>(ctor : seq<'T> -> 'List, nullV
 
     interface ICollectionPickler with
         member __.ElementPickler = tp :> _
+
+
 
 type BytesSetPickler() =
     inherit Pickler<Set<byte[]>>()
@@ -73,6 +79,8 @@ type BytesSetPickler() =
     interface ICollectionPickler with
         member __.ElementPickler = new ByteArrayPickler() :> _
 
+
+
 type NumSetPickler<'T when 'T : comparison> (tp : NumRepresentablePickler<'T>) =
     inherit Pickler<Set<'T>>()
     override __.DefaultValue = Set.empty
@@ -96,6 +104,8 @@ type NumSetPickler<'T when 'T : comparison> (tp : NumRepresentablePickler<'T>) =
 
     interface ICollectionPickler with
         member __.ElementPickler = tp :> _
+
+
 
 type StringSetPickler<'T when 'T : comparison> (tp : StringRepresentablePickler<'T>) =
     inherit Pickler<Set<'T>>()
@@ -128,6 +138,8 @@ let mkSetPickler<'T when 'T : comparison>(tp : Pickler<'T>) : Pickler<Set<'T>> =
     | :? StringRepresentablePickler<'T> as tc -> StringSetPickler<'T>(tc) :> _
     | _ -> UnSupportedType.Raise typeof<Set<'T>>
 
+
+
 type MapPickler<'Value>(vp : Pickler<'Value>) =
     inherit Pickler<Map<string,'Value>>()
     override __.PickleType = PickleType.Map
@@ -139,11 +151,17 @@ type MapPickler<'Value>(vp : Pickler<'Value>) =
         else
             let m = 
                 map 
-                |> Seq.choose (fun kv -> 
+                |> Seq.choose (fun kv ->
+                    if not <| isValidFieldName kv.Key then
+                        let msg = sprintf "unsupported key name '%s'. should be alphanumeric and not starting with digit." kv.Key
+                        invalidArg "map" msg
+
                     match vp.Pickle kv.Value with 
                     | None -> None 
                     | Some av -> Some (keyVal kv.Key av)) 
                 |> cdict
+
+            if m.Count = 0 then None else
 
             AttributeValue(M = m) |> Some
             

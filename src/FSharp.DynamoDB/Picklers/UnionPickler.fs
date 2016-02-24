@@ -15,6 +15,10 @@ open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
 
+//
+//  Pickler implementation for F# Union types
+//
+
 type private UnionCaseData = 
     { 
         UCI : UnionCaseInfo

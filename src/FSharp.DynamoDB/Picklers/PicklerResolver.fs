@@ -12,6 +12,10 @@ open Microsoft.FSharp.Reflection
 open FSharp.DynamoDB
 open FSharp.DynamoDB.TypeShape
 
+//
+//  Pickler resolution implementation
+//
+
 [<AutoOpen>]
 module private ResolverImpl =
 
@@ -143,5 +147,7 @@ module private ResolverImpl =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module internal Pickler =
 
+    /// Resolves pickler for given type
     let resolveUntyped (t : Type) = CachedResolver.Create().Resolve t
+    /// Resolves pickler for given type
     let resolve<'T> () = CachedResolver.Create().Resolve<'T> ()

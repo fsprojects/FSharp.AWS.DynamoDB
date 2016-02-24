@@ -2,7 +2,6 @@
 module internal FSharp.DynamoDB.RecordPickler
 
 open System
-open System.Text.RegularExpressions
 open System.Collections
 open System.Collections.Generic
 open System.IO
@@ -15,10 +14,9 @@ open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
 
-let private fieldNameRegex = new Regex("^[0-9a-zA-Z]+", RegexOptions.Compiled)
-let isValidFieldName (name : string) =
-    fieldNameRegex.IsMatch name && not <| Char.IsDigit name.[0]   
-    
+//
+//  Pickler implementation for F# record types
+//
 
 [<CustomEquality; NoComparison>]
 type RecordInfo =
@@ -130,6 +128,8 @@ type RecordPickler<'T>(ctorInfo : ConstructorInfo, properties : RecordPropertyIn
     override __.UnPickle a =
         if a.IsMSet then __.ToRecord a.M
         else invalidCast a
+
+
 
 let mkTuplePickler<'T> (resolver : IPicklerResolver) =
     let ctor, rest = FSharpValue.PreComputeTupleConstructorInfo(typeof<'T>)
