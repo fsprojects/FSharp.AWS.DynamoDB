@@ -51,8 +51,8 @@ type NoDefaultValueAttribute() =
 /// Serialization/Deserialization methods before being uploaded to the table.
 type internal IPropertySerializer =
     abstract PickleType : Type
-    abstract Serialize   : value:obj -> obj
-    abstract Deserialize : pickle:obj -> obj
+    abstract Serialize   : value:'T -> obj
+    abstract Deserialize : pickle:obj -> 'T
 
 /// Declares that the given property should be serialized using the given
 /// Serialization/Deserialization methods before being uploaded to the table.
@@ -60,9 +60,9 @@ type internal IPropertySerializer =
 type PropertySerializerAttribute<'PickleType>() =
     inherit Attribute()
     /// Serializes a value to the given pickle type
-    abstract Serialize   :  obj -> 'PickleType
+    abstract Serialize   :  'T -> 'PickleType
     /// Deserializes a value from the given pickle type
-    abstract Deserialize : 'PickleType -> obj
+    abstract Deserialize : 'PickleType -> 'T
 
     interface IPropertySerializer with
         member __.PickleType = typeof<'PickleType>
@@ -74,7 +74,7 @@ type PropertySerializerAttribute<'PickleType>() =
 type BinaryFormatterAttribute() =
     inherit PropertySerializerAttribute<byte[]>()
 
-    override __.Serialize(value:obj) =
+    override __.Serialize(value:'T) =
         let bfs = new BinaryFormatter()
         use m = new MemoryStream()
         bfs.Serialize(m, value)
@@ -83,7 +83,7 @@ type BinaryFormatterAttribute() =
     override __.Deserialize(pickle : byte[]) =
         let bfs = new BinaryFormatter()
         use m = new MemoryStream(pickle)
-        bfs.Deserialize(m)
+        bfs.Deserialize(m) :?> 'T
 
 /// Metadata on a table key attribute 
 type KeyAttributeSchema = 

@@ -59,7 +59,7 @@ with
         let attributes = prop.GetAttributes()
         let pickler = 
             match attributes |> Seq.tryPick (fun a -> match box a with :? IPropertySerializer as ps -> Some ps | _ -> None) with
-            | Some serializer -> new SerializerAttributePickler(prop, serializer, resolver) :> Pickler
+            | Some serializer -> mkSerializerAttributePickler resolver serializer prop.PropertyType
             | None -> resolver.Resolve prop.PropertyType
 
         let name =

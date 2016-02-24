@@ -12,6 +12,7 @@ open Microsoft.FSharp.Core.LanguagePrimitives
 open Amazon.DynamoDBv2.Model
 
 open FSharp.DynamoDB
+open FSharp.DynamoDB.TypeShape
 
 //
 //  Pickler implementations for primitive types
@@ -155,21 +156,26 @@ type OptionPickler<'T>(tp : Pickler<'T>) =
     override __.Pickle topt = match topt with None -> None | Some t -> tp.Pickle t
     override __.UnPickle a = if a.NULL then None else Some(tp.UnPickle a)
 
-type SerializerAttributePickler(propertyInfo : PropertyInfo, serializer : IPropertySerializer, resolver : IPicklerResolver) =
-    inherit Pickler()
+type SerializerAttributePickler<'T>(serializer : IPropertySerializer, resolver : IPicklerResolver) =
+    inherit Pickler<'T>()
 
     let picklePickler = resolver.Resolve serializer.PickleType
 
-    override __.Type = propertyInfo.PropertyType
     override __.PickleType = picklePickler.PickleType
     override __.PicklerType = PicklerType.Serialized
-    override __.DefaultValueUntyped = 
+    override __.DefaultValue = 
         raise <| NotSupportedException("Default values not supported in serialized types.")
 
-    override __.PickleUntyped value = 
+    override __.Pickle value = 
         let pickle = serializer.Serialize value
         picklePickler.PickleUntyped pickle
 
-    override __.UnPickleUntyped a =
+    override __.UnPickle a =
         let pickle = picklePickler.UnPickleUntyped a
         serializer.Deserialize pickle
+
+let mkSerializerAttributePickler (resolver : IPicklerResolver) (serializer : IPropertySerializer) (t : Type) =
+    getShape(t).Accept { 
+        new IFunc<Pickler> with 
+            member __.Invoke<'T> () = 
+                new SerializerAttributePickler<'T>(serializer, resolver) :> _ }
