@@ -50,9 +50,7 @@ type ``Simple Table Operation Tests`` () =
             Unions = [Choice1Of3 (guid()) ; Choice2Of3(rand()) ; Choice3Of3(Guid.NewGuid().ToByteArray())]
         }
 
-    let run = Async.RunSynchronously
-
-    let table = TableContext.GetTableContext<SimpleRecord>(client, tableName, createIfNotExists = true) |> run
+    let table = TableContext.GetTableContext<SimpleRecord>(client, tableName, createIfNotExists = true)
 
     [<Fact>]
     let ``Convert to compatible table`` () =
@@ -62,30 +60,30 @@ type ``Simple Table Operation Tests`` () =
     [<Fact>]
     let ``Simple Put Operation`` () =
         let value = mkItem()
-        let key = table.PutItemAsync value |> run
-        let value' = table.GetItemAsync key |> run
+        let key = table.PutItem value
+        let value' = table.GetItem key
         value' |> should equal value
 
     [<Fact>]
     let ``ContainsKey Operation`` () =
         let value = mkItem()
-        let key = table.PutItemAsync value |> run
-        table.ContainsKeyAsync key |> run |> should equal true
+        let key = table.PutItem value
+        table.ContainsKey key |> should equal true
 
     [<Fact>]
     let ``Batch Put Operation`` () =
         let values = set [ for i in 1L .. 20L -> mkItem() ]
-        let keys = table.BatchPutItemsAsync values |> run
-        let values' = table.BatchGetItemsAsync keys |> run |> Set.ofArray
+        let keys = table.BatchPutItems values
+        let values' = table.BatchGetItems keys |> Set.ofArray
         values' |> should equal values
 
     [<Fact>]
     let ``Simple Delete Operation`` () =
         let item = mkItem()
-        let key = table.PutItemAsync item |> run
-        table.ContainsKeyAsync key |> run |> should equal true
-        table.DeleteItemAsync key |> run
-        table.ContainsKeyAsync key |> run |> should equal false
+        let key = table.PutItem item
+        table.ContainsKey key |> should equal true
+        table.DeleteItem key
+        table.ContainsKey key |> should equal false
 
     interface IDisposable with
         member __.Dispose() =

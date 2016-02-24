@@ -66,7 +66,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         record.ExtractOpExprUpdater expr
 
     /// <summary>
-    ///     Asynchronously puts a record item to the table.
+    ///     Asynchronously puts a record item in the table.
     /// </summary>
     /// <param name="item">Item to be written.</param>
     /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
@@ -91,13 +91,29 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     }
 
     /// <summary>
-    ///     Asynchronously puts a record item to the table.
+    ///     Asynchronously puts a record item in the table.
     /// </summary>
     /// <param name="item">Item to be written.</param>
     /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
     member __.PutItemAsync(item : 'TRecord, precondition : Expr<'TRecord -> bool>) = async {
         return! __.PutItemAsync(item, __.PrecomputeConditionalExpr precondition)
     }
+
+    /// <summary>
+    ///     Puts a record item in the table.
+    /// </summary>
+    /// <param name="item">Item to be written.</param>
+    /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
+    member __.PutItem(item : 'TRecord, ?precondition : ConditionExpression<'TRecord>) =
+        __.PutItemAsync(item, ?precondition = precondition) |> Async.RunSynchronously
+
+    /// <summary>
+    ///     Puts a record item in the table.
+    /// </summary>
+    /// <param name="item">Item to be written.</param>
+    /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
+    member __.PutItem(item : 'TRecord, precondition : Expr<'TRecord -> bool>) =
+        __.PutItemAsync(item, precondition) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously puts a collection of items to the table as a batch write operation.
@@ -122,6 +138,14 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
 
         return items |> Array.map record.ExtractKey
     }
+
+    /// <summary>
+    ///     Puts a collection of items to the table as a batch write operation.
+    ///     At most 25 items can be written in a single batch write operation.
+    /// </summary>
+    /// <param name="items">Items to be written.</param>
+    member __.BatchPutItems(items : seq<'TRecord>) =
+        __.BatchPutItemsAsync(items) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously updates item with supplied key using provided update expression.
@@ -190,6 +214,42 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     }
 
     /// <summary>
+    ///     Updates item with supplied key using provided update expression.
+    /// </summary>
+    /// <param name="key">Key of item to be updated.</param>
+    /// <param name="updater">Table update expression.</param>
+    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+    /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
+    member __.UpdateItem(key : TableKey, updater : UpdateExpression<'TRecord>, 
+                                ?precondition : ConditionExpression<'TRecord>, ?returnLatest : bool) =
+        __.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
+        |> Async.RunSynchronously
+
+    /// <summary>
+    ///     Updates item with supplied key using provided record update expression.
+    /// </summary>
+    /// <param name="key">Key of item to be updated.</param>
+    /// <param name="updater">Table update expression.</param>
+    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+    /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
+    member __.UpdateItem(key : TableKey, updater : Expr<'TRecord -> 'TRecord>, 
+                                ?precondition : Expr<'TRecord -> bool>, ?returnLatest : bool) =
+        __.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
+        |> Async.RunSynchronously
+
+    /// <summary>
+    ///     Updates item with supplied key using provided record update operation.
+    /// </summary>
+    /// <param name="key">Key of item to be updated.</param>
+    /// <param name="updater">Table update expression.</param>
+    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+    /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
+    member __.UpdateItem(key : TableKey, updater : Expr<'TRecord -> UpdateOp>, 
+                                ?precondition : Expr<'TRecord -> bool>, ?returnLatest : bool) =
+        __.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
+        |> Async.RunSynchronously
+
+    /// <summary>
     ///     Asynchronously checks whether item of supplied key exists in table.
     /// </summary>
     /// <param name="key">Key to be checked.</param>
@@ -200,6 +260,13 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
         return response.IsItemSet
     }
+
+    /// <summary>
+    ///     Checks whether item of supplied key exists in table.
+    /// </summary>
+    /// <param name="key">Key to be checked.</param>
+    member __.ContainsKey(key : TableKey) = 
+        __.ContainsKeyAsync(key) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously fetches item of given key from table.
@@ -217,6 +284,12 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
 
         return record.OfAttributeValues response.Item
     }
+
+    /// <summary>
+    ///     Asynchronously fetches item of given key from table.
+    /// </summary>
+    /// <param name="key">Key of item to be fetched.</param>
+    member __.GetItem(key : TableKey) = __.GetItemAsync(key) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously performs a batch fetch of items with supplied keys.
@@ -241,6 +314,15 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     }
 
     /// <summary>
+    ///     Performs a batch fetch of items with supplied keys.
+    /// </summary>
+    /// <param name="keys">Keys of items to be fetched.</param>
+    /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
+    member __.BatchGetItems(keys : seq<TableKey>, ?consistentRead : bool) =
+        __.BatchGetItemsAsync(keys, ?consistentRead = consistentRead)
+        |> Async.RunSynchronously
+
+    /// <summary>
     ///     Asynchronously deletes item of given key from table.
     /// </summary>
     /// <param name="key">Key of item to be deleted.</param>
@@ -253,6 +335,13 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "DeleteItem request returned error %O" response.HttpStatusCode
     }
+
+    /// <summary>
+    ///     Deletes item of given key from table.
+    /// </summary>
+    /// <param name="key">Key of item to be deleted.</param>
+    member __.DeleteItem(key : TableKey) =
+        __.DeleteItemAsync(key) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously performs batch delete operation on items of given keys.
@@ -275,6 +364,13 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "PutItem request returned error %O" response.HttpStatusCode    
     }
+
+    /// <summary>
+    ///     Performs batch delete operation on items of given keys.
+    /// </summary>
+    /// <param name="keys">Keys of items to be deleted.</param>
+    member __.BatchDeleteItems(keys : seq<TableKey>) = 
+        __.BatchDeleteItemsAsync(keys) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously queries table with given condition expressions.
@@ -353,6 +449,34 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     }
 
     /// <summary>
+    ///     Queries table with given condition expressions.
+    /// </summary>
+    /// <param name="keyCondition">Key condition expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items to evaluate.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    member __.Query(keyCondition : ConditionExpression<'TRecord>, ?filterCondition : ConditionExpression<'TRecord>, 
+                            ?limit: int, ?consistentRead : bool, ?scanIndexForward : bool) : 'TRecord[] =
+        __.QueryAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit, 
+                        ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+        |> Async.RunSynchronously
+
+    /// <summary>
+    ///     Queries table with given condition expressions.
+    /// </summary>
+    /// <param name="keyCondition">Key condition expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items to evaluate.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    member __.Query(keyCondition : Expr<'TRecord -> bool>, ?filterCondition : Expr<'TRecord -> bool>, 
+                            ?limit: int, ?consistentRead : bool, ?scanIndexForward : bool) : 'TRecord[] =
+        __.QueryAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit, 
+                        ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+        |> Async.RunSynchronously
+
+    /// <summary>
     ///     Asynchronously scans table with given condition expressions.
     /// </summary>
     /// <param name="filterCondition">Filter condition expression.</param>
@@ -400,17 +524,37 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return! __.ScanAsync(cond, ?limit = limit, ?consistentRead = consistentRead)
     }
 
+    /// <summary>
+    ///     Scans table with given condition expressions.
+    /// </summary>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items to evaluate.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member __.Scan(filterCondition : ConditionExpression<'TRecord>, ?limit : int, ?consistentRead : bool) : 'TRecord [] =
+        __.ScanAsync(filterCondition, ?limit = limit, ?consistentRead = consistentRead)
+        |> Async.RunSynchronously
+
+    /// <summary>
+    ///     Scans table with given condition expressions.
+    /// </summary>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items to evaluate.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member __.Scan(filterCondition : Expr<'TRecord -> bool>, ?limit : int, ?consistentRead : bool) : 'TRecord [] =
+        __.ScanAsync(filterCondition, ?limit = limit, ?consistentRead = consistentRead)
+        |> Async.RunSynchronously
+
 
 type TableContext =
 
     /// <summary>
-    ///     Generates a DynamoDB client instance for given F# record, table name.
+    ///     Asynchronously generates a DynamoDB client instance for given F# record, table name.
     /// </summary>
     /// <param name="client">DynamoDB client instance.</param>
     /// <param name="tableName">Table name to target.</param>
     /// <param name="createIfNotExists">Create table if it does not already exist. Defaults to false.</param>
     /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
-    static member GetTableContext<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) = async {
+    static member GetTableContextAsync<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) = async {
         let createIfNotExists = defaultArg createIfNotExists false
         let rd = RecordDescriptor.Create<'TRecord> ()
         try
@@ -443,6 +587,17 @@ type TableContext =
 
         return new TableContext<'TRecord>(client, tableName, rd)
     }
+
+    /// <summary>
+    ///     Generates a DynamoDB client instance for given F# record, table name.
+    /// </summary>
+    /// <param name="client">DynamoDB client instance.</param>
+    /// <param name="tableName">Table name to target.</param>
+    /// <param name="createIfNotExists">Create table if it does not already exist. Defaults to false.</param>
+    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
+    static member GetTableContext<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) =
+        TableContext.GetTableContextAsync<'TRecord>(client, tableName, ?createIfNotExists = createIfNotExists)
+        |> Async.RunSynchronously
 
 
 [<AutoOpen>]
