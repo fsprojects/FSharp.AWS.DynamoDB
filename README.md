@@ -49,7 +49,7 @@ Queries and scans can be performeds using quoted predicates
 let qResults = table.Query(keyCondition = <@ fun r -> r.ProcessId = 0 @>, 
                             filterCondition = <@ fun r -> r.Name = "test" @>)
                             
-let sResults = table.Scan <@ fun r -> r.Started.Value < DateTimeOffset.Now - TimeSpan.FromMinutes 1.  @>
+let sResults = table.Scan <@ fun r -> r.Started.Value >= DateTimeOffset.Now - TimeSpan.FromMinutes 1.  @>
 ```
 
 Values can be updated using quoted update expressions
