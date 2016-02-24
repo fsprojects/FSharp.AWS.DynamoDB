@@ -84,6 +84,23 @@ type ByteArrayPickler() =
         else
             invalidCast a
 
+type MemoryStreamPickler() =
+    inherit Pickler<MemoryStream> ()
+    override __.PickleType = PickleType.Bytes
+    override __.PicklerType = PicklerType.Value
+
+    override __.DefaultValue = null
+    override __.Pickle m = 
+        if isNull m then Some <| AttributeValue(NULL = true)
+        elif m.Length = 0L then None 
+        else Some <| AttributeValue(B = m)
+
+    override __.UnPickle a = 
+        if a.NULL then null
+        elif notNull a.B then a.B
+        else
+            invalidCast a
+
 type GuidPickler() =
     inherit StringRepresentablePickler<Guid> ()
     override __.PickleType = PickleType.String

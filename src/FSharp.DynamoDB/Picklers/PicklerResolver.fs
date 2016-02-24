@@ -39,6 +39,7 @@ module private ResolverImpl =
         | :? ShapeTimeSpan -> new TimeSpanPickler() :> _
         | :? ShapeDateTime -> UnSupportedType.Raise(t, "please use DateTimeOffset instead.")
         | :? ShapeDateTimeOffset -> new DateTimeOffsetPickler() :> _
+        | _ when t = typeof<System.IO.MemoryStream> -> new MemoryStreamPickler() :> _
         | ShapeEnum s ->
             s.Accept {
                 new IEnumVisitor<Pickler> with
