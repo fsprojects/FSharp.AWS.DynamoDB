@@ -55,3 +55,12 @@ Values can be updated using quoted update expressions
 let updated = table.UpdateItem(<@ fun r -> { r with Started = Some DateTimeOffset.Now } @>, 
                                 preCondition = <@ fun r -> r.DateTimeOffset = None @>)
 ```
+
+## Supported Field Types
+
+FSharp.DynamoDB supports the following field types:
+* Numerical types, enumerations and strings.
+* Array, Nullable, Guid, DateTimeOffset and TimeSpan.
+* F# sets with elements of type number, string or byte[].
+* F# Maps with key of type string.
+* F# records and unions (recursive types not supported).
