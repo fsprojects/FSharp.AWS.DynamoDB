@@ -327,10 +327,10 @@ type ``Conditional Expression Tests`` () =
 
     [<Fact>]
     let ``Fail on identical comparands`` () =
-        fun () -> table.ExtractConditionalExpr <@ fun r -> r.Guid < r.Guid @>
+        fun () -> table.PrecomputeConditionalExpr <@ fun r -> r.Guid < r.Guid @>
         |> shouldFailwith<_, ArgumentException>
 
-        fun () -> table.ExtractConditionalExpr <@ fun r -> r.Bytes.Length = r.Bytes.Length @>
+        fun () -> table.PrecomputeConditionalExpr <@ fun r -> r.Bytes.Length = r.Bytes.Length @>
         |> shouldFailwith<_, ArgumentException>
 
 
@@ -354,7 +354,7 @@ type ``Conditional Expression Tests`` () =
 
         seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; RangeKey = int64 i }}
         |> Seq.splitInto 25
-        |> Seq.map table.PutItemsAsync
+        |> Seq.map table.BatchPutItemsAsync
         |> Async.Parallel
         |> Async.Ignore
         |> run
@@ -368,7 +368,7 @@ type ``Conditional Expression Tests`` () =
 
         seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; RangeKey = int64 i ; Bool = i % 2 = 0}}
         |> Seq.splitInto 25
-        |> Seq.map table.PutItemsAsync
+        |> Seq.map table.BatchPutItemsAsync
         |> Async.Parallel
         |> Async.Ignore
         |> run
@@ -380,7 +380,7 @@ type ``Conditional Expression Tests`` () =
 
     [<Fact>]
     let ``Detect incompatible key conditions`` () =
-        let test outcome q = table.ExtractConditionalExpr(q).IsQueryCompatible |> should equal outcome
+        let test outcome q = table.PrecomputeConditionalExpr(q).IsQueryCompatible |> should equal outcome
 
         test true <@ fun r -> r.HashKey = "2" @>
         test true <@ fun r -> r.HashKey = "2" && r.RangeKey < 2L @>
@@ -402,7 +402,7 @@ type ``Conditional Expression Tests`` () =
 
         seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; RangeKey = int64 i ; Bool = i % 2 = 0}}
         |> Seq.splitInto 25
-        |> Seq.map table.PutItemsAsync
+        |> Seq.map table.BatchPutItemsAsync
         |> Async.Parallel
         |> Async.Ignore
         |> run

@@ -6,11 +6,17 @@ open System.Collections.Generic
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
+//
+//  Table key schema extractor methods for F# records
+//
+
+/// Describes the key structure of a given F# record
 type KeyStructure =
     | HashKeyOnly of hashKeyProperty:RecordPropertyInfo
     | Combined of hashKeyProperty:RecordPropertyInfo * rangeKeyProperty:RecordPropertyInfo
     | DefaultHashKey of hkName:string * hkValue:obj * hkPickler:Pickler * rangeKeyProperty:RecordPropertyInfo
 with
+    /// Extracts given TableKey to AttributeValue form
     static member ExtractKey(keyStructure : KeyStructure, key : TableKey) =
         let dict = new Dictionary<string, AttributeValue> ()
         let extractKey name (pickler : Pickler) (value:obj) =
@@ -34,7 +40,7 @@ with
 
         dict
 
-
+    /// Extracts key from given record instance
     static member ExtractKey(keyStructure : KeyStructure, recordInfo : RecordInfo, record : 'Record) =
         let inline getValue (rp : RecordPropertyInfo) = rp.PropertyInfo.GetValue(record)
         match keyStructure with
@@ -47,6 +53,7 @@ with
             let rangeKey = getValue rkp
             TableKey.Combined(hashKey, rangeKey)
 
+    /// Builds key structures from supplied F# record info
     static member FromRecordInfo (recordInfo : RecordInfo) =
         let hkcaOpt = recordInfo.Type.TryGetAttribute<HashKeyConstantAttribute> ()
 
@@ -80,8 +87,8 @@ with
         | _ -> invalidArg (string recordInfo.Type) "Found more than one record fields carrying the HashKey attribute."
 
 
-
 type TableKeySchema with
+    /// Extracts table key schema record from key structure type
     static member OfKeyStructure(ks : KeyStructure) =
         let mkTableKeySchema h r = { HashKey = h ; RangeKey = r }
         let mkKeySchema (name : string) (pickler : Pickler) =
@@ -102,6 +109,7 @@ type TableKeySchema with
         | Combined(hk, rk) -> mkTableKeySchema (mkKeySchema hk.Name hk.Pickler) (Some (mkKeySchema rk.Name rk.Pickler))
         | DefaultHashKey(name,_,pickler,rk) -> mkTableKeySchema (mkKeySchema name pickler) (Some (mkKeySchema rk.Name rk.Pickler))
 
+    /// Extract key schema from DynamoDB table description object
     static member OfTableDescription (td : TableDescription) =
         let mkKeySchema (kse : KeySchemaElement) =
             let ad = td.AttributeDefinitions |> Seq.find (fun ad -> ad.AttributeName = kse.AttributeName)
@@ -111,6 +119,7 @@ type TableKeySchema with
         let rk = td.KeySchema |> Seq.tryPick (fun ks -> if ks.KeyType = KeyType.RANGE then Some(mkKeySchema ks) else None)
         { HashKey = hk ; RangeKey = rk }
 
+    /// Create a CreateTableRequest using supplied key schema
     member schema.CreateCreateTableRequest (tableName : string, provisionedThroughput : ProvisionedThroughput) =
         let ctr = new CreateTableRequest(TableName = tableName)
         let addKey kt (ks : KeyAttributeSchema) =

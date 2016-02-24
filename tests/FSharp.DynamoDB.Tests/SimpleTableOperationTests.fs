@@ -75,8 +75,8 @@ type ``Simple Table Operation Tests`` () =
     [<Fact>]
     let ``Batch Put Operation`` () =
         let values = set [ for i in 1L .. 20L -> mkItem() ]
-        let keys = table.PutItemsAsync values |> run
-        let values' = table.GetItemsAsync keys |> run |> Set.ofArray
+        let keys = table.BatchPutItemsAsync values |> run
+        let values' = table.BatchGetItemsAsync keys |> run |> Set.ofArray
         values' |> should equal values
 
     [<Fact>]
