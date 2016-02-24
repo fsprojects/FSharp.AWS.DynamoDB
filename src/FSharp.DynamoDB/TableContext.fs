@@ -554,7 +554,7 @@ type TableContext =
     /// <param name="tableName">Table name to target.</param>
     /// <param name="createIfNotExists">Create table if it does not already exist. Defaults to false.</param>
     /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
-    static member GetTableContextAsync<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) = async {
+    static member CreateAsync<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) = async {
         let createIfNotExists = defaultArg createIfNotExists false
         let rd = RecordDescriptor.Create<'TRecord> ()
         try
@@ -595,8 +595,8 @@ type TableContext =
     /// <param name="tableName">Table name to target.</param>
     /// <param name="createIfNotExists">Create table if it does not already exist. Defaults to false.</param>
     /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
-    static member GetTableContext<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) =
-        TableContext.GetTableContextAsync<'TRecord>(client, tableName, ?createIfNotExists = createIfNotExists)
+    static member Create<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) =
+        TableContext.CreateAsync<'TRecord>(client, tableName, ?createIfNotExists = createIfNotExists)
         |> Async.RunSynchronously
 
 

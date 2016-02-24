@@ -79,7 +79,7 @@ type ``Conditional Expression Tests`` () =
             Serialized = rand(), guid()
         }
 
-    let table = TableContext.GetTableContext<CondExprRecord>(client, tableName, createIfNotExists = true)
+    let table = TableContext.Create<CondExprRecord>(client, tableName, createIfNotExists = true)
 
     [<Fact>]
     let ``String precondition`` () =
