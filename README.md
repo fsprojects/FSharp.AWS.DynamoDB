@@ -7,6 +7,9 @@ using F# quotation expressions.
 The API draws heavily on the corresponding [FSharp.Azure.Storage](https://github.com/fsprojects/FSharp.Azure.Storage)
 wrapper for Azure table storage.
 
+## NuGet [![NuGet Status](http://img.shields.io/nuget/v/FSharp.DynamoDB.svg?style=flat)](https://www.nuget.org/packages/FSharp.DynamoDB/)
+`Install-Package FSharp.DynamoDB`
+
 ## Introduction
 
 Table items can be represented using F# records:
@@ -46,7 +49,7 @@ Queries and scans can be performeds using quoted predicates
 let qResults = table.Query(keyCondition = <@ fun r -> r.ProcessId = 0 @>, 
                             filterCondition = <@ fun r -> r.Name = "test" @>)
                             
-let sResults = table.Scan <@ fun r -> r.Started.Value < DateTimeOffset.Now - TimeSpan.FromMinutes 1.  @>
+let sResults = table.Scan <@ fun r -> r.Started.Value >= DateTimeOffset.Now - TimeSpan.FromMinutes 1.  @>
 ```
 
 Values can be updated using quoted update expressions
