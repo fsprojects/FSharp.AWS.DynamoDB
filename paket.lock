@@ -2,11 +2,11 @@ REDIRECTS: ON
 NUGET
   remote: https://www.nuget.org/api/v2
   specs:
-    AWSSDK.Core (3.1.4.4)
+    AWSSDK.Core (3.1.5)
       Microsoft.Net.Http (>= 2.2.29) - framework: portable-net45+win8+wp8+wpa81
       PCLCrypto (>= 1.0.2.15130) - framework: portable-net45+win8+wp8+wpa81
       PCLStorage (>= 1.0.2) - framework: portable-net45+win8+wp8+wpa81
-    AWSSDK.DynamoDBv2 (3.1.1.4)
+    AWSSDK.DynamoDBv2 (3.1.1.5)
       AWSSDK.Core (>= 3.1.4.3 < 3.2.0)
     FAKE (4.20.0)
     FsCheck (2.2.4)

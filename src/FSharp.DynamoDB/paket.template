@@ -1,0 +1,21 @@
+type project
+id FSharp.DynamoDB
+description
+    A library that provides an idiomatic F# API for AWS DynamoDB.
+version
+    0.0.1-alpha
+authors
+    Eirik Tsarpalis
+copyright
+    Copyright 2016
+releasenotes
+    RELEASE NOTES
+summary
+    A library that provides an idiomatic F# API for AWS DynamoDB.
+licenseurl https://github.com/eiriktsarpalis/FSharp.DynamoDB/blob/master/License.md
+projecturl https://github.com/eiriktsarpalis/FSharp.DynamoDB
+tags
+    fsharp, f#, aws, amazon, dynamodb
+dependencies
+    AWSSDK.DynamoDBv2 >= LOCKEDVERSION
+	Unquote >= LOCKEDVERSION
