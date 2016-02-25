@@ -37,7 +37,8 @@ type Test =
     }
 
 
-let table = TableContext.Create<Test>(ddb, "test", createIfNotExists = true)
+let table = TableContext.Create<Test>(ddb, "test")
+do table.CreateIfNotExists()
 
 let value = { HashKey = Guid.NewGuid() ; RangeKey = "2" ; Value = 40 ; Date = DateTimeOffset.Now + TimeSpan.FromDays 2. ; Value2 = None ; Values = [|{ A = "foo" ; B = System.Reflection.BindingFlags.Instance }|] ; Map = Map.ofList [("A1",1)] ; Set = [set [1L];set [2L]] ; Bytes = [|"a";null|]; String = ref "1a" ; Unions = [A 42; B("42",3)]}
 
