@@ -118,8 +118,3 @@ type UnSupportedType =
             | Some r -> sprintf "unsupported record field type '%O': %s" fieldType r
 
         raise <| new ArgumentException(message)
-
-open System.Text.RegularExpressions
-let private fieldNameRegex = new Regex("^[0-9a-zA-Z]+", RegexOptions.Compiled)
-let isValidFieldName (name : string) =
-    fieldNameRegex.IsMatch name && not <| Char.IsDigit name.[0]

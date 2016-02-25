@@ -15,55 +15,27 @@ type ConditionalCheckFailedException = Amazon.DynamoDBv2.Model.ConditionalCheckF
 
 /// DynamoDB client object for performing table operations 
 /// in the context of given F# record representationss
-type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : string, record : RecordDescriptor<'TRecord>) =
+[<Sealed; AutoSerializable(false)>]
+type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : string, template : RecordTemplate<'TRecord>) =
 
     /// DynamoDB client instance used for the table operations
     member __.Client = client
     /// DynamoDB table name targeted by the context
     member __.TableName = tableName
     /// Key schema used by the current record/table
-    member __.KeySchema = record.KeySchema
+    member __.KeySchema = template.KeySchema
+    /// Record-induced table template
+    member __.Template = template
 
     /// Creates a new table context instance that uses
     /// a new F# record type. The new F# record type
     /// must define a compatible key schema.
     member __.WithRecordType<'TRecord2>() : TableContext<'TRecord2> =
-        let rd = RecordDescriptor.Create<'TRecord2>()
-        if record.KeySchema <> rd.KeySchema then
+        let rd = RecordTemplate.Define<'TRecord2>()
+        if template.KeySchema <> rd.KeySchema then
             invalidArg (string typeof<'TRecord2>) "incompatible key schema."
         
         new TableContext<'TRecord2>(client, tableName, rd)
-
-    /// <summary>
-    ///     Extracts the key that corresponds to supplied record instance.
-    /// </summary>
-    /// <param name="item">Input record instance.</param>
-    member __.ExtractKey(item : 'TRecord) : TableKey =
-        record.ExtractKey item
-
-    /// <summary>
-    ///     Precomputes a DynamoDB conditional expression using
-    ///     supplied quoted record predicate.
-    /// </summary>
-    /// <param name="expr">Quoted record predicate.</param>
-    member __.PrecomputeConditionalExpr(expr : Expr<'TRecord -> bool>) =
-        record.ExtractConditional expr
-
-    /// <summary>
-    ///     Precomputes a DynamoDB update expression using
-    ///     supplied quoted record update expression.
-    /// </summary>
-    /// <param name="expr">Quoted record update expression.</param>
-    member __.PrecomputeUpdateExpr(expr : Expr<'TRecord -> 'TRecord>) =
-        record.ExtractRecExprUpdater expr
-
-    /// <summary>
-    ///     Precomputes a DynamoDB update expression using
-    ///     supplied quoted record update operations.
-    /// </summary>
-    /// <param name="expr">Quoted record update operations.</param>
-    member __.PrecomputeUpdateExpr(expr : Expr<'TRecord -> UpdateOp>) =
-        record.ExtractOpExprUpdater expr
 
     /// <summary>
     ///     Asynchronously puts a record item in the table.
@@ -71,7 +43,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="item">Item to be written.</param>
     /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
     member __.PutItemAsync(item : 'TRecord, ?precondition : ConditionExpression<'TRecord>) : Async<TableKey> = async {
-        let attrValues = record.ToAttributeValues(item)
+        let attrValues = template.ToAttributeValues(item)
         let request = new PutItemRequest(tableName, attrValues)
         request.ReturnValues <- ReturnValue.NONE
         match precondition with
@@ -87,7 +59,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "PutItem request returned error %O" response.HttpStatusCode
 
-        return record.ExtractKey item
+        return template.ExtractKey item
     }
 
     /// <summary>
@@ -96,7 +68,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="item">Item to be written.</param>
     /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
     member __.PutItemAsync(item : 'TRecord, precondition : Expr<'TRecord -> bool>) = async {
-        return! __.PutItemAsync(item, __.PrecomputeConditionalExpr precondition)
+        return! __.PutItemAsync(item, template.PrecomputeConditionalExpr precondition)
     }
 
     /// <summary>
@@ -122,7 +94,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="items">Items to be written.</param>
     member __.BatchPutItemsAsync(items : seq<'TRecord>) : Async<TableKey[]> = async {
         let mkWriteRequest (item : 'TRecord) =
-            let attrValues = record.ToAttributeValues(item)
+            let attrValues = template.ToAttributeValues(item)
             let pr = new PutRequest(attrValues)
             new WriteRequest(pr)
 
@@ -136,7 +108,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "PutItem request returned error %O" response.HttpStatusCode
 
-        return items |> Array.map record.ExtractKey
+        return items |> Array.map template.ExtractKey
     }
 
     /// <summary>
@@ -157,7 +129,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.UpdateItemAsync(key : TableKey, updater : UpdateExpression<'TRecord>, 
                                 ?precondition : ConditionExpression<'TRecord>, ?returnLatest : bool) : Async<'TRecord> = async {
 
-        let kav = record.ToAttributeValues(key)
+        let kav = template.ToAttributeValues(key)
         let request = new UpdateItemRequest()
         request.Key <- kav
         request.TableName <- tableName
@@ -181,7 +153,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "PutItem request returned error %O" response.HttpStatusCode
 
-        return record.OfAttributeValues response.Attributes
+        return template.OfAttributeValues response.Attributes
     }
 
     /// <summary>
@@ -193,8 +165,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
     member __.UpdateItemAsync(key : TableKey, updateExpr : Expr<'TRecord -> 'TRecord>, 
                                 ?precondition : Expr<'TRecord -> bool>, ?returnLatest : bool) = async {
-        let updater = record.ExtractRecExprUpdater updateExpr
-        let precondition = precondition |> Option.map record.ExtractConditional
+        let updater = template.PrecomputeUpdateExpr updateExpr
+        let precondition = precondition |> Option.map template.PrecomputeConditionalExpr
         return! __.UpdateItemAsync(key, updater, ?returnLatest = returnLatest, ?precondition = precondition)
     }
 
@@ -208,8 +180,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.UpdateItemAsync(key : TableKey, updateExpr : Expr<'TRecord -> UpdateOp>, 
                                 ?precondition : Expr<'TRecord -> bool>, ?returnLatest : bool) = async {
 
-        let updater = record.ExtractOpExprUpdater updateExpr
-        let precondition = precondition |> Option.map record.ExtractConditional
+        let updater = template.PrecomputeUpdateExpr updateExpr
+        let precondition = precondition |> Option.map template.PrecomputeConditionalExpr
         return! __.UpdateItemAsync(key, updater, ?returnLatest = returnLatest, ?precondition = precondition)
     }
 
@@ -254,7 +226,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// </summary>
     /// <param name="key">Key to be checked.</param>
     member __.ContainsKeyAsync(key : TableKey) : Async<bool> = async {
-        let kav = record.ToAttributeValues(key)
+        let kav = template.ToAttributeValues(key)
         let request = new GetItemRequest(tableName, kav)
         let! ct = Async.CancellationToken
         let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
@@ -273,7 +245,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
     member __.GetItemAsync(key : TableKey) : Async<'TRecord> = async {
-        let kav = record.ToAttributeValues(key)
+        let kav = template.ToAttributeValues(key)
         let request = new GetItemRequest(tableName, kav)
         let! ct = Async.CancellationToken
         let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
@@ -282,7 +254,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         elif not response.IsItemSet then
             failwithf "Could not find item %O" key
 
-        return record.OfAttributeValues response.Item
+        return template.OfAttributeValues response.Item
     }
 
     /// <summary>
@@ -299,8 +271,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.BatchGetItemsAsync(keys : seq<TableKey>, ?consistentRead : bool) : Async<'TRecord[]> = async {
         let consistentRead = defaultArg consistentRead false
         let kna = new KeysAndAttributes()
-        kna.AttributesToGet.AddRange(record.Info.Properties |> Seq.map (fun p -> p.Name))
-        kna.Keys.AddRange(keys |> Seq.map record.ToAttributeValues)
+        kna.AttributesToGet.AddRange(template.Info.Properties |> Seq.map (fun p -> p.Name))
+        kna.Keys.AddRange(keys |> Seq.map template.ToAttributeValues)
         kna.ConsistentRead <- consistentRead
         let request = new BatchGetItemRequest()
         request.RequestItems.[tableName] <- kna
@@ -310,7 +282,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "GetItem request returned error %O" response.HttpStatusCode
         
-        return response.Responses.[tableName] |> Seq.map record.OfAttributeValues |> Seq.toArray
+        return response.Responses.[tableName] |> Seq.map template.OfAttributeValues |> Seq.toArray
     }
 
     /// <summary>
@@ -327,7 +299,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// </summary>
     /// <param name="key">Key of item to be deleted.</param>
     member __.DeleteItemAsync(key : TableKey) : Async<unit> = async {
-        let kav = record.ToAttributeValues key
+        let kav = template.ToAttributeValues key
         let request = new DeleteItemRequest(tableName, kav)
         request.ReturnValues <- ReturnValue.NONE
         let! ct = Async.CancellationToken
@@ -349,7 +321,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="keys">Keys of items to be deleted.</param>
     member __.BatchDeleteItemsAsync(keys : seq<TableKey>) = async {
         let mkDeleteRequest (key : TableKey) =
-            let kav = record.ToAttributeValues(key)
+            let kav = template.ToAttributeValues(key)
             let pr = new DeleteRequest(kav)
             new WriteRequest(pr)
 
@@ -429,7 +401,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
 
         do! aux None
         
-        return downloaded |> Seq.map record.OfAttributeValues |> Seq.toArray
+        return downloaded |> Seq.map template.OfAttributeValues |> Seq.toArray
     }
 
     /// <summary>
@@ -443,8 +415,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.QueryAsync(keyCondition : Expr<'TRecord -> bool>, ?filterCondition : Expr<'TRecord -> bool>, 
                             ?limit : int, ?consistentRead : bool, ?scanIndexForward : bool) : Async<'TRecord []> = async {
 
-        let kc = record.ExtractConditional keyCondition
-        let fc = filterCondition |> Option.map record.ExtractConditional
+        let kc = template.PrecomputeConditionalExpr keyCondition
+        let fc = filterCondition |> Option.map template.PrecomputeConditionalExpr
         return! __.QueryAsync(kc, ?filterCondition = fc, ?limit = limit, ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
     }
 
@@ -510,7 +482,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
 
         do! aux None
         
-        return downloaded |> Seq.map record.OfAttributeValues |> Seq.toArray
+        return downloaded |> Seq.map template.OfAttributeValues |> Seq.toArray
     }
 
     /// <summary>
@@ -520,7 +492,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="limit">Maximum number of items to evaluate.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     member __.ScanAsync(filterExpr : Expr<'TRecord -> bool>, ?limit : int, ?consistentRead : bool) : Async<'TRecord []> = async {
-        let cond = record.ExtractConditional filterExpr
+        let cond = template.PrecomputeConditionalExpr filterExpr
         return! __.ScanAsync(cond, ?limit = limit, ?consistentRead = consistentRead)
     }
 
@@ -545,31 +517,24 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         |> Async.RunSynchronously
 
 
-type TableContext =
-
     /// <summary>
-    ///     Asynchronously generates a DynamoDB client instance for given F# record, table name.
+    ///     Asynchronously create described DynamoDB table if it does not already exist.
     /// </summary>
-    /// <param name="client">DynamoDB client instance.</param>
-    /// <param name="tableName">Table name to target.</param>
-    /// <param name="createIfNotExists">Create table if it does not already exist. Defaults to false.</param>
     /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
-    static member CreateAsync<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) = async {
-        let createIfNotExists = defaultArg createIfNotExists false
-        let rd = RecordDescriptor.Create<'TRecord> ()
+    member __.CreateIfNotExistsAsync(?provisionedThroughput : ProvisionedThroughput) : Async<unit> = async {
         try
             let dtr = new DescribeTableRequest(tableName)
             let! ct = Async.CancellationToken
             let! response = client.DescribeTableAsync(dtr, ct) |> Async.AwaitTaskCorrect
             let existingSchema = TableKeySchema.OfTableDescription response.Table
-            if existingSchema <> rd.KeySchema then 
-                sprintf "table '%s' contains incompatible key schema %A, which is incompatible with record '%O'." 
+            if existingSchema <> template.KeySchema then 
+                sprintf "table '%s' exists with key schema %A, which is incompatible with record '%O'." 
                     tableName existingSchema typeof<'TRecord>
                 |> invalidOp
 
-        with :? ResourceNotFoundException when createIfNotExists ->
+        with :? ResourceNotFoundException ->
             let provisionedThroughput = defaultArg provisionedThroughput (new ProvisionedThroughput(10L,10L))
-            let ctr = rd.KeySchema.CreateCreateTableRequest (tableName, provisionedThroughput)
+            let ctr = template.KeySchema.CreateCreateTableRequest (tableName, provisionedThroughput)
             let! ct = Async.CancellationToken
             let! response = client.CreateTableAsync(ctr, ct) |> Async.AwaitTaskCorrect
             if response.HttpStatusCode <> HttpStatusCode.OK then
@@ -584,28 +549,37 @@ type TableContext =
             }
 
             do! awaitReady 30
-
-        return new TableContext<'TRecord>(client, tableName, rd)
     }
 
     /// <summary>
-    ///     Generates a DynamoDB client instance for given F# record, table name.
+    ///     Create described DynamoDB table if it does not already exist.
+    /// </summary>
+    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
+    member __.CreateIfNotExists(?provisionedThroughput : ProvisionedThroughput) =
+        __.CreateIfNotExistsAsync(?provisionedThroughput = provisionedThroughput)
+        |> Async.RunSynchronously
+
+/// Table context factory methods
+type TableContext =
+
+    /// <summary>
+    ///     Creates a DynamoDB client instance for given F# record, table name.
     /// </summary>
     /// <param name="client">DynamoDB client instance.</param>
     /// <param name="tableName">Table name to target.</param>
-    /// <param name="createIfNotExists">Create table if it does not already exist. Defaults to false.</param>
-    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
-    static member Create<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) =
-        TableContext.CreateAsync<'TRecord>(client, tableName, ?createIfNotExists = createIfNotExists)
-        |> Async.RunSynchronously
+    static member Create<'TRecord>(client : IAmazonDynamoDB, tableName : string) =
+        if not <| isValidTableName tableName then invalidArg tableName "unsupported DynamoDB table name."
+        new TableContext<'TRecord>(client, tableName, RecordTemplate.Define<'TRecord>())
 
 
 [<AutoOpen>]
 module TableContextUtils =
+
+    let template<'TRecord> = RecordTemplate.Define<'TRecord>()
     
     /// Precomputes a conditional expression
-    let inline cond (ctx : TableContext<'TRecord>) expr = ctx.PrecomputeConditionalExpr expr
+    let inline cond (tmp : RecordTemplate<'TRecord>) expr = tmp.PrecomputeConditionalExpr expr
     /// Precomputes an update expression
-    let inline updateOp (ctx : TableContext<'TRecord>) (expr : Expr<'TRecord -> UpdateOp>) = ctx.PrecomputeUpdateExpr expr
+    let inline updateOp (tmp : RecordTemplate<'TRecord>) (expr : Expr<'TRecord -> UpdateOp>) = tmp.PrecomputeUpdateExpr expr
     /// Precomputes an update expression
-    let inline updateRec (ctx : TableContext<'TRecord>) (expr : Expr<'TRecord -> 'TRecord>) = ctx.PrecomputeUpdateExpr expr
+    let inline updateRec (tmp : RecordTemplate<'TRecord>) (expr : Expr<'TRecord -> 'TRecord>) = tmp.PrecomputeUpdateExpr expr

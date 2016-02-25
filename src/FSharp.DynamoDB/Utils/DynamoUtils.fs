@@ -1,8 +1,10 @@
 ﻿[<AutoOpen>]
 module internal FSharp.DynamoDB.DynamoUtils
 
+open System
 open System.IO
 open System.Collections.Generic
+open System.Text.RegularExpressions
 
 open Amazon.DynamoDBv2.Model
 
@@ -93,3 +95,16 @@ type AttributeValue with
 
         else
             "{ }"
+
+
+// DynamoDB Name limitations, see:
+// http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Limits.html
+let private tableNameRegex = Regex("^[\w\-_\.]*$", RegexOptions.Compiled)
+let isValidTableName (tableName : string) =
+    if tableName.Length < 3 || tableName.Length > 255 then false
+    elif not <| tableNameRegex.IsMatch tableName then false
+    else true
+
+let private fieldNameRegex = new Regex("^[a-zA-Z][a-zA-Z0-9]*", RegexOptions.Compiled)
+let isValidFieldName (name : string) =
+    fieldNameRegex.IsMatch name

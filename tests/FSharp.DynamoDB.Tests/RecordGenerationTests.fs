@@ -13,10 +13,10 @@ open FSharp.DynamoDB
 module ``Record Generation Tests`` =
 
     let testRoundTrip<'Record> () =
-        let rd = RecordDescriptor.Create<'Record>()
+        let rt = RecordTemplate.Define<'Record>()
         let roundTrip (r : 'Record) =
-            rd.ToAttributeValues r
-            |> rd.OfAttributeValues
+            rt.ToAttributeValues r
+            |> rt.OfAttributeValues
             |> should equal r
 
         Check.Quick round
@@ -41,66 +41,66 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Generate correct schema for S Record`` () =
-        let rd = RecordDescriptor.Create<``S Record``>()
-        rd.KeySchema.HashKey.AttributeName |> should equal "A1"
-        rd.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.S
-        rd.KeySchema.RangeKey |> should equal None
+        let rt = RecordTemplate.Define<``S Record``>()
+        rt.KeySchema.HashKey.AttributeName |> should equal "A1"
+        rt.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.S
+        rt.KeySchema.RangeKey |> should equal None
 
     [<Fact>]
     let ``Generate correct schema for N Record`` () =
-        let rd = RecordDescriptor.Create<``N Record``>()
-        rd.KeySchema.HashKey.AttributeName |> should equal "A1"
-        rd.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.N
-        rd.KeySchema.RangeKey |> should equal None
+        let rt = RecordTemplate.Define<``N Record``>()
+        rt.KeySchema.HashKey.AttributeName |> should equal "A1"
+        rt.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.N
+        rt.KeySchema.RangeKey |> should equal None
 
     [<Fact>]
     let ``Generate correct schema for B Record`` () =
-        let rd = RecordDescriptor.Create<``B Record``>()
-        rd.KeySchema.HashKey.AttributeName |> should equal "A1"
-        rd.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.B
-        rd.KeySchema.RangeKey |> should equal None
+        let rt = RecordTemplate.Define<``B Record``>()
+        rt.KeySchema.HashKey.AttributeName |> should equal "A1"
+        rt.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.B
+        rt.KeySchema.RangeKey |> should equal None
 
     [<Fact>]
     let ``Generate correct schema for SN Record`` () =
-        let rd = RecordDescriptor.Create<``SN Record``>()
-        rd.KeySchema.HashKey.AttributeName |> should equal "A1"
-        rd.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.S
-        rd.KeySchema.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.N })
+        let rt = RecordTemplate.Define<``SN Record``>()
+        rt.KeySchema.HashKey.AttributeName |> should equal "A1"
+        rt.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.S
+        rt.KeySchema.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.N })
 
     [<Fact>]
     let ``Generate correct schema for NB Record`` () =
-        let rd = RecordDescriptor.Create<``NB Record``>()
-        rd.KeySchema.HashKey.AttributeName |> should equal "A1"
-        rd.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.N
-        rd.KeySchema.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.B })
+        let rt = RecordTemplate.Define<``NB Record``>()
+        rt.KeySchema.HashKey.AttributeName |> should equal "A1"
+        rt.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.N
+        rt.KeySchema.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.B })
 
     [<Fact>]
     let ``Generate correct schema for BS Record`` () =
-        let rd = RecordDescriptor.Create<``BS Record``>()
-        rd.KeySchema.HashKey.AttributeName |> should equal "A1"
-        rd.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.B
-        rd.KeySchema.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.S })
+        let rt = RecordTemplate.Define<``BS Record``>()
+        rt.KeySchema.HashKey.AttributeName |> should equal "A1"
+        rt.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.B
+        rt.KeySchema.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.S })
 
     [<Fact>]
     let ``Generate correct schema for NS Constant HashKey Record`` () =
-        let rd = RecordDescriptor.Create<``NS Constant HashKey Record``> ()
-        rd.KeySchema.HashKey.AttributeName |> should equal "HashKey"
-        rd.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.N
-        rd.KeySchema.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.S })
+        let rt = RecordTemplate.Define<``NS Constant HashKey Record``> ()
+        rt.KeySchema.HashKey.AttributeName |> should equal "HashKey"
+        rt.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.N
+        rt.KeySchema.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.S })
 
     [<Fact>]
     let ``Generate correct schema for BS Constant RangeKey Record`` () =
-        let rd = RecordDescriptor.Create<``BS Constant RangeKey Record``> ()
-        rd.KeySchema.HashKey.AttributeName |> should equal "A1"
-        rd.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.B
-        rd.KeySchema.RangeKey |> should equal (Some { AttributeName = "RangeKey" ; KeyType = ScalarAttributeType.S })
+        let rt = RecordTemplate.Define<``BS Constant RangeKey Record``> ()
+        rt.KeySchema.HashKey.AttributeName |> should equal "A1"
+        rt.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.B
+        rt.KeySchema.RangeKey |> should equal (Some { AttributeName = "RangeKey" ; KeyType = ScalarAttributeType.S })
 
     [<Fact>]
     let ``Generate correct schema for Custom HashKey Name Record`` () =
-        let rd = RecordDescriptor.Create<``Custom HashKey Name Record``> ()
-        rd.KeySchema.HashKey.AttributeName |> should equal "CustomHashKeyName"
-        rd.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.S
-        rd.KeySchema.RangeKey |> should equal None
+        let rt = RecordTemplate.Define<``Custom HashKey Name Record``> ()
+        rt.KeySchema.HashKey.AttributeName |> should equal "CustomHashKeyName"
+        rt.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.S
+        rt.KeySchema.RangeKey |> should equal None
 
 
     [<Fact>]
@@ -234,7 +234,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Record lacking key attributes should fail``() =
-        fun () -> RecordDescriptor.Create<``Record lacking key attributes``>()
+        fun () -> RecordTemplate.Define<``Record lacking key attributes``>()
         |> shouldFailwith<_, ArgumentException>
 
 
@@ -242,7 +242,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Record lacking hashkey attribute should fail`` () =
-        fun () -> RecordDescriptor.Create<``Record lacking hashkey attribute``>()
+        fun () -> RecordTemplate.Define<``Record lacking hashkey attribute``>()
         |> shouldFailwith<_, ArgumentException>
 
 
@@ -250,14 +250,14 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Record containing unsupported attribute type should fail`` () =
-        fun () -> RecordDescriptor.Create<``Record lacking hashkey attribute``>()
+        fun () -> RecordTemplate.Define<``Record lacking hashkey attribute``>()
         |> shouldFailwith<_, ArgumentException>
 
     type ``Record containing key field of unsupported type`` = { [<HashKey>]A1 : bool }
 
     [<Fact>]
     let ``Record containing key field of unsupported type should fail`` () =
-        fun () -> RecordDescriptor.Create<``Record containing key field of unsupported type``>()
+        fun () -> RecordTemplate.Define<``Record containing key field of unsupported type``>()
         |> shouldFailwith<_, ArgumentException>
 
 
@@ -265,7 +265,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Record containing multiple HashKey attributes should fail`` () =
-        fun () -> RecordDescriptor.Create<``Record containing multiple HashKey attributes``>()
+        fun () -> RecordTemplate.Define<``Record containing multiple HashKey attributes``>()
         |> shouldFailwith<_, ArgumentException>
 
     [<HashKeyConstant("HashKey", "HashKeyValue")>]
@@ -273,7 +273,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Record containing costant HashKey attribute lacking RangeKey attribute should fail`` () =
-        fun () -> RecordDescriptor.Create<``Record containing costant HashKey attribute lacking RangeKey attribute``>()
+        fun () -> RecordTemplate.Define<``Record containing costant HashKey attribute lacking RangeKey attribute``>()
         |> shouldFailwith<_, ArgumentException>
 
     [<HashKeyConstant("HashKey", "HashKeyValue")>]
@@ -282,5 +282,5 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Record containing costant HashKey attribute with HashKey attribute should fail`` () =
-        fun () -> RecordDescriptor.Create<``Record containing costant HashKey attribute with HashKey attribute``>()
+        fun () -> RecordTemplate.Define<``Record containing costant HashKey attribute with HashKey attribute``>()
         |> shouldFailwith<_, ArgumentException>

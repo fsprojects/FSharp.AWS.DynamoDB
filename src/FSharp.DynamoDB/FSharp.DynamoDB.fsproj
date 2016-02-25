@@ -60,7 +60,7 @@
     <Compile Include="Expression\UpdateExpr.fs" />
     <Compile Include="Expression\ExpressionContainers.fs" />
     <Compile Include="RecordSchema.fs" />
-    <Compile Include="RecordDescriptor.fs" />
+    <Compile Include="RecordTemplate.fs" />
     <Compile Include="TableContext.fs" />
     <None Include="Script.fsx" />
     <None Include="paket.references" />

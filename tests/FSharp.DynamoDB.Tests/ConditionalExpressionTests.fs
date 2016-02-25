@@ -79,7 +79,8 @@ type ``Conditional Expression Tests`` () =
             Serialized = rand(), guid()
         }
 
-    let table = TableContext.Create<CondExprRecord>(client, tableName, createIfNotExists = true)
+    let table = TableContext.Create<CondExprRecord>(client, tableName)
+    do table.CreateIfNotExists()
 
     [<Fact>]
     let ``String precondition`` () =
@@ -338,10 +339,10 @@ type ``Conditional Expression Tests`` () =
 
     [<Fact>]
     let ``Fail on identical comparands`` () =
-        fun () -> table.PrecomputeConditionalExpr <@ fun r -> r.Guid < r.Guid @>
+        fun () -> table.Template.PrecomputeConditionalExpr <@ fun r -> r.Guid < r.Guid @>
         |> shouldFailwith<_, ArgumentException>
 
-        fun () -> table.PrecomputeConditionalExpr <@ fun r -> r.Bytes.Length = r.Bytes.Length @>
+        fun () -> table.Template.PrecomputeConditionalExpr <@ fun r -> r.Bytes.Length = r.Bytes.Length @>
         |> shouldFailwith<_, ArgumentException>
 
 
@@ -392,7 +393,7 @@ type ``Conditional Expression Tests`` () =
 
     [<Fact>]
     let ``Detect incompatible key conditions`` () =
-        let test outcome q = table.PrecomputeConditionalExpr(q).IsQueryCompatible |> should equal outcome
+        let test outcome q = table.Template.PrecomputeConditionalExpr(q).IsQueryCompatible |> should equal outcome
 
         test true <@ fun r -> r.HashKey = "2" @>
         test true <@ fun r -> r.HashKey = "2" && r.RangeKey < 2L @>
