@@ -33,7 +33,7 @@ type Test =
         Date : DateTimeOffset
         Map : Map<string, int>
         Set : Set<int64> list
-        Bytes : string[]
+        Bytes : System.IO.MemoryStream
     }
 
 

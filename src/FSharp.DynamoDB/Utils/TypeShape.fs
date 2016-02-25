@@ -62,6 +62,14 @@ and ShapeUInt64() =
     inherit TypeShape<uint64> ()
     override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitUInt64()
 
+and ShapeNativeInt() =
+    inherit TypeShape<nativeint> ()
+    override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitNativeInt()
+
+and ShapeUNativeInt() =
+    inherit TypeShape<unativeint> ()
+    override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitUNativeInt()
+
 and ShapeSingle() =
     inherit TypeShape<single> ()
     override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitSingle()
@@ -580,6 +588,8 @@ and ITypeShapeVisitor<'R> =
     abstract VisitUInt16 : unit -> 'R
     abstract VisitUInt32 : unit -> 'R
     abstract VisitUInt64 : unit -> 'R
+    abstract VisitNativeInt : unit -> 'R
+    abstract VisitUNativeInt : unit -> 'R
     abstract VisitSingle : unit -> 'R
     abstract VisitDouble : unit -> 'R
     abstract VisitString : unit -> 'R
@@ -659,15 +669,7 @@ module private TypeShapeImpl =
     let activate1 (gt : Type) (tp : Type) = activate gt [|tp|]
     let activate2 (gt : Type) (p1 : Type) (p2 : Type) = activate gt [|p1 ; p2|]
 
-    let private canon = Type.GetType("System.__Canon")
-    let private isIntrinsicType (t : Type) =
-        t.IsPointer 
-        || t = typeof<System.Reflection.Pointer>
-        || t.IsByRef
-        || t.IsCOMObject
-        || t.IsImport
-        || t.IsMarshalByRef
-        || t = canon
+    let canon = Type.GetType("System.__Canon")
 
     /// correctly resolves if type is assignable to interface
     let rec private isAssignableFrom (interfaceTy : Type) (ty : Type) =
@@ -683,7 +685,7 @@ module private TypeShapeImpl =
     let resolveTypeShape (t : Type) : TypeShape =
         if t.IsGenericTypeDefinition then raise <| UnsupportedShape t
         elif t.IsGenericParameter then raise <| UnsupportedShape t
-        elif isIntrinsicType t then raise <| UnsupportedShape t
+        elif t = canon then raise <| UnsupportedShape t
         elif t.IsPrimitive then
             if t = typeof<bool> then ShapeBool() :> _
             elif t = typeof<byte> then ShapeByte() :> _
@@ -696,6 +698,8 @@ module private TypeShapeImpl =
             elif t = typeof<int64> then ShapeInt64() :> _
             elif t = typeof<single> then ShapeSingle() :> _
             elif t = typeof<double> then ShapeDouble() :> _
+            elif t = typeof<nativeint> then ShapeNativeInt() :> _
+            elif t = typeof<unativeint> then ShapeUNativeInt() :> _
             else activate1 typedefof<ShapeUnknown<_>> t
 
         elif t = typeof<decimal> then ShapeDecimal() :> _

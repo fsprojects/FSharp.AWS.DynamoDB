@@ -189,6 +189,7 @@ module ``Record Generation Tests`` =
             Single : single
             Double : double
             Decimal : decimal
+            MemoryStream : System.IO.MemoryStream
 
             Nested : NestedRecord * NestedUnion
         }
