@@ -48,3 +48,23 @@ table.GetItem key
 table.Scan(<@ fun r -> r.Value2.Value < 42 @>)
 
 table.Scan <@ fun t -> t.Date < DateTimeOffset.Now @>
+
+#time "on"
+
+// Real: 00:00:08.917, CPU: 00:00:08.968, GC gen0: 214, gen1: 2, gen2: 1
+for i = 1 to 1000 do
+    let _ = table.Template.PrecomputeUpdateExpr <@ fun r -> { r with Value2 = Some 42} @>
+    ()
+
+// Real: 00:02:09.249, CPU: 00:00:16.171, GC gen0: 242, gen1: 13, gen2: 1
+// Real: 00:01:54.275, CPU: 00:00:18.843, GC gen0: 242, gen1: 12, gen2: 1
+for i = 1 to 1000 do
+    let _ = table.UpdateItem(key, <@ fun r -> { r with Value2 = Some 42} @>)
+    ()
+
+// Real: 00:01:29.459, CPU: 00:00:01.578, GC gen0: 27, gen1: 3, gen2: 1
+// Real: 00:01:25.446, CPU: 00:00:02.468, GC gen0: 27, gen1: 3, gen2: 1
+let uexpr = table.Template.PrecomputeUpdateExpr <@ fun r -> { r with Value2 = Some 42} @>
+for i = 1 to 1000 do
+    let _ = table.UpdateItem(key, uexpr)
+    ()
