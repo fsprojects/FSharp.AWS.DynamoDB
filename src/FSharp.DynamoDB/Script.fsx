@@ -33,14 +33,14 @@ type Test =
         Date : DateTimeOffset
         Map : Map<string, int>
         Set : Set<int64> list
-        Bytes : System.IO.MemoryStream
+        Bytes : byte[]
     }
 
 
 let table = TableContext.Create<Test>(ddb, "test")
 do table.CreateIfNotExists()
 
-let value = { HashKey = Guid.NewGuid() ; RangeKey = "2" ; Value = 40 ; Date = DateTimeOffset.Now + TimeSpan.FromDays 2. ; Value2 = None ; Values = [|{ A = "foo" ; B = System.Reflection.BindingFlags.Instance }|] ; Map = Map.ofList [("A1",1)] ; Set = [set [1L];set [2L]] ; Bytes = [|"a";null|]; String = ref "1a" ; Unions = [A 42; B("42",3)]}
+let value = { HashKey = Guid.NewGuid() ; RangeKey = "2" ; Value = 40 ; Date = DateTimeOffset.Now + TimeSpan.FromDays 2. ; Value2 = None ; Values = [|{ A = "foo" ; B = System.Reflection.BindingFlags.Instance }|] ; Map = Map.ofList [("A1",1)] ; Set = [set [1L];set [2L]] ; Bytes = [|1uy..10uy|]; String = ref "1a" ; Unions = [A 42; B("42",3)]}
 
 let key = table.PutItem value
 table.GetItem key
@@ -58,13 +58,22 @@ for i = 1 to 1000 do
 
 // Real: 00:02:09.249, CPU: 00:00:16.171, GC gen0: 242, gen1: 13, gen2: 1
 // Real: 00:01:54.275, CPU: 00:00:18.843, GC gen0: 242, gen1: 12, gen2: 1
+// Real: 00:02:45.919, CPU: 00:00:09.953, GC gen0: 489, gen1: 17, gen2: 2
+// Real: 00:02:42.569, CPU: 00:00:09.562, GC gen0: 489, gen1: 18, gen2: 2
 for i = 1 to 1000 do
     let _ = table.UpdateItem(key, <@ fun r -> { r with Value2 = Some 42} @>)
     ()
 
-// Real: 00:01:29.459, CPU: 00:00:01.578, GC gen0: 27, gen1: 3, gen2: 1
-// Real: 00:01:25.446, CPU: 00:00:02.468, GC gen0: 27, gen1: 3, gen2: 1
+// Real: 00:02:36.154, CPU: 00:00:02.281, GC gen0: 51, gen1: 4, gen2: 0
+// Real: 00:02:29.609, CPU: 00:00:03.000, GC gen0: 52, gen1: 6, gen2: 1
 let uexpr = table.Template.PrecomputeUpdateExpr <@ fun r -> { r with Value2 = Some 42} @>
 for i = 1 to 1000 do
     let _ = table.UpdateItem(key, uexpr)
+    ()
+
+// Real: 00:02:20.947, CPU: 00:00:02.187, GC gen0: 53, gen1: 5, gen2: 0
+// Real: 00:02:33.710, CPU: 00:00:02.265, GC gen0: 54, gen1: 6, gen2: 1
+let uexpr2 = table.Template.PrecomputeUpdateExpr <@ fun v r -> { r with Value2 = v } @>
+for i = 1 to 1000 do
+    let _ = table.UpdateItem(key, uexpr2 (Some 42))
     ()

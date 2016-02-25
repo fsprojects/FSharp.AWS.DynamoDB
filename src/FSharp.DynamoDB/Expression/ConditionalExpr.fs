@@ -47,16 +47,36 @@ and Comparator =
 and Operand =
     | Undefined
     | Value of AttributeValue
+    | Param of index:int
     | Attribute of AttributePath
     | SizeOf of AttributePath
 
 /// Extracts a query expression from a quoted F# predicate
-let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) : QueryExpr =
+let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : Pickler[] * QueryExpr =
     if not expr.IsClosed then invalidArg "expr" "supplied query is not a closed expression."
     let invalidQuery() = invalidArg "expr" <| sprintf "Supplied expression is not a valid conditional."
 
-    match expr with
-    | Lambda(r, body) ->
+    let eparams = new Dictionary<Var, int * Pickler> ()
+    let rec extractParams i expr =
+        match expr with
+        | Lambda(v, body) when v.Type <> recordInfo.Type ->
+            let p = Pickler.resolveUntyped v.Type
+            eparams.Add(v, (i, p))
+            extractParams (i + 1) body
+        | _ -> expr
+
+    let expr' = extractParams 0 expr
+
+    let (|Param|_|) e =
+        match e with
+        | Var v ->
+            let ok,found = eparams.TryGetValue v
+            if ok then Some(fst found)
+            else None
+        | _ -> None
+
+    match expr' with
+    | Lambda(r,body) when r.Type = recordInfo.Type ->
 
         let getAttrValue (pickler : Pickler) (expr : Expr) =
             expr |> evalRaw |> pickler.PickleCoerced
@@ -83,6 +103,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) :
             | PipeRight e -> extractOperand pickler e
 
             | AttributeGet attr -> Attribute attr
+            | Param i -> Param i
 
             | SpecificProperty <@ fun (s : string) -> s.Length @> (Some (AttributeGet attr), _, []) -> 
                 SizeOf attr
@@ -220,7 +241,9 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) :
 
             | _ -> invalidQuery()
 
-        extractQuery body
+        let query = extractQuery body
+        let picklers = eparams |> Seq.map (fun kv -> kv.Value) |> Seq.sortBy fst |> Seq.map snd |> Seq.toArray
+        picklers, query
 
     | _ -> invalidQuery()
 
@@ -233,6 +256,7 @@ let queryExprToString (getAttrId : AttributePath -> string)
     let inline writeOp o = 
         match o with 
         | Undefined -> invalidOp "internal error: attempting to reference undefined value in query expression."
+        | Param _ -> invalidOp "internal error: attempting to reference parameter value in query expression."
         | Value v -> !(getValueId v) 
         | Attribute a -> !(getAttrId a) 
         | SizeOf a -> ! "( size ( " ; !(getAttrId a) ; ! " ))"
@@ -268,6 +292,72 @@ let queryExprToString (getAttrId : AttributePath -> string)
 
     aux qExpr
     sb.ToString()
+
+/// applies a set of input values to a parametric query expression
+let applyParametersToQueryExpr (inputValues : obj[]) (picklers : Pickler[]) (qExpr : QueryExpr) =
+    let paramValues = new Dictionary<int, Operand>()
+    let applyOperand (op : Operand) =
+        match op with
+        | Param i ->
+            let ok, found = paramValues.TryGetValue i
+            if ok then found
+            else
+                let v = inputValues.[i]
+                let pickler = picklers.[i]
+                let op =
+                    match pickler.PickleUntyped v with
+                    | Some av -> Value av
+                    | None -> Undefined
+
+                paramValues.Add(i, op)
+                op
+
+        | _ -> op
+
+    let rec applyQuery q =
+        match q with
+        | False | True
+        | Attribute_Exists _ | Attribute_Not_Exists _ -> q
+        | Not q -> 
+            match applyQuery q with
+            | Not q' -> q'
+            | q' -> Not q'
+
+        | And(q, q') -> 
+            match applyQuery q, applyQuery q' with
+            | False, _ | _, False -> False
+            | q, True  | True, q  -> q
+            | q, q' -> And(q,q')
+
+        | Or(q, q') -> 
+            match applyQuery q, applyQuery q' with
+            | True, _  | _, True  -> True
+            | q, False | q, False -> q
+            | q, q' -> Or(q, q')
+
+        | In(o, os) -> In(applyOperand o, List.map applyOperand os)
+        | Between(x, l, u) -> Between(applyOperand x, applyOperand l, applyOperand u)
+        | BeginsWith(attr, o) -> BeginsWith(attr, applyOperand o)
+        | Contains(attr, o) -> Contains(attr, applyOperand o)
+        | Compare(cmp, l, r) ->
+            let l' = applyOperand l
+            let r' = applyOperand r
+            let assignUndefined op =
+                match op with
+                | Attribute attr ->
+                    match cmp with
+                    | NE -> Attribute_Exists attr
+                    | EQ -> Attribute_Not_Exists attr
+                    | _ -> True
+                | _ -> invalidOp "internal error; assigning undefined value to non attribute path."
+
+            if l' = Undefined then assignUndefined r'
+            elif r' = Undefined then assignUndefined l'
+            else Compare(cmp, l', r')
+
+    applyQuery qExpr
+
+
 
 // A DynamoDB key condition expression must satisfy the following conditions:
 // 1. Must only reference HashKey & RangeKey attributes.
@@ -336,11 +426,11 @@ with
     member __.WriteValuesTo(target : Dictionary<string, AttributeValue>) =
         for k,v in __.Values do target.[k] <- v
 
-    /// Extracts condition expression from given quoted F# predicate
-    static member Extract (recordInfo : RecordInfo) (expr : Expr<'TRecord -> bool>) =
-        match extractQueryExpr recordInfo expr with
+    /// Creates a condition expression instance from given quoted F# predicate
+    static member Create (recordInfo : RecordInfo) (query : QueryExpr) =
+        match query with
         | False | True -> invalidArg "expr" "supplied query is tautological."
-        | query ->
+        | _ -> ()
 
         let attrs = new Dictionary<string, string> ()
         let getAttrId (attr : AttributePath) =
@@ -370,6 +460,28 @@ with
             Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.sortBy fst |> Seq.toArray
             Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.sortBy fst |> Seq.toArray
         }
+
+    static member Extract0 (recordInfo : RecordInfo) (expr : Expr<'Record -> bool>) =
+        let _, query = extractQueryExpr recordInfo expr
+        ConditionalExpression.Create recordInfo query
+
+    static member Extract1 (recordInfo : RecordInfo) (expr : Expr<'T1 -> 'Record -> bool>) =
+        let picklers, query = extractQueryExpr recordInfo expr
+        fun (t1 : 'T1) ->
+            let query' = applyParametersToQueryExpr [|t1|] picklers query
+            ConditionalExpression.Create recordInfo query'
+
+    static member Extract2 (recordInfo : RecordInfo) (expr : Expr<'T1 -> 'T2 -> 'Record -> bool>) =
+        let picklers, query = extractQueryExpr recordInfo expr
+        fun (t1 : 'T1) (t2 : 'T2) ->
+            let query' = applyParametersToQueryExpr [|t1 ; t2|] picklers query
+            ConditionalExpression.Create recordInfo query'
+
+    static member Extract3 (recordInfo : RecordInfo) (expr : Expr<'T1 -> 'T2 -> 'T3 -> 'Record -> bool>) =
+        let picklers, query = extractQueryExpr recordInfo expr
+        fun (t1 : 'T1) (t2 : 'T2) (t3 : 'T3) ->
+            let query' = applyParametersToQueryExpr [|t1 ; t2 ; t3|] picklers query
+            ConditionalExpression.Create recordInfo query'
 
     /// Append expression variables to existing state, while building a new expression string
     /// Used for combined key and filter conditions
