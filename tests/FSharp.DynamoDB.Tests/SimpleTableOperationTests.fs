@@ -36,6 +36,15 @@ module SimpleTableTypes =
             Values : Set<int>
         }
 
+    [<RangeKeyConstant("RangeKey", "compatible")>]
+    type CompatibleRecord2 =
+        {
+            [<HashKey; CustomName("HashKey")>]
+            Id : string
+
+            Values : Set<int>
+        }
+
 type ``Simple Table Operation Tests`` () =
 
     let client = getDynamoDBAccount()
@@ -55,6 +64,11 @@ type ``Simple Table Operation Tests`` () =
     [<Fact>]
     let ``Convert to compatible table`` () =
         let table' = table.WithRecordType<CompatibleRecord> ()
+        table'.KeySchema |> should equal table.KeySchema
+
+    [<Fact>]
+    let ``Convert to compatible table 2`` () =
+        let table' = table.WithRecordType<CompatibleRecord2> ()
         table'.KeySchema |> should equal table.KeySchema
 
     [<Fact>]
