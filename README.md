@@ -63,7 +63,7 @@ Or they can be updated using the `UpdateOp` DSL
 which is closer to the underlying DynamoDB API
 
 ```fsharp
-let updated = table.UpdateItem(<@ fun r -> SET r.Name "newName" &&& ADD r.Dependencies ["MBrace.Core.dll"] @>)
+let updated = table.UpdateItem <@ fun r -> SET r.Name "newName" &&& ADD r.Dependencies ["MBrace.Core.dll"] @>
 ```
 
 ## Supported Field Types
