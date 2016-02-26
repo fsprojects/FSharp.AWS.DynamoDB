@@ -64,8 +64,9 @@ let updated = table.UpdateItem(<@ fun r -> { r with Started = Some DateTimeOffse
 FSharp.DynamoDB supports the following field types:
 * Numerical types, enumerations and strings.
 * Array, Nullable, Guid, DateTimeOffset and TimeSpan.
+* F# lists
 * F# sets with elements of type number, string or byte[].
-* F# Maps with key of type string.
+* F# maps with key of type string.
 * F# records and unions (recursive types not supported).
 
 ## Notes on value representation
