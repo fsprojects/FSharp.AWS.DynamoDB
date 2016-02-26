@@ -1,4 +1,4 @@
-﻿module internal FSharp.DynamoDB.RecordSchema
+﻿module internal FSharp.DynamoDB.KeySchema
 
 open System
 open System.Collections.Generic

@@ -39,13 +39,13 @@ type UpdateOperation =
     | Remove of AttributePath
     | Add of AttributePath * Operand
     | Delete of AttributePath * Operand
-with    
-    member uo.Type =
+with
+    member uo.Attribute =
         match uo with
-        | Set _ -> 0
-        | Remove _ -> 1
-        | Add _ -> 2
-        | Delete _ -> 3
+        | Set(attr,_)  -> attr
+        | Remove attr -> attr
+        | Add(attr,_) -> attr
+        | Delete(attr,_) -> attr
 
 /// Update value used for SET operations
 and UpdateValue =
@@ -57,17 +57,19 @@ and UpdateValue =
 /// Update value operand
 and Operand =
     | Attribute of AttributePath
-    | Value of AttributeValue
+    | Value of AttributeValueEqWrapper
     | Param of index:int
     | Undefined
 
 /// Intermediate representation of update expressions
-type UpdateExprs = 
+type IntermediateUpdateExprs = 
     { 
         /// Record variable identifier used by predicate
         RVar : Var
         /// External update params
-        Params : Dictionary<Var, int * Pickler>
+        Params : Pickler []
+        /// Parameter variable recognizer
+        ParamRecognizer : Expr -> int option
         /// Record conversion info
         RecordInfo : RecordInfo
         /// Collection of SET assignments that require further conversions
@@ -76,21 +78,23 @@ type UpdateExprs =
         UpdateOps : UpdateOperation []
     }
 
+/// Update operations pars
+type UpdateOperations =
+    {
+        /// Update operations, sorted by type
+        UpdateOps : UpdateOperation [][]
+        /// If update operation is parametric, specifies an array of picklers for input parameters
+        Params : Pickler []
+    }
+with
+    member __.IsParametericExpr = __.Params.Length > 0
+
 /// Extracts update expressions from a quoted record update predicate
-let extractRecordExprUpdaters (recordInfo : RecordInfo) (expr : Expr) =
+let extractRecordExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : IntermediateUpdateExprs =
     if not expr.IsClosed then invalidArg "expr" "supplied update expression contains free variables."
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
-    let eparams = new Dictionary<Var, int * Pickler> ()
-    let rec extractParams i expr =
-        match expr with
-        | Lambda(v, body) when v.Type <> recordInfo.Type ->
-            let p = Pickler.resolveUntyped v.Type
-            eparams.Add(v, (i, p))
-            extractParams (i + 1) body
-        | _ -> expr
-
-    let expr' = extractParams 0 expr
+    let pPicklers, pRecognizer, expr' = extractExprParams recordInfo expr
 
     match expr' with
     | Lambda(r,body) when r.Type = recordInfo.Type ->
@@ -115,34 +119,17 @@ let extractRecordExprUpdaters (recordInfo : RecordInfo) (expr : Expr) =
             |> Seq.choose id 
             |> Seq.toArray
 
-        { RVar = r ; Params = eparams ; Assignments = assignmentExprs ; RecordInfo = recordInfo ; UpdateOps = [||] }
+        { RVar = r ; Params = pPicklers ; ParamRecognizer = pRecognizer ; Assignments = assignmentExprs ; RecordInfo = recordInfo ; UpdateOps = [||] }
 
     | _ -> invalidExpr()
 
 
 /// Extracts update expressions from a quoted update operation predicate
-let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr) =
+let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : IntermediateUpdateExprs =
     if not expr.IsClosed then invalidArg "expr" "supplied update expression contains free variables."
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
-    let eparams = new Dictionary<Var, int * Pickler> ()
-    let rec extractParams i expr =
-        match expr with
-        | Lambda(v, body) when v.Type <> recordInfo.Type ->
-            let p = Pickler.resolveUntyped v.Type
-            eparams.Add(v, (i, p))
-            extractParams (i + 1) body
-        | _ -> expr
-
-    let expr' = extractParams 0 expr
-
-    let (|PVar|_|) (e : Expr) =
-        match e with
-        | Var v ->
-            let ok, found = eparams.TryGetValue v
-            if ok then Some(fst found)
-            else None
-        | _ -> None
+    let pPicklers, (|PVar|_|), expr' = extractExprParams recordInfo expr
 
     let getOperand (pickler : Pickler) (expr : Expr) =
         match expr with
@@ -150,7 +137,7 @@ let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr) =
         | _ ->
             match expr |> evalRaw |> pickler.PickleCoerced with
             | None -> Undefined
-            | Some av -> Value av
+            | Some av -> Value (wrap av)
 
     match expr' with
     | Lambda(r,body) when r.Type = recordInfo.Type ->
@@ -195,27 +182,21 @@ let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr) =
         let assignments = assignments.ToArray()
         let updateOps = updateOps.ToArray()
 
-        { RVar = r ; Params = eparams ; RecordInfo = recordInfo ; Assignments = assignments ; UpdateOps = updateOps }
+        { RVar = r ; Params = pPicklers ; ParamRecognizer = (|PVar|_|) ; RecordInfo = recordInfo ; Assignments = assignments ; UpdateOps = updateOps }
 
     | _ -> invalidExpr()
 
 /// Completes conversion from intermediate update expression to final update operations
-let extractUpdateOps (exprs : UpdateExprs) =
+let extractUpdateOps (exprs : IntermediateUpdateExprs) =
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
     let (|AttributeGet|_|) (e : Expr) = AttributePath.TryExtract exprs.RVar exprs.RecordInfo e
 
     let getValue (pickler : Pickler) (expr : Expr) =
         match expr |> evalRaw |> pickler.PickleCoerced with
         | None -> Undefined
-        | Some av -> Value av
+        | Some av -> Value (wrap av)
 
-    let (|PVar|_|) (e : Expr) =
-        match e with
-        | Var v ->
-            let ok, found = exprs.Params.TryGetValue v
-            if ok then Some(fst found)
-            else None
-        | _ -> None
+    let (|PVar|_|) = exprs.ParamRecognizer
 
     let rec extractOperand (pickler : Pickler) (expr : Expr) =
         match expr with
@@ -325,68 +306,21 @@ let extractUpdateOps (exprs : UpdateExprs) =
         exprs.Assignments 
         |> Seq.choose (fun (rp,e) -> tryExtractUpdateExpr rp e)
         |> Seq.append exprs.UpdateOps
-        |> Seq.sortBy (fun o -> o.Type)
-        |> Seq.toArray
-
-    let picklers = 
-        exprs.Params 
-        |> Seq.map (fun kv -> kv.Value) 
-        |> Seq.sortBy fst 
-        |> Seq.map snd 
+        |> Seq.map (fun uop -> 
+            let rp = uop.Attribute.RootProperty
+            if rp.IsHashKey then invalidArg "expr" "update expression cannot update hash key."
+            if rp.IsRangeKey then invalidArg "expr" "update expression cannot update range key."
+            uop)
+        |> Seq.groupBy (function Set _ -> 0 | Remove _ -> 1 | Add _ -> 2 | Delete _ -> 3)
+        |> Seq.map (fun (_,gp) -> gp |> Seq.sortBy (fun o -> o.Attribute.Id) |> Seq.toArray)
         |> Seq.toArray
 
     if updateOps.Length = 0 then invalidArg "expr" "No update clauses found in expression"
 
-    picklers, updateOps
-
-/// prints a set of update operations to string recognizable by the DynamoDB APIs
-let updateExprsToString (getAttrId : AttributePath -> string) 
-                        (getValueId : AttributeValue -> string) (uexprs : UpdateOperation []) =
-
-    let opStr op = 
-        match op with 
-        | Attribute id -> getAttrId id 
-        | Value id -> getValueId id
-        | Undefined -> invalidOp "internal error: attempting to reference undefined value in update expression."
-        | Param _ -> invalidOp "internal error: attempting to reference parametric value in update expression."
-
-    let valStr value = 
-        match value with 
-        | Operand op -> opStr op 
-        | Op_Addition(l, r) -> sprintf "%s + %s" (opStr l) (opStr r)
-        | Op_Subtraction(l, r) -> sprintf "%s - %s" (opStr l) (opStr r)
-        | List_Append(l,r) -> sprintf "(list_append(%s, %s))" (opStr l) (opStr r)
-
-    let sb = new System.Text.StringBuilder()
-    let append (s:string) = sb.Append s |> ignore
-    let isFirst = 
-        let tag = ref -1 in
-        fun (op:UpdateOperation) -> 
-            if !tag = -1 then 
-                tag := op.Type
-                true
-            elif !tag <> op.Type then
-                tag := op.Type
-                append " "
-                true
-            else
-                false
-
-    for uo in uexprs do
-        match uo with
-        | Set(attr, op) when isFirst uo -> sprintf "SET %s = %s" (getAttrId attr) (valStr op) |> append
-        | Set(attr, op) -> sprintf ", %s = %s" (getAttrId attr) (valStr op) |> append
-        | Add(attr, op) when isFirst uo -> sprintf "ADD %s %s" (getAttrId attr) (opStr op) |> append
-        | Add(attr, op) -> sprintf ", %s %s" (getAttrId attr) (opStr op) |> append
-        | Delete(attr, op) when isFirst uo -> sprintf "DELETE %s %s" (getAttrId attr) (opStr op) |> append
-        | Delete(attr, op) -> sprintf ", %s %s" (getAttrId attr) (opStr op) |> append
-        | Remove(attr) when isFirst uo -> sprintf "REMOVE %s" (getAttrId attr) |> append
-        | Remove(attr) -> sprintf ", %s" (getAttrId attr) |> append
-
-    sb.ToString()
+    { UpdateOps = updateOps ; Params = exprs.Params }
 
 /// applies a set of input values to parametric update operations
-let applyParametersToUpdateOps (inputValues : obj[]) (picklers : Pickler[]) (uops : UpdateOperation[]) =
+let applyParams (uops : UpdateOperations) (inputValues : obj[]) =
     let paramValues = new Dictionary<int, Operand>()
     let applyOperand (op : Operand) =
         match op with
@@ -395,10 +329,10 @@ let applyParametersToUpdateOps (inputValues : obj[]) (picklers : Pickler[]) (uop
             if ok then found
             else
                 let v = inputValues.[i]
-                let pickler = picklers.[i]
+                let pickler = uops.Params.[i]
                 let op =
                     match pickler.PickleUntyped v with
-                    | Some av -> Value av
+                    | Some av -> Value (wrap av)
                     | None -> Undefined
 
                 paramValues.Add(i, op)
@@ -437,122 +371,72 @@ let applyParametersToUpdateOps (inputValues : obj[]) (picklers : Pickler[]) (uop
         | Add(attr, op) -> Add(attr, applyOperand op)
         | Delete(attr, op) -> Delete(attr, applyOperand op)
 
-    uops |> Array.map applyUpdateOp
-            
-        
+    { UpdateOps = Array.map (Array.map applyUpdateOp) uops.UpdateOps ; Params = [||] }
 
-let private attrValueCmp = new AttributeValueComparer() :> IEqualityComparer<_>
+/// prints a set of update operations to string recognizable by the DynamoDB APIs
+let writeUpdateExpression (writer : AttributeWriter) (uops : UpdateOperations) =
 
-/// Update expression parsed form holder
-[<CustomEquality; NoComparison>]
-type UpdateExpression =
-    {
-        Expression : string
-        Attributes : (string * string) []
-        Values     : (string * AttributeValue) []
-    }
-with
-    member __.WriteAttributesTo(target : Dictionary<string,string>) =
-        for k,v in __.Attributes do target.[k] <- v
+    let sb = new System.Text.StringBuilder()
+    let inline (!) (s:string) = sb.Append s |> ignore
 
-    member __.WriteValuesTo(target : Dictionary<string, AttributeValue>) =
-        for k,v in __.Values do target.[k] <- v
+    let inline writeAttr attr = !(writer.WriteAttibute attr)
+    let inline writeVal v = !(writer.WriteValue (unwrap v))
 
-    /// Creates update expression from given update operations
-    static member Create (updateOps : UpdateOperation[]) =
-        let attrs = new Dictionary<string, string> ()
-        let getAttrId (attr : AttributePath) =
-            let rp = attr.RootProperty
-            if rp.IsHashKey then invalidArg "expr" "update expression cannot update hash key."
-            if rp.IsRangeKey then invalidArg "expr" "update expression cannot update range key."
-            let ok,found = attrs.TryGetValue rp.AttrId
-            if ok then attr.Id
-            else
-                attrs.Add(rp.AttrId, rp.Name)
-                attr.Id
+    let writeOp op = 
+        match op with 
+        | Attribute attr -> writeAttr attr
+        | Value v -> writeVal v
+        | Undefined -> invalidOp "internal error: attempting to reference undefined value in update expression."
+        | Param _ -> invalidOp "internal error: attempting to reference parametric value in update expression."
 
-        let values = new Dictionary<AttributeValue, string>(new AttributeValueComparer())
-        let getValueId (av : AttributeValue) =
-            let ok,found = values.TryGetValue av
-            if ok then found
-            else
-                let id = sprintf ":uval%d" values.Count
-                values.Add(av, id)
-                id
+    let writeUV value = 
+        match value with 
+        | Operand op -> writeOp op 
+        | Op_Addition(l, r) -> writeOp l; ! " + " ; writeOp r
+        | Op_Subtraction(l, r) -> writeOp l ; ! " - " ; writeOp r
+        | List_Append(l,r) -> ! "(list_append(" ; writeOp l ; ! ", " ; writeOp r ; ! "))"
 
-        let exprString = updateExprsToString getAttrId getValueId updateOps
+    for i = 0 to uops.UpdateOps.Length - 1 do
+        if i > 0 then ! " "
+        let group = uops.UpdateOps.[i]
+        for j = 0 to group.Length - 1 do
+            match group.[j] with
+            | Set(attr, uv) -> 
+                if j = 0 then ! "SET " else ! ", "
+                writeAttr attr ; !" = " ; writeUV uv
+            | Remove attr ->
+                if j = 0 then ! "REMOVE " else ! ", "
+                writeAttr attr
 
-        {
-            Expression = exprString
-            Attributes = attrs |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.sortBy fst |> Seq.toArray
-            Values = values |> Seq.map (fun kv -> kv.Value, kv.Key) |> Seq.sortBy fst |> Seq.toArray
-        }
+            | Add(attr, op) ->
+                if j = 0 then ! "ADD " else ! ", "
+                writeAttr attr ; ! " " ; writeOp op
 
-    static member ExtractUpdateExpr0 recordInfo (expr : Expr<'TRecord -> 'TRecord>) =
-        let exprs = extractRecordExprUpdaters recordInfo expr
-        let _,updateOps = extractUpdateOps exprs
-        UpdateExpression.Create updateOps
+            | Delete(attr, op) ->
+                if j = 0 then ! "DELETE " else ! ", "
+                writeAttr attr ; ! " " ; writeOp op
 
-    static member ExtractUpdateExpr1 recordInfo (expr : Expr<'T1 -> 'TRecord -> 'TRecord>) =
-        let exprs = extractRecordExprUpdaters recordInfo expr
-        let picklers,updateOps = extractUpdateOps exprs
-        fun (t1:'T1) ->
-            let updateOps' = applyParametersToUpdateOps [|t1|] picklers updateOps
-            UpdateExpression.Create updateOps'
+    sb.ToString()
 
-    static member ExtractUpdateExpr2 recordInfo (expr : Expr<'T1 -> 'T2 -> 'TRecord -> 'TRecord>) =
-        let exprs = extractRecordExprUpdaters recordInfo expr
-        let picklers,updateOps = extractUpdateOps exprs
-        fun (t1:'T1) (t2:'T2) ->
-            let updateOps' = applyParametersToUpdateOps [|t1;t2|] picklers updateOps
-            UpdateExpression.Create updateOps'
 
-    static member ExtractUpdateExpr3 recordInfo (expr : Expr<'T1 -> 'T2 -> 'T3 -> 'TRecord -> 'TRecord>) =
-        let exprs = extractRecordExprUpdaters recordInfo expr
-        let picklers,updateOps = extractUpdateOps exprs
-        fun (t1:'T1) (t2:'T2) (t3:'T3) ->
-            let updateOps' = applyParametersToUpdateOps [|t1;t2;t3|] picklers updateOps
-            UpdateExpression.Create updateOps'
+type UpdateOperations with
+    member uops.Apply([<ParamArray>]parameters : obj[]) =
+        applyParams uops parameters
 
-    static member ExtractOpExpr0 recordInfo (expr : Expr<'TRecord -> UpdateOp>) =
-        let exprs = extractOpExprUpdaters recordInfo expr
-        let _,updateOps = extractUpdateOps exprs
-        UpdateExpression.Create updateOps
+    member uops.Write (writer : AttributeWriter) =
+        writeUpdateExpression writer uops
 
-    static member ExtractOpExpr1 recordInfo (expr : Expr<'T1 -> 'TRecord -> UpdateOp>) =
-        let exprs = extractOpExprUpdaters recordInfo expr
-        let picklers,updateOps = extractUpdateOps exprs
-        fun (t1:'T1) ->
-            let updateOps' = applyParametersToUpdateOps [|t1|] picklers updateOps
-            UpdateExpression.Create updateOps'
+    member uops.GetDebugData() =
+        let aw = new AttributeWriter()
+        let expr = writeUpdateExpression aw uops
+        let names = aw.Names |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
+        let values = aw.Values |> Seq.map (fun kv -> kv.Key, kv.Value.Print()) |> Seq.toList
+        expr, names, values
 
-    static member ExtractOpExpr2 recordInfo (expr : Expr<'T1 -> 'T2 -> 'TRecord -> UpdateOp>) =
-        let exprs = extractOpExprUpdaters recordInfo expr
-        let picklers,updateOps = extractUpdateOps exprs
-        fun (t1:'T1) (t2:'T2) ->
-            let updateOps' = applyParametersToUpdateOps [|t1;t2|] picklers updateOps
-            UpdateExpression.Create updateOps'
+    static member ExtractUpdateExpr (recordInfo : RecordInfo) (expr : Expr) =
+        let iexprs = extractRecordExprUpdaters recordInfo expr
+        extractUpdateOps iexprs
 
-    static member ExtractOpExpr3 recordInfo (expr : Expr<'T1 -> 'T2 -> 'T3 -> 'TRecord -> UpdateOp>) =
-        let exprs = extractOpExprUpdaters recordInfo expr
-        let picklers,updateOps = extractUpdateOps exprs
-        fun (t1:'T1) (t2:'T2) (t3:'T3) ->
-            let updateOps' = applyParametersToUpdateOps [|t1;t2;t3|] picklers updateOps
-            UpdateExpression.Create updateOps'
-
-    override uexpr.Equals obj =
-        match obj with
-        | :? UpdateExpression as uexpr' ->
-            uexpr.Expression = uexpr'.Expression &&
-            uexpr.Values.Length = uexpr'.Values.Length &&
-            let eq (k,v) (k',v') = k = k' && attrValueCmp.Equals(v,v') in
-            Array.forall2 eq uexpr.Values uexpr'.Values
-        | _ -> false
-
-    override uexpr.GetHashCode() =
-        let mutable vhash = 0
-        for k,v in uexpr.Values do
-            let th = combineHash (hash k) (attrValueCmp.GetHashCode v)
-            vhash <- combineHash vhash th
-
-        hash2 uexpr.Expression vhash
+    static member ExtractOpExpr (recordInfo : RecordInfo) (expr : Expr) =
+        let iexprs = extractOpExprUpdaters recordInfo expr
+        extractUpdateOps iexprs

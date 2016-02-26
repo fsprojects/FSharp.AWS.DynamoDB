@@ -1,12 +1,15 @@
 ﻿module internal FSharp.DynamoDB.ExprCommon
 
 open System
+open System.Collections.Generic
 open System.Reflection
 
 open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Quotations.Patterns
 open Microsoft.FSharp.Quotations.DerivedPatterns
 open Microsoft.FSharp.Quotations.ExprShape
+
+open Amazon.DynamoDBv2.Model
 
 open Swensen.Unquote
 
@@ -150,6 +153,54 @@ with
             | _ -> None
 
         extractProps [] e
+
+/// Wrapper API for writing attribute names and values for Dynamo query expressions
+type AttributeWriter(names : Dictionary<string, string>, values : Dictionary<string, AttributeValue>) =
+    static let cmp = new AttributeValueComparer()
+    let vcontents = new Dictionary<AttributeValue, string>(cmp)
+
+    new () = new AttributeWriter(new Dictionary<_,_>(), new Dictionary<_,_>())
+
+    member __.Names  = names
+    member __.Values = values
+
+    member __.WriteValue(av : AttributeValue) =
+        let ok, found = vcontents.TryGetValue av
+        if ok then found
+        else
+            let id = sprintf ":val%d" values.Count
+            vcontents.Add(av, id)
+            values.Add(id, av)
+            id
+
+    member __.WriteAttibute(attr : AttributePath) =
+        let rp = attr.RootProperty
+        names.[rp.AttrId] <- rp.Name
+        attr.Id
+
+/// Recognizes exprs of shape <@ fun p1 p2 ... -> body @>
+let extractExprParams (recordInfo : RecordInfo) (expr : Expr) =
+    let picklers = new ResizeArray<Pickler>()
+    let vars = new Dictionary<Var, int> ()
+    let rec aux i expr =
+        match expr with
+        | Lambda(v, body) when v.Type <> recordInfo.Type ->
+            let p = Pickler.resolveUntyped v.Type
+            picklers.Add p
+            vars.Add(v, i)
+            aux (i + 1) body
+        | _ -> expr
+
+    let expr' = aux 0 expr
+    let tryFindIndex e =
+        match e with
+        | Var v ->
+            let ok,i = vars.TryGetValue v
+            if ok then Some i
+            else None
+        | _ -> None
+
+    picklers.ToArray(), tryFindIndex, expr'
 
 // Detects conflicts in a collection of attribute paths
 // e.g. 'r.Foo.Bar.[0]' and 'r.Foo' are conflicting

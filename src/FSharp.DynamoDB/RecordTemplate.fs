@@ -9,7 +9,7 @@ open Microsoft.FSharp.Quotations
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.RecordSchema
+open FSharp.DynamoDB.KeySchema
 open FSharp.DynamoDB.ConditionalExpr
 open FSharp.DynamoDB.UpdateExpr
 
@@ -39,7 +39,7 @@ type RecordTemplate<'Record> internal () =
     /// </summary>
     /// <param name="expr">Quoted record predicate.</param>
     member __.PrecomputeConditionalExpr(expr : Expr<'Record -> bool>) : ConditionExpression<'Record> =
-        let cexpr = ConditionalExpression.Extract0 pickler.RecordInfo expr
+        let cexpr = ConditionalExpression.Extract pickler.RecordInfo expr
         new ConditionExpression<'Record>(cexpr)
 
     /// <summary>
@@ -47,27 +47,36 @@ type RecordTemplate<'Record> internal () =
     ///     supplied quoted record predicate.
     /// </summary>
     /// <param name="expr">Quoted record predicate.</param>
-    member __.PrecomputeConditionalExpr(expr : Expr<'I1 -> 'Record -> bool>) =
-        let f = ConditionalExpression.Extract1 pickler.RecordInfo expr
-        fun i1 -> new ConditionExpression<'Record>(f i1)
+    member __.PrecomputeConditionalExpr(expr : Expr<'I1 -> 'Record -> bool>) : 'I1 -> ConditionExpression<'Record> =
+        let f = ConditionalExpression.Extract pickler.RecordInfo expr
+        fun i1 -> new ConditionExpression<'Record>(f.Apply(i1))
 
     /// <summary>
     ///     Precomputes a DynamoDB conditional expression using
     ///     supplied quoted record predicate.
     /// </summary>
     /// <param name="expr">Quoted record predicate.</param>
-    member __.PrecomputeConditionalExpr(expr : Expr<'I1 -> 'I2 -> 'Record -> bool>) =
-        let f = ConditionalExpression.Extract2 pickler.RecordInfo expr
-        fun i1 i2 -> new ConditionExpression<'Record>(f i1 i2)
+    member __.PrecomputeConditionalExpr(expr : Expr<'I1 -> 'I2 -> 'Record -> bool>) : 'I1 -> 'I2 -> ConditionExpression<'Record> =
+        let f = ConditionalExpression.Extract pickler.RecordInfo expr
+        fun i1 i2 -> new ConditionExpression<'Record>(f.Apply(i1, i2))
 
     /// <summary>
     ///     Precomputes a DynamoDB conditional expression using
     ///     supplied quoted record predicate.
     /// </summary>
     /// <param name="expr">Quoted record predicate.</param>
-    member __.PrecomputeConditionalExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'Record -> bool>) =
-        let f = ConditionalExpression.Extract3 pickler.RecordInfo expr
-        fun i1 i2 i3 -> new ConditionExpression<'Record>(f i1 i2 i3)
+    member __.PrecomputeConditionalExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'Record -> bool>) : 'I1 -> 'I2 -> 'I3 -> ConditionExpression<'Record> =
+        let f = ConditionalExpression.Extract pickler.RecordInfo expr
+        fun i1 i2 i3 -> new ConditionExpression<'Record>(f.Apply(i1, i2, i3))
+
+    /// <summary>
+    ///     Precomputes a DynamoDB conditional expression using
+    ///     supplied quoted record predicate.
+    /// </summary>
+    /// <param name="expr">Quoted record predicate.</param>
+    member __.PrecomputeConditionalExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'I4 -> 'Record -> bool>) : 'I1 -> 'I2 -> 'I3 -> 'I4 -> ConditionExpression<'Record> =
+        let f = ConditionalExpression.Extract pickler.RecordInfo expr
+        fun i1 i2 i3 i4 -> new ConditionExpression<'Record>(f.Apply(i1, i2, i3, i4))
 
     /// <summary>
     ///     Precomputes a DynamoDB update expression using
@@ -75,35 +84,44 @@ type RecordTemplate<'Record> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update expression.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'Record -> 'Record>) : UpdateExpression<'Record> =
-        let uexpr = UpdateExpression.ExtractUpdateExpr0 pickler.RecordInfo expr
-        new UpdateExpression<'Record>(uexpr)
+        let uops = UpdateOperations.ExtractUpdateExpr pickler.RecordInfo expr
+        new UpdateExpression<'Record>(uops)
 
     /// <summary>
     ///     Precomputes a DynamoDB update expression using
     ///     supplied quoted record update expression.
     /// </summary>
     /// <param name="expr">Quoted record update expression.</param>
-    member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'Record -> 'Record>) =
-        let uexpr = UpdateExpression.ExtractUpdateExpr1 pickler.RecordInfo expr
-        fun i1 -> new UpdateExpression<'Record>(uexpr i1)
+    member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'Record -> 'Record>) : 'I1 -> UpdateExpression<'Record> =
+        let uops = UpdateOperations.ExtractUpdateExpr pickler.RecordInfo expr
+        fun i1 -> new UpdateExpression<'Record>(uops.Apply(i1))
 
     /// <summary>
     ///     Precomputes a DynamoDB update expression using
     ///     supplied quoted record update expression.
     /// </summary>
     /// <param name="expr">Quoted record update expression.</param>
-    member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'Record -> 'Record>) =
-        let uexpr = UpdateExpression.ExtractUpdateExpr2 pickler.RecordInfo expr
-        fun i1 i2 -> new UpdateExpression<'Record>(uexpr i1 i2)
+    member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'Record -> 'Record>) : 'I1 -> 'I2 -> UpdateExpression<'Record> =
+        let uops = UpdateOperations.ExtractUpdateExpr pickler.RecordInfo expr
+        fun i1 i2 -> new UpdateExpression<'Record>(uops.Apply(i1, i2))
 
     /// <summary>
     ///     Precomputes a DynamoDB update expression using
     ///     supplied quoted record update expression.
     /// </summary>
     /// <param name="expr">Quoted record update expression.</param>
-    member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'Record -> 'Record>) =
-        let uexpr = UpdateExpression.ExtractUpdateExpr3 pickler.RecordInfo expr
-        fun i1 i2 i3 -> new UpdateExpression<'Record>(uexpr i1 i2 i3)
+    member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'Record -> 'Record>) : 'I1 -> 'I2 -> 'I3 -> UpdateExpression<'Record> =
+        let uops = UpdateOperations.ExtractUpdateExpr pickler.RecordInfo expr
+        fun i1 i2 i3 -> new UpdateExpression<'Record>(uops.Apply(i1, i2, i3))
+
+    /// <summary>
+    ///     Precomputes a DynamoDB update expression using
+    ///     supplied quoted record update expression.
+    /// </summary>
+    /// <param name="expr">Quoted record update expression.</param>
+    member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'I4 -> 'Record -> 'Record>) : 'I1 -> 'I2 -> 'I3 -> 'I4 -> UpdateExpression<'Record> =
+        let uops = UpdateOperations.ExtractUpdateExpr pickler.RecordInfo expr
+        fun i1 i2 i3 i4 -> new UpdateExpression<'Record>(uops.Apply(i1, i2, i3, i4))
 
     /// <summary>
     ///     Precomputes a DynamoDB update expression using
@@ -111,8 +129,8 @@ type RecordTemplate<'Record> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update operations.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'TRecord -> UpdateOp>) : UpdateExpression<'Record> =
-        let uexpr = UpdateExpression.ExtractOpExpr0 pickler.RecordInfo expr
-        new UpdateExpression<'Record>(uexpr)
+        let uops = UpdateOperations.ExtractOpExpr pickler.RecordInfo expr
+        new UpdateExpression<'Record>(uops)
 
     /// <summary>
     ///     Precomputes a DynamoDB update expression using
@@ -120,8 +138,8 @@ type RecordTemplate<'Record> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update operations.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'TRecord -> UpdateOp>) =
-        let uexpr = UpdateExpression.ExtractOpExpr1 pickler.RecordInfo expr
-        fun i1 -> new UpdateExpression<'Record>(uexpr i1)
+        let uops = UpdateOperations.ExtractOpExpr pickler.RecordInfo expr
+        fun i1 -> new UpdateExpression<'Record>(uops.Apply i1)
 
     /// <summary>
     ///     Precomputes a DynamoDB update expression using
@@ -129,8 +147,8 @@ type RecordTemplate<'Record> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update operations.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'TRecord -> UpdateOp>) =
-        let uexpr = UpdateExpression.ExtractOpExpr2 pickler.RecordInfo expr
-        fun i1 i2 -> new UpdateExpression<'Record>(uexpr i1 i2)
+        let uops = UpdateOperations.ExtractOpExpr pickler.RecordInfo expr
+        fun i1 i2 -> new UpdateExpression<'Record>(uops.Apply(i1, i2))
 
     /// <summary>
     ///     Precomputes a DynamoDB update expression using
@@ -138,8 +156,17 @@ type RecordTemplate<'Record> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update operations.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'TRecord -> UpdateOp>) =
-        let uexpr = UpdateExpression.ExtractOpExpr3 pickler.RecordInfo expr
-        fun i1 i2 i3 -> new UpdateExpression<'Record>(uexpr i1 i2 i3)
+        let uops = UpdateOperations.ExtractOpExpr pickler.RecordInfo expr
+        fun i1 i2 i3 -> new UpdateExpression<'Record>(uops.Apply(i1, i2, i3))
+
+    /// <summary>
+    ///     Precomputes a DynamoDB update expression using
+    ///     supplied quoted record update operations.
+    /// </summary>
+    /// <param name="expr">Quoted record update operations.</param>
+    member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'I4 -> 'TRecord -> UpdateOp>) =
+        let uops = UpdateOperations.ExtractOpExpr pickler.RecordInfo expr
+        fun i1 i2 i3 i4 -> new UpdateExpression<'Record>(uops.Apply(i1, i2, i3, i4))
 
     /// Convert table key to attribute values
     member internal __.ToAttributeValues(key : TableKey) = 

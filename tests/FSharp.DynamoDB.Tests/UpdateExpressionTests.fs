@@ -352,6 +352,28 @@ type ``Update Expression Tests`` () =
         let item' = table.GetItem key
         item'.Value |> should equal item.Value
 
+    [<Fact>]
+    let ``Simple Parametric Updater 1`` () =
+        let item = mkItem()
+        let key = table.PutItem item
+        let cond = table.Template.PrecomputeUpdateExpr <@ fun v1 v2 r -> { r with Value = v1 ; String = v2 } @>
+        let v1 = rand()
+        let v2 = guid()
+        let result = table.UpdateItem(key, cond v1 v2)
+        result.Value |> should equal v1
+        result.String |> should equal v2
+
+    [<Fact>]
+    let ``Simple Parametric Updater 2`` () =
+        let item = mkItem()
+        let key = table.PutItem item
+        let cond = table.Template.PrecomputeUpdateExpr <@ fun v1 v2 r -> SET r.Value v1 &&& SET r.String v2 @>
+        let v1 = rand()
+        let v2 = guid()
+        let result = table.UpdateItem(key, cond v1 v2)
+        result.Value |> should equal v1
+        result.String |> should equal v2
+
     interface IDisposable with
         member __.Dispose() =
             ignore <| client.DeleteTable(tableName)

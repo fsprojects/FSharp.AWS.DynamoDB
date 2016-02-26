@@ -393,7 +393,7 @@ type ``Conditional Expression Tests`` () =
 
     [<Fact>]
     let ``Detect incompatible key conditions`` () =
-        let test outcome q = table.Template.PrecomputeConditionalExpr(q).IsQueryCompatible |> should equal outcome
+        let test outcome q = table.Template.PrecomputeConditionalExpr(q).IsKeyConditionCompatible |> should equal outcome
 
         test true <@ fun r -> r.HashKey = "2" @>
         test true <@ fun r -> r.HashKey = "2" && r.RangeKey < 2L @>
@@ -422,6 +422,13 @@ type ``Conditional Expression Tests`` () =
 
         let results = table.Scan(<@ fun r -> r.HashKey = hKey && r.RangeKey <= 100L && r.Bool = true @>)
         results.Length |> should equal 50
+
+    [<Fact>]
+    let ``Simple Parametric Conditional`` () =
+        let item = mkItem()
+        let key = table.PutItem item
+        let cond = table.Template.PrecomputeConditionalExpr <@ fun hk rk r -> r.HashKey = hk && r.RangeKey = rk @>
+        table.PutItem(item, cond item.HashKey item.RangeKey)
 
     interface IDisposable with
         member __.Dispose() =

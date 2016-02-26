@@ -8,7 +8,8 @@ open Microsoft.FSharp.Quotations
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.RecordSchema
+open FSharp.DynamoDB.KeySchema
+open FSharp.DynamoDB.ExprCommon
 
 /// Exception raised by DynamoDB in case where write preconditions are not satisfied
 type ConditionalCheckFailedException = Amazon.DynamoDBv2.Model.ConditionalCheckFailedException
@@ -48,10 +49,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         request.ReturnValues <- ReturnValue.NONE
         match precondition with
         | Some pc ->
-            let cond = pc.Conditional
-            cond.WriteAttributesTo request.ExpressionAttributeNames 
-            cond.WriteValuesTo request.ExpressionAttributeValues
-            request.ConditionExpression <- cond.Expression
+            let writer = new AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+            request.ConditionExpression <- pc.Conditional.Write writer
         | _ -> ()
 
         let! ct = Async.CancellationToken
@@ -130,22 +129,16 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                                 ?precondition : ConditionExpression<'TRecord>, ?returnLatest : bool) : Async<'TRecord> = async {
 
         let kav = template.ToAttributeValues(key)
-        let request = new UpdateItemRequest()
-        request.Key <- kav
-        request.TableName <- tableName
-        request.UpdateExpression <- updater.Updater.Expression
-        updater.Updater.WriteAttributesTo request.ExpressionAttributeNames
-        updater.Updater.WriteValuesTo request.ExpressionAttributeValues
+        let request = new UpdateItemRequest(Key = kav, TableName = tableName)
         request.ReturnValues <- 
             if defaultArg returnLatest true then ReturnValue.ALL_NEW
             else ReturnValue.ALL_OLD
 
+        let writer = new AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+        request.UpdateExpression <- updater.UpdateOps.Write(writer)
+
         match precondition with
-        | Some pc ->
-            let cond = pc.Conditional
-            cond.WriteAttributesTo request.ExpressionAttributeNames
-            cond.WriteValuesTo request.ExpressionAttributeValues
-            request.ConditionExpression <- cond.Expression
+        | Some pc -> request.ConditionExpression <- pc.Conditional.Write writer
         | _ -> ()
 
         let! ct = Async.CancellationToken
@@ -355,7 +348,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.QueryAsync(keyCondition : ConditionExpression<'TRecord>, ?filterCondition : ConditionExpression<'TRecord>, 
                             ?limit: int, ?consistentRead : bool, ?scanIndexForward : bool) : Async<'TRecord []> = async {
 
-        if not keyCondition.IsQueryCompatible then 
+        if not keyCondition.IsKeyConditionCompatible then 
             invalidArg "keyCondition" 
                 """key conditions must satisfy the following constraints:
 * Must only reference HashKey & RangeKey attributes.
@@ -370,16 +363,14 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let rec aux last = async {
             let request = new QueryRequest(tableName)
             let cond = keyCondition.Conditional
-            request.KeyConditionExpression <- cond.Expression
-            cond.WriteAttributesTo request.ExpressionAttributeNames
-            cond.WriteValuesTo request.ExpressionAttributeValues
+            let writer = new AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+            request.KeyConditionExpression <- cond.Write writer
 
             match filterCondition with
             | Some fc ->
                 let cond = fc.Conditional
-                request.FilterExpression <- 
-                    cond.BuildAppendedConditional(request.ExpressionAttributeNames, 
-                                                    request.ExpressionAttributeValues)
+                request.FilterExpression <- cond.Write writer
+
             | None -> ()
 
             limit |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
@@ -459,10 +450,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let downloaded = new ResizeArray<_>()
         let rec aux last = async {
             let request = new ScanRequest(tableName)
-            let cond = filterCondition.Conditional
-            request.FilterExpression <- cond.Expression
-            cond.WriteAttributesTo request.ExpressionAttributeNames
-            cond.WriteValuesTo request.ExpressionAttributeValues
+            let writer = new AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+            request.FilterExpression <- filterCondition.Conditional.Write writer
 
             limit |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
             consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)

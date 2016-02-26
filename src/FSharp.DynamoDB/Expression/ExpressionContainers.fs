@@ -5,6 +5,7 @@ open System.Collections.Generic
 
 open Microsoft.FSharp.Quotations
 
+open FSharp.DynamoDB.ExprCommon
 open FSharp.DynamoDB.ConditionalExpr
 open FSharp.DynamoDB.UpdateExpr
 
@@ -13,39 +14,43 @@ open FSharp.DynamoDB.UpdateExpr
 //
 
 /// Represents a condition expression for a given record type
+[<Sealed; AutoSerializable(false)>]
 type ConditionExpression<'Record> internal (cond : ConditionalExpression) =
-    /// DynamoDB condition expression string
-    member __.Expression = cond.Expression
-    /// DynamoDB attribute names
-    member __.Attributes = cond.Attributes
-    /// DynamoDB attribute values
-    member __.Values = cond.Values |> Array.map (fun (k,v) -> k, v.Print())
+    let data = lazy(cond.GetDebugData())
     /// Gets whether given conditional is a valid key condition
-    member __.IsQueryCompatible = cond.IsQueryCompatible
+    member __.IsKeyConditionCompatible = cond.IsKeyConditionCompatible
     /// Internal condition expression object
     member internal __.Conditional = cond
+    /// DynamoDB condition expression string
+    member __.Expression = let expr,_,_ = data.Value in expr
+    /// DynamoDB attribute names
+    member __.Names = let _,names,_ = data.Value in names
+    /// DynamoDB attribute values
+    member __.Values = let _,_,values = data.Value in values
 
     override __.Equals(other : obj) =
         match other with
-        | :? ConditionExpression<'Record> as other -> cond = other.Conditional
+        | :? ConditionExpression<'Record> as other -> cond.QueryExpr = other.Conditional.QueryExpr
         | _ -> false
 
-    override __.GetHashCode() = hash cond
+    override __.GetHashCode() = hash cond.QueryExpr
 
 /// Represents an update expression for a given record type
-type UpdateExpression<'Record> internal (updater : UpdateExpression) =
-    /// DynamoDB update expression string
-    member __.Expression = updater.Expression
-    /// DynamoDB attribute names
-    member __.Attributes = updater.Attributes
-    /// DynamoDB attribute values
-    member __.Values = updater.Values |> Array.map (fun (k,v) -> k, v.Print())
+[<Sealed; AutoSerializable(false)>]
+type UpdateExpression<'Record> internal (updateOps : UpdateOperations) =
+    let data = lazy(updateOps.GetDebugData())
     /// Internal update expression object
-    member internal __.Updater = updater
+    member internal __.UpdateOps = updateOps
+    /// DynamoDB update expression string
+    member __.Expression = let expr,_,_ = data.Value in expr
+    /// DynamoDB attribute names
+    member __.Names = let _,names,_ = data.Value in names
+    /// DynamoDB attribute values
+    member __.Values = let _,_,values = data.Value in values
 
     override __.Equals(other : obj) =
         match other with
-        | :? UpdateExpression<'Record> as other -> updater = other.Updater
+        | :? UpdateExpression<'Record> as other -> updateOps.UpdateOps = other.UpdateOps.UpdateOps
         | _ -> false
 
-    override __.GetHashCode() = hash updater
+    override __.GetHashCode() = hash updateOps.UpdateOps

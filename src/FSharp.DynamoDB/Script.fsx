@@ -51,28 +51,23 @@ table.Scan <@ fun t -> t.Date < DateTimeOffset.Now @>
 
 #time "on"
 
-// Real: 00:00:08.917, CPU: 00:00:08.968, GC gen0: 214, gen1: 2, gen2: 1
+// Real: 00:00:07.996, CPU: 00:00:07.937, GC gen0: 213, gen1: 1, gen2: 0
 for i = 1 to 1000 do
     let _ = table.Template.PrecomputeUpdateExpr <@ fun r -> { r with Value2 = Some 42} @>
     ()
 
-// Real: 00:02:09.249, CPU: 00:00:16.171, GC gen0: 242, gen1: 13, gen2: 1
-// Real: 00:01:54.275, CPU: 00:00:18.843, GC gen0: 242, gen1: 12, gen2: 1
-// Real: 00:02:45.919, CPU: 00:00:09.953, GC gen0: 489, gen1: 17, gen2: 2
-// Real: 00:02:42.569, CPU: 00:00:09.562, GC gen0: 489, gen1: 18, gen2: 2
+// Real: 00:01:57.405, CPU: 00:00:19.750, GC gen0: 241, gen1: 13, gen2: 1
 for i = 1 to 1000 do
     let _ = table.UpdateItem(key, <@ fun r -> { r with Value2 = Some 42} @>)
     ()
 
-// Real: 00:02:36.154, CPU: 00:00:02.281, GC gen0: 51, gen1: 4, gen2: 0
-// Real: 00:02:29.609, CPU: 00:00:03.000, GC gen0: 52, gen1: 6, gen2: 1
+// Real: 00:01:35.912, CPU: 00:00:01.921, GC gen0: 27, gen1: 3, gen2: 1
 let uexpr = table.Template.PrecomputeUpdateExpr <@ fun r -> { r with Value2 = Some 42} @>
 for i = 1 to 1000 do
     let _ = table.UpdateItem(key, uexpr)
     ()
 
-// Real: 00:02:20.947, CPU: 00:00:02.187, GC gen0: 53, gen1: 5, gen2: 0
-// Real: 00:02:33.710, CPU: 00:00:02.265, GC gen0: 54, gen1: 6, gen2: 1
+// Real: 00:01:35.107, CPU: 00:00:02.078, GC gen0: 26, gen1: 2, gen2: 0
 let uexpr2 = table.Template.PrecomputeUpdateExpr <@ fun v r -> { r with Value2 = v } @>
 for i = 1 to 1000 do
     let _ = table.UpdateItem(key, uexpr2 (Some 42))

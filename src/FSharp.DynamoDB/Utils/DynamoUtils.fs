@@ -61,9 +61,26 @@ type AttributeValueComparer() =
         else
             -1
 
+    static member Equals(l,r) = areEqualAttributeValues l r
+    static member GetHashCode av = getAttributeValueHashCode av
+
     interface IEqualityComparer<AttributeValue> with
         member __.Equals(l,r) = areEqualAttributeValues l r
         member __.GetHashCode av = getAttributeValueHashCode av
+
+/// Struct AttributeValue wrapper with modified equality semantics
+[<Struct; CustomEquality; NoComparison>]
+type AttributeValueEqWrapper(av : AttributeValue) =
+    member __.AttributeValue = av
+    override __.Equals(o) =
+        match o with
+        | :? AttributeValueEqWrapper as av' -> AttributeValueComparer.Equals(av,av')
+        | _ -> false
+
+    override __.GetHashCode() = AttributeValueComparer.GetHashCode av
+
+let inline wrap av = new AttributeValueEqWrapper(av)
+let inline unwrap (avw : AttributeValueEqWrapper) = avw.AttributeValue
 
 type AttributeValue with
     member inline av.IsSSSet = av.SS.Count > 0
@@ -95,7 +112,6 @@ type AttributeValue with
 
         else
             "{ }"
-
 
 // DynamoDB Name limitations, see:
 // http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Limits.html
