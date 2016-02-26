@@ -89,8 +89,7 @@ type ``Update Expression Tests`` () =
             Serialized = rand(), guid() ; Serialized2 = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
         }
 
-    let table = TableContext.Create<UpdateExprRecord>(client, tableName)
-    do table.CreateIfNotExists()
+    let table = TableContext.Create<UpdateExprRecord>(client, tableName, createIfNotExists = true)
 
     [<Fact>]
     let ``Attempt to update HashKey`` () =

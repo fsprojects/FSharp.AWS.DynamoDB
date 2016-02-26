@@ -61,8 +61,7 @@ type ``Simple Table Operation Tests`` () =
             Unions = [Choice1Of3 (guid()) ; Choice2Of3(rand()) ; Choice3Of3(Guid.NewGuid().ToByteArray())]
         }
 
-    let table = TableContext.Create<SimpleRecord>(client, tableName)
-    do table.CreateIfNotExists()
+    let table = TableContext.Create<SimpleRecord>(client, tableName, createIfNotExists = true)
 
     [<Fact>]
     let ``Convert to compatible table`` () =

@@ -1,3 +1,6 @@
+### 0.0.6-alpha
+* TableContext API refinements.
+
 ### 0.0.5-alpha
 * Implement parametric expressions.
 

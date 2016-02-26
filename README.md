@@ -35,7 +35,7 @@ We can now perfom table operations on DynamoDB like so
 open Amazon.DynamoDBv2
 
 let client : IAmazonDynamoDB = ``your DynamoDB client instance``
-let table = TableContext.Create<WorkItemInfo>(client, tableName = "workItems")
+let table = TableContext.Create<WorkItemInfo>(client, tableName = "workItems", createIfNotExists = true)
 
 let workItem = { ProcessId = 0L ; WorkItemId = 1L ; Name = "Test" ; UUID = guid() ; Dependencies = ["mscorlib"] ; Started = None }
 
@@ -71,7 +71,7 @@ FSharp.DynamoDB supports the following field types:
 
 ## Notes on value representation
 
-Due to restrictions of DynamoDB, it may sometimes be the case that objects may not be persisted faithfully.
+Due to restrictions of DynamoDB, it may sometimes be the case that objects are not persisted faithfully.
 For example, consider the following record definition:
 ```fsharp
 type Record = 

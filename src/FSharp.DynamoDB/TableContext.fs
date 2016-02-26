@@ -524,7 +524,11 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                 |> invalidOp
 
         with :? ResourceNotFoundException when createIfNotExists ->
-            let provisionedThroughput = defaultArg provisionedThroughput (new ProvisionedThroughput(10L,10L))
+            let provisionedThroughput = 
+                match provisionedThroughput with
+                | None -> new ProvisionedThroughput(10L,10L)
+                | Some pt -> pt
+
             let ctr = template.KeySchema.CreateCreateTableRequest (tableName, provisionedThroughput)
             let! ct = Async.CancellationToken
             let! response = client.CreateTableAsync(ctr, ct) |> Async.AwaitTaskCorrect
@@ -561,13 +565,16 @@ type TableContext =
     /// <param name="tableName">Table name to target.</param>
     /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
     /// <param name="createIfNotExists">Create the table now instance if it does not exist. Defaults to false.</param>
-    static member CreateAsync<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool) = async {
+    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
+    static member CreateAsync<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool, 
+                                                                    ?provisionedThroughput : ProvisionedThroughput) : Async<TableContext<'TRecord>> = async {
+
         if not <| isValidTableName tableName then invalidArg tableName "unsupported DynamoDB table name."
         let verifyTable = defaultArg verifyTable true
         let createIfNotExists = defaultArg createIfNotExists false
         let context = new TableContext<'TRecord>(client, tableName, RecordTemplate.Define<'TRecord>())
         if verifyTable || createIfNotExists then
-            do! context.VerifyTableAsync(createIfNotExists = createIfNotExists)
+            do! context.VerifyTableAsync(createIfNotExists = createIfNotExists, ?provisionedThroughput = provisionedThroughput)
 
         return context
     }
@@ -579,8 +586,11 @@ type TableContext =
     /// <param name="tableName">Table name to target.</param>
     /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
     /// <param name="createIfNotExists">Create the table now instance if it does not exist. Defaults to false.</param>
-    static member Create<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool) =
-        TableContext.CreateAsync<'TRecord>(client, tableName, ?verifyTable = verifyTable, ?createIfNotExists = createIfNotExists)
+    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
+    static member Create<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool,
+                                        ?provisionedThroughput : ProvisionedThroughput) =
+        TableContext.CreateAsync<'TRecord>(client, tableName, ?verifyTable = verifyTable, ?createIfNotExists = createIfNotExists,
+                                                ?provisionedThroughput = provisionedThroughput)
         |> Async.RunSynchronously
 
 
