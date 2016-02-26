@@ -76,6 +76,24 @@ FSharp.DynamoDB supports the following field types:
 * F# maps with key of type string.
 * F# records and unions (recursive types not supported).
 
+## Example: Creating an atomic counter
+
+```fsharp
+type private CounterEntry = { [<HashKey>]Id : Guid ; Value : int64 }
+
+type Counter private (table : TableContext<CounterEntry>, key : TableKey) =
+    member __.Value = table.GetItem(key).Value
+    member __.Incr() = 
+        let updated = table.UpdateItem(key, <@ fun e -> { e with Value = e.Value + 1L } @>)
+        updated.Value
+
+    static member Create(client : IAmazonDynamoDB, table : string) =
+        let table = TableContext.Create<CounterEntry>(client, table, createIfNotExists = true)
+        let entry = { Id = Guid.NewGuid() ; Value = 0L }
+        let key = table.PutItem entry
+        new Counter(table, key)
+```
+
 ## Notes on value representation
 
 Due to restrictions of DynamoDB, it may sometimes be the case that objects are not persisted faithfully.
