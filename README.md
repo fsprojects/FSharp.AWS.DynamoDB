@@ -26,7 +26,7 @@ type WorkItemInfo =
 
 		Name : string
 		UUID : Guid
-		Dependencies : string list
+		Dependencies : Set<string>
 		Started : DateTimeOffset option
 	}
 ```
@@ -37,7 +37,7 @@ open Amazon.DynamoDBv2
 let client : IAmazonDynamoDB = ``your DynamoDB client instance``
 let table = TableContext.Create<WorkItemInfo>(client, tableName = "workItems", createIfNotExists = true)
 
-let workItem = { ProcessId = 0L ; WorkItemId = 1L ; Name = "Test" ; UUID = guid() ; Dependencies = ["mscorlib"] ; Started = None }
+let workItem = { ProcessId = 0L ; WorkItemId = 1L ; Name = "Test" ; UUID = guid() ; Dependencies = set ["mscorlib"] ; Started = None }
 
 let key : TableKey = table.PutItem(workItem)
 let workItem' = table.GetItem(key)
@@ -92,4 +92,20 @@ Subsequently recovering the given key will result in the following value:
 val it : Record = {HashKey = 8d4f0678-6def-4bc9-a0ff-577a53c1337c;
                    Optional = None;
                    Lists = [[1;2]; [3;4]];}
+```
+
+## Precomputing DynamoDB Expressions
+
+It is possible to precompute a DynamoDB expression as follows:
+```fsharp
+let precomputedConditional = table.Template.PrecomputeConditionalExpr <@ fun w -> w.Name <> "test" && w.Dependencies.Contains "mscorlib" @>
+```
+This precomputed conditional can now be used in place of the original expression in the FSharp.DynamoDB API:
+```fsharp
+let results = table.Scan precomputedConditional
+```
+FSharp.DynamoDB also supports precomputation of parametric expressions:
+```fsharp
+let startedBefore = table.Template.PrecomputeConditionalExpr <@ fun time w -> w.StartTime.Value <= time @>
+table.Scan(startedBefore (DateTimeOffset.Now - TimeSpan.FromDays 1.))
 ```
