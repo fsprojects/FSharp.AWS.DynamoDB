@@ -35,7 +35,7 @@ We can now perfom table operations on DynamoDB like so
 open Amazon.DynamoDBv2
 
 let client : IAmazonDynamoDB = ``your DynamoDB client instance``
-let table = TableContext.Create<WorkItemInfo>(client, tableName = "workItems", createIfNotExists = true)
+let table = TableContext.Create<WorkItemInfo>(client, tableName = "workItems")
 
 let workItem = { ProcessId = 0L ; WorkItemId = 1L ; Name = "Test" ; UUID = guid() ; Dependencies = ["mscorlib"] ; Started = None }
 
@@ -67,3 +67,28 @@ FSharp.DynamoDB supports the following field types:
 * F# sets with elements of type number, string or byte[].
 * F# Maps with key of type string.
 * F# records and unions (recursive types not supported).
+
+## Notes on value representation
+
+Due to restrictions of DynamoDB, it may sometimes be the case that objects may not be persisted faithfully.
+For example, consider the following record definition:
+```fsharp
+type Record = 
+    {         
+        [<HashKey>]
+        HashKey : Guid
+
+        Optional : int option option
+        Lists : int list list
+    }
+    
+let item = { HashKey = Guid.NewGuid() ; Optional = Some None ; Lists = [[1;2];[];[3;4]] }
+let key = table.PutItem item
+```
+Subsequently recovering the given key will result in the following value:
+```
+> table.GetItem key
+val it : Record = {HashKey = 8d4f0678-6def-4bc9-a0ff-577a53c1337c;
+                   Optional = None;
+                   Lists = [[1;2]; [3;4]];}
+```
