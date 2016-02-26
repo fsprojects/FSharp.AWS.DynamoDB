@@ -252,6 +252,13 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
             else
                 List_Append(l, r)
 
+        | ConsList(head, tail) ->
+            let l, r = extractOperand pickler head, extractOperand pickler tail
+            if l = Undefined then Operand r
+            elif r = Undefined then Operand l
+            else
+                List_Append(l, r)
+
         | SpecificCall2 <@ List.append @> (None, _, _, [left; right]) ->
             let l, r = extractOperand pickler left, extractOperand pickler right
             if l = Undefined then Operand r

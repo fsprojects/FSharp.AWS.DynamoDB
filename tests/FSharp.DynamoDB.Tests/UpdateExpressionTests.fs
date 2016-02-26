@@ -224,6 +224,13 @@ type ``Update Expression Tests`` () =
         item'.List |> should equal (item.List @ item.List)
 
     [<Fact>]
+    let ``Update list with consing`` () =
+        let item = { mkItem() with List = [2L] }
+        let key = table.PutItem item
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with List = 1L :: r.List } @>)
+        item'.List |> should equal [1L ; 2L]
+
+    [<Fact>]
     let ``Update set with add element`` () =
         let item = { mkItem() with Set = set [1L;2L] }
         let key = table.PutItem item

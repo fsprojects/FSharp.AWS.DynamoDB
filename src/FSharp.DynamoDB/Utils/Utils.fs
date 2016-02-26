@@ -186,6 +186,14 @@ module internal Utils =
 
         | _ -> None
 
+    let (|ConsList|_|) (e : Expr) =
+        match e with
+        | NewUnionCase(uci, [h ; t]) ->
+            let dt = uci.DeclaringType
+            if dt.IsGenericType && dt.GetGenericTypeDefinition() = typedefof<_ list> then
+                Some(h, t)
+            else None
+        | _ -> None
 
     type Task with
         /// Gets the inner exception of the faulted task.
