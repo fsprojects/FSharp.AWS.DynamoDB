@@ -87,7 +87,7 @@ let item = { HashKey = Guid.NewGuid() ; Optional = Some None ; Lists = [[1;2];[]
 let key = table.PutItem item
 ```
 Subsequently recovering the given key will result in the following value:
-```
+```fsharp
 > table.GetItem key
 val it : Record = {HashKey = 8d4f0678-6def-4bc9-a0ff-577a53c1337c;
                    Optional = None;
