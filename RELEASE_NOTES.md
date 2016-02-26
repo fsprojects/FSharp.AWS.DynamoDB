@@ -1,3 +1,6 @@
+### 0.0.7-alpha
+* Support list consing in update expressions.
+
 ### 0.0.6-alpha
 * TableContext API refinements.
 
