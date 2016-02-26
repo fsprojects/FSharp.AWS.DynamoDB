@@ -367,12 +367,12 @@ type ``Update Expression Tests`` () =
     let ``Simple Parametric Updater 2`` () =
         let item = mkItem()
         let key = table.PutItem item
-        let cond = table.Template.PrecomputeUpdateExpr <@ fun v1 v2 r -> SET r.Value v1 &&& SET r.String v2 @>
+        let cond = table.Template.PrecomputeUpdateExpr <@ fun v1 v2 r -> SET r.Value v1 &&& ADD r.Set v2 @>
         let v1 = rand()
-        let v2 = guid()
+        let v2 = [ for i in 1 .. 10 -> rand()]
         let result = table.UpdateItem(key, cond v1 v2)
         result.Value |> should equal v1
-        result.String |> should equal v2
+        for v in v2 do result.Set.Contains v |> should equal true
 
     [<Fact>]
     let ``Parametric Updater with optional argument`` () =
@@ -381,6 +381,25 @@ type ``Update Expression Tests`` () =
         let cond = table.Template.PrecomputeUpdateExpr <@ fun opt (r : R) -> { r with Optional = opt } @>
         let result = table.UpdateItem(key, cond None)
         result.Optional |> should equal None
+
+    [<Fact>]
+    let ``Parametric Updater with heterogeneous argument consumption`` () =
+        let item = mkItem()
+        let key = table.PutItem item
+        let values = [ for i in 1 .. 10 -> rand()]
+        let cond = table.Template.PrecomputeUpdateExpr <@ fun vs r -> SET r.List vs &&& ADD r.Set vs @>
+        let result = table.UpdateItem(key, cond values)
+        result.List |> should equal values
+        for v in values do result.Set.Contains v |> should equal true
+
+    [<Fact>]
+    let ``Parametric Updater with invalid param usage`` () =
+        let template = table.Template
+        fun () -> template.PrecomputeUpdateExpr <@ fun v (r : R) -> { r with Value = List.head v } @>
+        |> shouldFailwith<_, ArgumentException>
+
+        fun () -> template.PrecomputeUpdateExpr <@ fun v (r : R) -> ADD r.Set (1L :: v) @>
+        |> shouldFailwith<_, ArgumentException>
 
     interface IDisposable with
         member __.Dispose() =

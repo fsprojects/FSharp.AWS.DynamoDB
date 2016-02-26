@@ -69,7 +69,7 @@ and UpdateValue =
 and Operand =
     | Attribute of AttributePath
     | Value of AttributeValueEqWrapper
-    | Param of index:int
+    | Param of index:int * Pickler
     | Undefined
 
 /// Intermediate representation of update expressions
@@ -77,8 +77,8 @@ type IntermediateUpdateExprs =
     { 
         /// Record variable identifier used by predicate
         RVar : Var
-        /// External update params
-        Params : Pickler []
+        /// Number of parameters in update expression
+        NParams : int
         /// Parameter variable recognizer
         ParamRecognizer : Expr -> int option
         /// Record conversion info
@@ -94,18 +94,18 @@ type UpdateOperations =
     {
         /// Update operations, sorted by type
         UpdateOps : UpdateOperation []
-        /// If update operation is parametric, specifies an array of picklers for input parameters
-        Params : Pickler []
+        /// Number of external parameters in update operation
+        NParams : int
     }
 with
-    member __.IsParametericExpr = __.Params.Length > 0
+    member __.IsParametericExpr = __.NParams > 0
 
 /// Extracts update expressions from a quoted record update predicate
 let extractRecordExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : IntermediateUpdateExprs =
     if not expr.IsClosed then invalidArg "expr" "supplied update expression contains free variables."
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
-    let pPicklers, pRecognizer, expr' = extractExprParams recordInfo expr
+    let nParams, pRecognizer, expr' = extractExprParams recordInfo expr
 
     match expr' with
     | Lambda(r,body) when r.Type = recordInfo.Type ->
@@ -130,7 +130,8 @@ let extractRecordExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : Intermed
             |> Seq.choose id 
             |> Seq.toArray
 
-        { RVar = r ; Params = pPicklers ; ParamRecognizer = pRecognizer ; Assignments = assignmentExprs ; RecordInfo = recordInfo ; UpdateOps = [||] }
+        { RVar = r ; NParams = nParams ; ParamRecognizer = pRecognizer ; 
+          Assignments = assignmentExprs ; RecordInfo = recordInfo ; UpdateOps = [||] }
 
     | _ -> invalidExpr()
 
@@ -140,15 +141,18 @@ let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : Intermediate
     if not expr.IsClosed then invalidArg "expr" "supplied update expression contains free variables."
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
-    let pPicklers, (|PVar|_|), expr' = extractExprParams recordInfo expr
+    let nParams, (|PVar|_|), expr' = extractExprParams recordInfo expr
 
-    let getOperand (pickler : Pickler) (expr : Expr) =
+    let rec getOperand (pickler : Pickler) (expr : Expr) =
         match expr with
-        | PVar i -> Param i
-        | _ ->
+        | Coerce(e, _) -> getOperand pickler e
+        | PVar i -> Param (i, pickler)
+        | _ when expr.IsClosed ->
             match expr |> evalRaw |> pickler.PickleCoerced with
             | None -> Undefined
             | Some av -> Value (wrap av)
+
+        | _ -> invalidExpr()
 
     match expr' with
     | Lambda(r,body) when r.Type = recordInfo.Type ->
@@ -193,7 +197,7 @@ let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : Intermediate
         let assignments = assignments.ToArray()
         let updateOps = updateOps.ToArray()
 
-        { RVar = r ; Params = pPicklers ; ParamRecognizer = (|PVar|_|) ; RecordInfo = recordInfo ; Assignments = assignments ; UpdateOps = updateOps }
+        { RVar = r ; NParams = nParams ; ParamRecognizer = (|PVar|_|) ; RecordInfo = recordInfo ; Assignments = assignments ; UpdateOps = updateOps }
 
     | _ -> invalidExpr()
 
@@ -214,7 +218,7 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
         | _ when expr.IsClosed -> getValue pickler expr
         | PipeRight e | PipeLeft e -> extractOperand pickler e
         | AttributeGet attr -> Attribute attr
-        | PVar i -> Param i
+        | PVar i -> Param (i, pickler)
         | _ -> invalidExpr()
 
     let rec extractUpdateValue (pickler : Pickler) (expr : Expr) =
@@ -328,26 +332,16 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
 
     if updateOps.Length = 0 then invalidArg "expr" "No update clauses found in expression"
 
-    { UpdateOps = updateOps ; Params = exprs.Params }
+    { UpdateOps = updateOps ; NParams = exprs.NParams }
 
 /// applies a set of input values to parametric update operations
 let applyParams (uops : UpdateOperations) (inputValues : obj[]) =
-    let paramValues = new Dictionary<int, Operand>()
     let applyOperand (op : Operand) =
         match op with
-        | Param i ->
-            let ok, found = paramValues.TryGetValue i
-            if ok then found
-            else
-                let v = inputValues.[i]
-                let pickler = uops.Params.[i]
-                let op =
-                    match pickler.PickleUntyped v with
-                    | Some av -> Value (wrap av)
-                    | None -> Undefined
-
-                paramValues.Add(i, op)
-                op
+        | Param (i, pickler) ->
+            match pickler.PickleCoerced inputValues.[i] with
+            | Some av -> Value (wrap av)
+            | None -> Undefined
 
         | _ -> op
 
@@ -400,7 +394,7 @@ let applyParams (uops : UpdateOperations) (inputValues : obj[]) =
         |> Seq.sortBy (fun uop -> uop.Id, uop.Attribute.Id)
         |> Seq.toArray
 
-    { UpdateOps = updateOps' ; Params = [||] }
+    { UpdateOps = updateOps' ; NParams = 0 }
 
 /// prints a set of update operations to string recognizable by the DynamoDB APIs
 let writeUpdateExpression (writer : AttributeWriter) (uops : UpdateOperations) =

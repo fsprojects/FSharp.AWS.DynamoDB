@@ -180,13 +180,10 @@ type AttributeWriter(names : Dictionary<string, string>, values : Dictionary<str
 
 /// Recognizes exprs of shape <@ fun p1 p2 ... -> body @>
 let extractExprParams (recordInfo : RecordInfo) (expr : Expr) =
-    let picklers = new ResizeArray<Pickler>()
     let vars = new Dictionary<Var, int> ()
     let rec aux i expr =
         match expr with
         | Lambda(v, body) when v.Type <> recordInfo.Type ->
-            let p = Pickler.resolveUntyped v.Type
-            picklers.Add p
             vars.Add(v, i)
             aux (i + 1) body
         | _ -> expr
@@ -200,7 +197,7 @@ let extractExprParams (recordInfo : RecordInfo) (expr : Expr) =
             else None
         | _ -> None
 
-    picklers.ToArray(), tryFindIndex, expr'
+    vars.Count, tryFindIndex, expr'
 
 // Detects conflicts in a collection of attribute paths
 // e.g. 'r.Foo.Bar.[0]' and 'r.Foo' are conflicting

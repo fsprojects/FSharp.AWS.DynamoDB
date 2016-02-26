@@ -437,6 +437,15 @@ type ``Conditional Expression Tests`` () =
         let cond = table.Template.PrecomputeConditionalExpr <@ fun opt r -> r.Optional = opt @>
         table.PutItem(item, cond None)
 
+    [<Fact>]
+    let ``Parametric Conditional with invalid param usage`` () =
+        let template = table.Template
+        fun () -> template.PrecomputeConditionalExpr <@ fun v r -> r.Value = v + 1L @>
+        |> shouldFailwith<_, ArgumentException>
+
+        fun () -> template.PrecomputeConditionalExpr <@ fun v r -> r.Value = Option.get v @>
+        |> shouldFailwith<_, ArgumentException>
+
     interface IDisposable with
         member __.Dispose() =
             ignore <| client.DeleteTable(tableName)

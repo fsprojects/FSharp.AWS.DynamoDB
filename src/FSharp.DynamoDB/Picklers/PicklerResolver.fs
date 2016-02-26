@@ -128,27 +128,31 @@ module private ResolverImpl =
         | _ -> UnSupportedType.Raise t
 
     type CachedResolver private () as self =
-        static let globalCache = new ConcurrentDictionary<Type, Pickler>()
+        static let globalCache = new ConcurrentDictionary<Type, Lazy<Pickler>>()
         let stack = new Stack<Type>()
         let resolve t = 
             if stack.Contains t then
                 UnSupportedType.Raise(t, "recursive types not supported.")
                 
             stack.Push t
-            let pickler = globalCache.GetOrAdd(t, resolvePickler self)
+            let pf = globalCache.GetOrAdd(t, fun t -> lazy(resolvePickler self t))
             let _ = stack.Pop()
-            pickler
-
-        static member Create() = new CachedResolver() :> IPicklerResolver
+            pf.Value
 
         interface IPicklerResolver with
             member __.Resolve(t : Type) = resolve t
             member __.Resolve<'T> () = resolve typeof<'T> :?> Pickler<'T>
 
+        static member Resolve(t : Type) =
+            let ok, found = globalCache.TryGetValue t
+            if ok then found.Value
+            else
+                (new CachedResolver() :> IPicklerResolver).Resolve t
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module internal Pickler =
 
     /// Resolves pickler for given type
-    let resolveUntyped (t : Type) = CachedResolver.Create().Resolve t
+    let resolveUntyped (t : Type) = CachedResolver.Resolve t
     /// Resolves pickler for given type
-    let resolve<'T> () = CachedResolver.Create().Resolve<'T> ()
+    let resolve<'T> () = CachedResolver.Resolve typeof<'T> :?> Pickler<'T>

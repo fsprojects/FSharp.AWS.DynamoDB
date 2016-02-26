@@ -65,6 +65,10 @@ let inline mkNumericalPickler< ^N when ^N : (static member Parse : string -> ^N)
         member __.UnPickle a = 
             if not <| isNull a.N then parseNum a.N 
             else invalidCast a
+
+        member __.PickleCoerced o =
+            let n = match o with :? ^N as n -> n | other -> string other |> parseNum
+            __.Pickle n
     }
 
 type ByteArrayPickler() =

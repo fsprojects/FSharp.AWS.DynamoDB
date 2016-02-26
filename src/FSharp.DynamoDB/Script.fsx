@@ -26,6 +26,7 @@ type Test =
         [<RangeKey>]
         RangeKey : string
         Value : int
+        List : int64 list
         Unions : Union list
         String : string ref
         Value2 : int option
@@ -40,7 +41,7 @@ type Test =
 let table = TableContext.Create<Test>(ddb, "test")
 do table.CreateIfNotExists()
 
-let value = { HashKey = Guid.NewGuid() ; RangeKey = "2" ; Value = 40 ; Date = DateTimeOffset.Now + TimeSpan.FromDays 2. ; Value2 = None ; Values = [|{ A = "foo" ; B = System.Reflection.BindingFlags.Instance }|] ; Map = Map.ofList [("A1",1)] ; Set = [set [1L];set [2L]] ; Bytes = [|1uy..10uy|]; String = ref "1a" ; Unions = [A 42; B("42",3)]}
+let value = { HashKey = Guid.NewGuid() ; List = [] ; RangeKey = "2" ; Value = 40 ; Date = DateTimeOffset.Now + TimeSpan.FromDays 2. ; Value2 = None ; Values = [|{ A = "foo" ; B = System.Reflection.BindingFlags.Instance }|] ; Map = Map.ofList [("A1",1)] ; Set = [set [1L];set [2L]] ; Bytes = [|1uy..10uy|]; String = ref "1a" ; Unions = [A 42; B("42",3)]}
 
 let key = table.PutItem value
 table.GetItem key

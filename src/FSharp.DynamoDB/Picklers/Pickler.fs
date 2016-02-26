@@ -36,8 +36,10 @@ type PicklerType =
 type Pickler() =
     /// Type that the given instance is responsible for pickling
     abstract Type : Type
-    abstract PickleType : PickleType
-    abstract PicklerType  : PicklerType
+    /// Type used for pickling value in DynamoDB
+    abstract PickleType  : PickleType
+    /// Type of pickler that was generated
+    abstract PicklerType : PicklerType
 
     /// Default value to be used in case of missing attribute in table
     abstract DefaultValueUntyped : obj
@@ -58,6 +60,9 @@ type Pickler() =
         | PickleType.Bytes
         | PickleType.Bool -> true
         | _ -> false
+
+    override p.Equals o = obj.ReferenceEquals(p, o)
+    override p.GetHashCode() = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode p
 
 /// Typed pickler base class
 [<AbstractClass>]

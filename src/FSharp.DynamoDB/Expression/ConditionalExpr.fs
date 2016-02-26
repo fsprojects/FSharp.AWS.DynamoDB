@@ -47,7 +47,7 @@ and Comparator =
 and Operand =
     | Undefined
     | Value of AttributeValueEqWrapper
-    | Param of index:int
+    | Param of index:int * Pickler
     | Attribute of AttributePath
     | SizeOf of AttributePath
 
@@ -59,10 +59,10 @@ type ConditionalExpression =
         /// Specifies whether this query is compatible with DynamoDB key conditions
         IsKeyConditionCompatible : bool
         /// If query expression is parametric, specifies an array of picklers for input parameters
-        Params : Pickler []
+        NParams : int
     }
 with
-    member __.IsParametericExpr = __.Params.Length > 0
+    member __.IsParametericExpr = __.NParams > 0
 
 // A DynamoDB key condition expression must satisfy the following conditions:
 // 1. Must only reference HashKey & RangeKey attributes.
@@ -117,7 +117,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
     if not expr.IsClosed then invalidArg "expr" "supplied query is not a closed expression."
     let invalidQuery() = invalidArg "expr" <| sprintf "Supplied expression is not a valid conditional."
 
-    let pPicklers, (|PVar|_|), expr' = extractExprParams recordInfo expr
+    let nParams, (|PVar|_|), expr' = extractExprParams recordInfo expr
 
     match expr' with
     | Lambda(r,body) when r.Type = recordInfo.Type ->
@@ -143,11 +143,14 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
                 | None -> Undefined
                 | Some av -> Value (wrap av)
 
+            | Coerce(e,_)
             | PipeLeft e
             | PipeRight e -> extractOperand pickler e
 
             | AttributeGet attr -> Attribute attr
-            | PVar i -> Param i
+            | PVar i -> 
+                let pickler = match pickler with Some p -> p | None -> Pickler.resolveUntyped expr.Type
+                Param(i, pickler)
 
             | SpecificProperty <@ fun (s : string) -> s.Length @> (Some (AttributeGet attr), _, []) -> 
                 SizeOf attr
@@ -289,7 +292,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
         ensureNotTautological queryExpr
         {
             QueryExpr = queryExpr
-            Params = pPicklers
+            NParams = nParams
             IsKeyConditionCompatible = isKeyConditionCompatible queryExpr
         }
 
@@ -297,22 +300,12 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
 
 /// applies a set of input values to a parametric query expression
 let applyParams (cond : ConditionalExpression) (inputValues : obj[]) =
-    let paramValues = new Dictionary<int, Operand>()
     let applyOperand (op : Operand) =
         match op with
-        | Param i ->
-            let ok, op = paramValues.TryGetValue i
-            if ok then op
-            else
-                let v = inputValues.[i]
-                let pickler = cond.Params.[i]
-                let op =
-                    match pickler.PickleUntyped v with
-                    | Some av -> Value (wrap av)
-                    | None -> Undefined
-
-                paramValues.Add(i, op)
-                op
+        | Param (i, pickler) ->
+            match pickler.PickleCoerced inputValues.[i] with
+            | Some av -> Value (wrap av)
+            | None -> Undefined
 
         | _ -> op
 
@@ -359,7 +352,7 @@ let applyParams (cond : ConditionalExpression) (inputValues : obj[]) =
 
     let reduced = applyQuery cond.QueryExpr
     ensureNotTautological reduced
-    { cond with QueryExpr = reduced ; Params = [||] }
+    { cond with QueryExpr = reduced ; NParams = 0 }
 
 /// prints a query expression to string recognizable by the DynamoDB APIs
 let writeConditionExpression (writer : AttributeWriter) (cond : ConditionalExpression) =
