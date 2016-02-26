@@ -1,3 +1,6 @@
+### 0.0.5-alpha
+* Implement update expressions.
+
 ### 0.0.4-alpha
 * Bugfix.
 
