@@ -430,6 +430,13 @@ type ``Conditional Expression Tests`` () =
         let cond = table.Template.PrecomputeConditionalExpr <@ fun hk rk r -> r.HashKey = hk && r.RangeKey = rk @>
         table.PutItem(item, cond item.HashKey item.RangeKey)
 
+    [<Fact>]
+    let ``Parametric Conditional with optional argument`` () =
+        let item = { mkItem() with Optional = None }
+        let key = table.PutItem item
+        let cond = table.Template.PrecomputeConditionalExpr <@ fun opt r -> r.Optional = opt @>
+        table.PutItem(item, cond None)
+
     interface IDisposable with
         member __.Dispose() =
             ignore <| client.DeleteTable(tableName)

@@ -374,6 +374,14 @@ type ``Update Expression Tests`` () =
         result.Value |> should equal v1
         result.String |> should equal v2
 
+    [<Fact>]
+    let ``Parametric Updater with optional argument`` () =
+        let item = { mkItem() with Optional = Some (guid()) }
+        let key = table.PutItem item
+        let cond = table.Template.PrecomputeUpdateExpr <@ fun opt (r : R) -> { r with Optional = opt } @>
+        let result = table.UpdateItem(key, cond None)
+        result.Optional |> should equal None
+
     interface IDisposable with
         member __.Dispose() =
             ignore <| client.DeleteTable(tableName)

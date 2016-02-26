@@ -35,6 +35,7 @@ open FSharp.DynamoDB.ExprCommon
 
 /// DynamoDB update opration
 type UpdateOperation =
+    | Skip
     | Set of AttributePath * UpdateValue
     | Remove of AttributePath
     | Add of AttributePath * Operand
@@ -42,10 +43,20 @@ type UpdateOperation =
 with
     member uo.Attribute =
         match uo with
+        | Skip -> invalidOp "no attribute contained in skip op"
         | Set(attr,_)  -> attr
         | Remove attr -> attr
         | Add(attr,_) -> attr
         | Delete(attr,_) -> attr
+
+    member uo.Id =
+        match uo with
+        | Skip -> 0
+        | Set _ -> 1
+        | Remove _ -> 2
+        | Add _ -> 3
+        | Delete _ -> 4
+
 
 /// Update value used for SET operations
 and UpdateValue =
@@ -82,7 +93,7 @@ type IntermediateUpdateExprs =
 type UpdateOperations =
     {
         /// Update operations, sorted by type
-        UpdateOps : UpdateOperation [][]
+        UpdateOps : UpdateOperation []
         /// If update operation is parametric, specifies an array of picklers for input parameters
         Params : Pickler []
     }
@@ -246,73 +257,73 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
 
         | _ -> extractOperand pickler expr |> Operand
 
-    let rec tryExtractUpdateExpr (parent : AttributePath) (expr : Expr) =
+    let rec extractUpdateOp (parent : AttributePath) (expr : Expr) : UpdateOperation =
         match expr with
-        | PipeRight e | PipeLeft e -> tryExtractUpdateExpr parent e
+        | PipeRight e | PipeLeft e -> extractUpdateOp parent e
         | SpecificCall2 <@ Set.add @> (None, _, _, [elem; AttributeGet attr]) when parent = attr ->
             let op = extractOperand parent.Pickler elem
-            if op = Undefined then None
-            else Add(attr, op) |> Some
+            if op = Undefined then Skip
+            else Add(attr, op)
 
         | SpecificCall2 <@ fun (s : Set<_>) e -> s.Add e @> (Some (AttributeGet attr), _, _, [elem]) when attr = parent ->
             let op = extractOperand parent.Pickler elem
-            if op = Undefined then None
+            if op = Undefined then Skip
             else
-                Add(attr, op) |> Some
+                Add(attr, op)
 
         | SpecificCall2 <@ Set.remove @> (None, _, _, [elem ; AttributeGet attr]) when attr = parent ->
             let op = extractOperand parent.Pickler elem
-            if op = Undefined then None
+            if op = Undefined then Skip
             else
-                Delete(attr, op) |> Some
+                Delete(attr, op)
 
         | SpecificCall2 <@ fun (s : Set<_>) e -> s.Remove e @> (Some (AttributeGet attr), _, _, [elem]) when attr = parent ->
             let op = extractOperand parent.Pickler elem
-            if op = Undefined then None
+            if op = Undefined then Skip
             else
-                Delete(attr, op) |> Some
+                Delete(attr, op)
 
         | SpecificCall2 <@ (+) @> (None, _, _, ([AttributeGet attr; other] | [other ; AttributeGet attr])) when attr = parent && not attr.Pickler.IsScalar ->
             let op = extractOperand parent.Pickler other
-            if op = Undefined then None
+            if op = Undefined then Skip
             else
-                Add(attr, op) |> Some
+                Add(attr, op)
 
         | SpecificCall2 <@ (-) @> (None, _, _, [AttributeGet attr; other]) when attr = parent && not attr.Pickler.IsScalar ->
             let op = extractOperand parent.Pickler other
-            if op = Undefined then None
+            if op = Undefined then Skip
             else
-                Delete(attr, op) |> Some
+                Delete(attr, op)
 
         | SpecificCall2 <@ Map.add @> (None, _, _, [keyE; value; AttributeGet attr]) when attr = parent ->
             let key = evalRaw keyE
             let attr = Suffix(key, parent)
             let ep = getElemPickler parent.Pickler
             match extractUpdateValue ep value with
-            | Operand op when op = Undefined -> Some(Remove attr)
-            | uv -> Some(Set(attr, uv))
+            | Operand op when op = Undefined -> Remove attr
+            | uv -> Set(attr, uv)
 
         | SpecificCall2 <@ Map.remove @> (None, _, _, [keyE; AttributeGet attr]) when attr = parent ->
             let key = evalRaw keyE
             let attr = Suffix(key, parent)
-            Some(Remove attr)
+            Remove attr
 
         | e -> 
             match extractUpdateValue parent.Pickler e with
-            | Operand op when op = Undefined -> Some(Remove parent)
-            | uv -> Some(Set(parent, uv))
+            | Operand op when op = Undefined -> Remove parent
+            | uv -> Set(parent, uv)
 
     let updateOps = 
         exprs.Assignments 
-        |> Seq.choose (fun (rp,e) -> tryExtractUpdateExpr rp e)
+        |> Seq.map (fun (rp,e) -> extractUpdateOp rp e)
         |> Seq.append exprs.UpdateOps
+        |> Seq.filter (function Skip _ -> false | _ -> true)
         |> Seq.map (fun uop -> 
             let rp = uop.Attribute.RootProperty
             if rp.IsHashKey then invalidArg "expr" "update expression cannot update hash key."
             if rp.IsRangeKey then invalidArg "expr" "update expression cannot update range key."
             uop)
-        |> Seq.groupBy (function Set _ -> 0 | Remove _ -> 1 | Add _ -> 2 | Delete _ -> 3)
-        |> Seq.map (fun (_,gp) -> gp |> Seq.sortBy (fun o -> o.Attribute.Id) |> Seq.toArray)
+        |> Seq.sortBy (fun uop -> uop.Id, uop.Attribute.Id)
         |> Seq.toArray
 
     if updateOps.Length = 0 then invalidArg "expr" "No update clauses found in expression"
@@ -366,12 +377,30 @@ let applyParams (uops : UpdateOperations) (inputValues : obj[]) =
 
     let applyUpdateOp uop =
         match uop with
-        | Remove _ -> uop
-        | Set(attr,uv) -> Set(attr, applyUpdateValue uv)
-        | Add(attr, op) -> Add(attr, applyOperand op)
-        | Delete(attr, op) -> Delete(attr, applyOperand op)
+        | Remove _ | Skip _ -> uop
+        | Set(attr, uv) -> 
+            match applyUpdateValue uv with
+            | Operand Undefined -> Remove attr
+            | uv -> Set(attr, uv)
 
-    { UpdateOps = Array.map (Array.map applyUpdateOp) uops.UpdateOps ; Params = [||] }
+        | Add(attr, op) -> 
+            match applyOperand op with
+            | Undefined -> Skip
+            | op -> Add(attr, op)
+
+        | Delete(attr, op) -> 
+            match applyOperand op with
+            | Undefined -> Skip
+            | op -> Delete(attr, op)
+
+    let updateOps' =
+        uops.UpdateOps
+        |> Seq.map applyUpdateOp
+        |> Seq.filter (function Skip -> false | _ -> true)
+        |> Seq.sortBy (fun uop -> uop.Id, uop.Attribute.Id)
+        |> Seq.toArray
+
+    { UpdateOps = updateOps' ; Params = [||] }
 
 /// prints a set of update operations to string recognizable by the DynamoDB APIs
 let writeUpdateExpression (writer : AttributeWriter) (uops : UpdateOperations) =
@@ -396,25 +425,34 @@ let writeUpdateExpression (writer : AttributeWriter) (uops : UpdateOperations) =
         | Op_Subtraction(l, r) -> writeOp l ; ! " - " ; writeOp r
         | List_Append(l,r) -> ! "(list_append(" ; writeOp l ; ! ", " ; writeOp r ; ! "))"
 
-    for i = 0 to uops.UpdateOps.Length - 1 do
-        if i > 0 then ! " "
-        let group = uops.UpdateOps.[i]
-        for j = 0 to group.Length - 1 do
-            match group.[j] with
-            | Set(attr, uv) -> 
-                if j = 0 then ! "SET " else ! ", "
-                writeAttr attr ; !" = " ; writeUV uv
-            | Remove attr ->
-                if j = 0 then ! "REMOVE " else ! ", "
-                writeAttr attr
+    let isFirstGp =
+        let lastId = ref -1
+        fun (uo:UpdateOperation) ->
+            if lastId.Value = -1 then
+                lastId := uo.Id ; true
+            elif lastId.Value <> uo.Id then
+                lastId := uo.Id ; ! " " ; true
+            else
+                false
 
-            | Add(attr, op) ->
-                if j = 0 then ! "ADD " else ! ", "
-                writeAttr attr ; ! " " ; writeOp op
+    for uop in uops.UpdateOps do
+        match uop with
+        | Skip -> ()
+        | Set(attr, uv) -> 
+            if isFirstGp uop then ! "SET " else ! ", "
+            writeAttr attr ; !" = " ; writeUV uv
 
-            | Delete(attr, op) ->
-                if j = 0 then ! "DELETE " else ! ", "
-                writeAttr attr ; ! " " ; writeOp op
+        | Remove attr ->
+            if isFirstGp uop then ! "REMOVE " else ! ", "
+            writeAttr attr
+
+        | Add(attr, op) ->
+            if isFirstGp uop then ! "ADD " else ! ", "
+            writeAttr attr ; ! " " ; writeOp op
+
+        | Delete(attr, op) ->
+            if isFirstGp uop then ! "DELETE " else ! ", "
+            writeAttr attr ; ! " " ; writeOp op
 
     sb.ToString()
 
