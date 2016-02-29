@@ -1,3 +1,6 @@
+### 0.0.8-alpha
+* Implement string representation attribute.
+
 ### 0.0.7-alpha
 * Support list consing in update expressions.
 
