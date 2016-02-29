@@ -15,7 +15,7 @@ open FSharp.DynamoDB.UpdateExpr
 
 /// Represents a condition expression for a given record type
 [<Sealed; AutoSerializable(false)>]
-type ConditionExpression<'Record> internal (cond : ConditionalExpression) =
+type ConditionExpression<'TRecord> internal (cond : ConditionalExpression) =
     let data = lazy(cond.GetDebugData())
     /// Gets whether given conditional is a valid key condition
     member __.IsKeyConditionCompatible = cond.IsKeyConditionCompatible
@@ -30,14 +30,52 @@ type ConditionExpression<'Record> internal (cond : ConditionalExpression) =
 
     override __.Equals(other : obj) =
         match other with
-        | :? ConditionExpression<'Record> as other -> cond.QueryExpr = other.Conditional.QueryExpr
+        | :? ConditionExpression<'TRecord> as other -> cond.QueryExpr = other.Conditional.QueryExpr
         | _ -> false
 
     override __.GetHashCode() = hash cond.QueryExpr
 
+type ConditionExpression =
+    
+    /// <summary>
+    ///     Applies the AND operation on two conditionals
+    /// </summary>
+    static member And(left : ConditionExpression<'TRecord>, right : ConditionExpression<'TRecord>) =
+        let lc,rc = left.Conditional, right.Conditional
+        new ConditionExpression<'TRecord>(
+            { 
+                QueryExpr = And(lc.QueryExpr, rc.QueryExpr)
+                IsKeyConditionCompatible = lc.IsKeyConditionCompatible && rc.IsKeyConditionCompatible 
+                NParams = 0   
+            })
+
+    /// <summary>
+    ///     Applies the OR operation on two conditionals
+    /// </summary>
+    static member Or(left : ConditionExpression<'TRecord>, right : ConditionExpression<'TRecord>) =
+        let lc,rc = left.Conditional, right.Conditional
+        new ConditionExpression<'TRecord>(
+            { 
+                QueryExpr = Or(lc.QueryExpr, rc.QueryExpr)
+                IsKeyConditionCompatible = lc.IsKeyConditionCompatible && rc.IsKeyConditionCompatible 
+                NParams = 0   
+            })
+
+    /// <summary>
+    ///     Applies the NOT operation on a conditional
+    /// </summary>
+    static member Not(conditional : ConditionExpression<'TRecord>) =
+        let c = conditional.Conditional
+        new ConditionExpression<'TRecord>(
+            { 
+                QueryExpr = Not c.QueryExpr
+                IsKeyConditionCompatible = c.IsKeyConditionCompatible
+                NParams = 0   
+            })
+
 /// Represents an update expression for a given record type
 [<Sealed; AutoSerializable(false)>]
-type UpdateExpression<'Record> internal (updateOps : UpdateOperations) =
+type UpdateExpression<'TRecord> internal (updateOps : UpdateOperations) =
     let data = lazy(updateOps.GetDebugData())
     /// Internal update expression object
     member internal __.UpdateOps = updateOps
@@ -50,7 +88,7 @@ type UpdateExpression<'Record> internal (updateOps : UpdateOperations) =
 
     override __.Equals(other : obj) =
         match other with
-        | :? UpdateExpression<'Record> as other -> updateOps.UpdateOps = other.UpdateOps.UpdateOps
+        | :? UpdateExpression<'TRecord> as other -> updateOps.UpdateOps = other.UpdateOps.UpdateOps
         | _ -> false
 
     override __.GetHashCode() = hash updateOps.UpdateOps

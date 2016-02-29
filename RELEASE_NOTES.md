@@ -1,3 +1,6 @@
+### 0.0.11-alpha
+* Implement conditional combinators.
+
 ### 0.0.10-alpha
 * Add support for condition expressions in delete operations.
 
