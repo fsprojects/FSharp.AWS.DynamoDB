@@ -73,9 +73,12 @@ let inline mkNumericalPickler< ^N when ^N : (static member Parse : string -> ^N)
     }
 
 type ByteArrayPickler() =
-    inherit Pickler<byte[]> ()
+    inherit StringRepresentablePickler<byte[]> ()
     override __.PickleType = PickleType.Bytes
     override __.PicklerType = PicklerType.Value
+
+    override __.Parse s = Convert.FromBase64String s
+    override __.UnParse b = Convert.ToBase64String b
 
     override __.DefaultValue = [||]
     override __.Pickle bs = 
@@ -177,6 +180,28 @@ type OptionPickler<'T>(tp : Pickler<'T>) =
     override __.DefaultValue = None
     override __.Pickle topt = match topt with None -> None | Some t -> tp.Pickle t
     override __.UnPickle a = if a.NULL then None else Some(tp.UnPickle a)
+
+type StringRepresentationPickler<'T>(ep : StringRepresentablePickler<'T>) =
+    inherit Pickler<'T> ()
+    override __.PickleType = PickleType.String
+    override __.PicklerType = ep.PicklerType
+    override __.DefaultValue = ep.DefaultValue
+    override __.Pickle t = AttributeValue(S = ep.UnParse t) |> Some
+    override __.UnPickle a = 
+        if notNull a.S then ep.Parse a.S
+        else invalidCast a
+
+let mkStringRepresentationPickler (resolver : IPicklerResolver) (prop : PropertyInfo) =
+    getShape(prop.PropertyType).Accept {
+        new IFunc<Pickler> with
+            member __.Invoke<'T>() =
+                match resolver.Resolve<'T>() with
+                | :? StringRepresentablePickler<'T> as tp ->
+                    if tp.PickleType = PickleType.String then tp :> Pickler
+                    else new StringRepresentationPickler<'T>(tp) :> Pickler
+                | _ ->
+                    invalidArg prop.Name "property type cannot be represented as string."
+    }
 
 type SerializerAttributePickler<'T>(serializer : IPropertySerializer, resolver : IPicklerResolver) =
     inherit Pickler<'T>()

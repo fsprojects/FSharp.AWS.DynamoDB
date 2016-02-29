@@ -60,6 +60,8 @@ with
         let pickler = 
             match attributes |> Seq.tryPick (fun a -> match box a with :? IPropertySerializer as ps -> Some ps | _ -> None) with
             | Some serializer -> mkSerializerAttributePickler resolver serializer prop.PropertyType
+            | None when attributes |> containsAttribute<StringRepresentationAttribute> -> 
+                mkStringRepresentationPickler resolver prop
             | None -> resolver.Resolve prop.PropertyType
 
         let name =

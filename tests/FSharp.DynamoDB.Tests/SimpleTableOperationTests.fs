@@ -27,7 +27,7 @@ module SimpleTableTypes =
             Unions : Choice<string, int64, byte[]> list
         }
 
-    [<HashKeyConstant("HashKey", "compatible")>]
+    [<ConstantHashKeyAttribute("HashKey", "compatible")>]
     type CompatibleRecord =
         {
             [<RangeKey; CustomName("RangeKey")>]
@@ -36,7 +36,7 @@ module SimpleTableTypes =
             Values : Set<int>
         }
 
-    [<RangeKeyConstant("RangeKey", "compatible")>]
+    [<ConstantRangeKeyAttribute("RangeKey", "compatible")>]
     type CompatibleRecord2 =
         {
             [<HashKey; CustomName("HashKey")>]

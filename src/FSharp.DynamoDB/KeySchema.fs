@@ -69,8 +69,8 @@ with
 
     /// Builds key structure from supplied F# record info
     static member FromRecordInfo (recordInfo : RecordInfo) =
-        let hkcaOpt = recordInfo.Type.TryGetAttribute<HashKeyConstantAttribute> ()
-        let rkcaOpt = recordInfo.Type.TryGetAttribute<RangeKeyConstantAttribute> ()
+        let hkcaOpt = recordInfo.Type.TryGetAttribute<ConstantHashKeyAttribute> ()
+        let rkcaOpt = recordInfo.Type.TryGetAttribute<ConstantRangeKeyAttribute> ()
 
         if Option.isSome hkcaOpt && Option.isSome rkcaOpt then
             invalidArg (string recordInfo.Type) "Cannot specify both HashKey and RangeKey constant attributes in record definition."

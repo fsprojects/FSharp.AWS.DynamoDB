@@ -30,12 +30,19 @@ module ``Record Generation Tests`` =
     type ``SN Record`` = { [<HashKey>] A1 : string ; [<RangeKey>] B1 : int64  }
     type ``NB Record`` = { [<HashKey>] A1 : uint16 ; [<RangeKey>] B1 : byte[] }
     type ``BS Record`` = { [<HashKey>] A1 : byte[] ; [<RangeKey>] B1 : string }
+    type ``SS Record`` = { [<HashKey>] A1 : string ; [<RangeKey>] B1 : string }
 
-    [<HashKeyConstant("HashKey", 42)>]
+    [<ConstantHashKeyAttribute("HashKey", 42)>]
     type ``NS Constant HashKey Record`` = { [<RangeKey>] B1 : string }
 
-    [<RangeKeyConstant("RangeKey", "Constant")>]
+    [<ConstantRangeKeyAttribute("RangeKey", "Constant")>]
     type ``BS Constant RangeKey Record`` = { [<HashKey>] A1 : byte[] }
+
+    type ``SS String Representation Record`` = 
+        { 
+            [<HashKey; StringRepresentation>]  A1 : byte[]
+            [<RangeKey; StringRepresentation>] B1 : int64
+        }
 
     type ``Custom HashKey Name Record`` = { [<HashKey; CustomName("CustomHashKeyName")>] B1 : string }
 
@@ -94,6 +101,12 @@ module ``Record Generation Tests`` =
         rt.KeySchema.HashKey.AttributeName |> should equal "A1"
         rt.KeySchema.HashKey.KeyType |> should equal ScalarAttributeType.B
         rt.KeySchema.RangeKey |> should equal (Some { AttributeName = "RangeKey" ; KeyType = ScalarAttributeType.S })
+
+    [<Fact>]
+    let ``Generate correct schema for SS String representation Record`` () =
+        let rt = RecordTemplate.Define<``SS Record``> ()
+        let rt' = RecordTemplate.Define<``SS String Representation Record``> ()
+        rt'.KeySchema |> should equal rt.KeySchema
 
     [<Fact>]
     let ``Generate correct schema for Custom HashKey Name Record`` () =
@@ -269,7 +282,7 @@ module ``Record Generation Tests`` =
         fun () -> RecordTemplate.Define<``Record containing multiple HashKey attributes``>()
         |> shouldFailwith<_, ArgumentException>
 
-    [<HashKeyConstant("HashKey", "HashKeyValue")>]
+    [<ConstantHashKeyAttribute("HashKey", "HashKeyValue")>]
     type ``Record containing costant HashKey attribute lacking RangeKey attribute`` = { Value : int }
 
     [<Fact>]
@@ -277,7 +290,7 @@ module ``Record Generation Tests`` =
         fun () -> RecordTemplate.Define<``Record containing costant HashKey attribute lacking RangeKey attribute``>()
         |> shouldFailwith<_, ArgumentException>
 
-    [<HashKeyConstant("HashKey", "HashKeyValue")>]
+    [<ConstantHashKeyAttribute("HashKey", "HashKeyValue")>]
     type ``Record containing costant HashKey attribute with HashKey attribute`` = 
         { [<HashKey>]HashKey : string ; [<RangeKey>]RangeKey : string }
 
