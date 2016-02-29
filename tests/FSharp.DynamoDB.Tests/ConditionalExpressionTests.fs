@@ -82,6 +82,22 @@ type ``Conditional Expression Tests`` () =
     let table = TableContext.Create<CondExprRecord>(client, tableName, createIfNotExists = true)
 
     [<Fact>]
+    let ``Item exists precondition`` () =
+        let item = mkItem()
+        fun () -> table.PutItem(item, precondition = itemExists)
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+        let key = table.PutItem item
+        table.PutItem(item, precondition = itemExists)
+
+    [<Fact>]
+    let ``Item not exists precondition`` () =
+        let item = mkItem()
+        let key = table.PutItem(item, precondition = itemDoesNotExist)
+        fun () -> table.PutItem(item, precondition = itemDoesNotExist)
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+    [<Fact>]
     let ``String precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
@@ -351,6 +367,22 @@ type ``Conditional Expression Tests`` () =
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> r.Serialized = (0L,"")  @>)
         |> shouldFailwith<_, ArgumentException>
+
+    [<Fact>]
+    let ``EXISTS precondition`` () =
+        let item = { mkItem() with List = [1L] }
+        let key = table.PutItem item
+        let _ = table.PutItem(item, precondition = <@ fun r -> EXISTS r.List.[0] @>)
+        fun () -> table.PutItem(item, precondition = <@ fun r -> EXISTS r.List.[1] @>)
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+    [<Fact>]
+    let ``NOT_EXISTS precondition`` () =
+        let item = { mkItem() with List = [1L] }
+        let key = table.PutItem item
+        let _ = table.PutItem(item, precondition = <@ fun r -> NOT_EXISTS r.List.[1] @>)
+        fun () -> table.PutItem(item, precondition = <@ fun r -> NOT_EXISTS r.List.[0] @>)
+        |> shouldFailwith<_, ConditionalCheckFailedException>
 
     [<Fact>]
     let ``Boolean precondition`` () =

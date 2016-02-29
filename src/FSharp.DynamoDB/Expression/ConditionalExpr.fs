@@ -31,10 +31,10 @@ type QueryExpr =
     | Compare of Comparator * Operand * Operand
     | Between of Operand * Operand * Operand
     | In of Operand * Operand list
-    | BeginsWith of AttributePath * Operand
-    | Contains of AttributePath * Operand
-    | Attribute_Exists of AttributePath
-    | Attribute_Not_Exists of AttributePath
+    | BeginsWith of AttributeId * Operand
+    | Contains of AttributeId * Operand
+    | Attribute_Exists of AttributeId
+    | Attribute_Not_Exists of AttributeId
 
 and Comparator =
     | EQ
@@ -48,8 +48,8 @@ and Operand =
     | Undefined
     | Value of AttributeValueEqWrapper
     | Param of index:int * Pickler
-    | Attribute of AttributePath
-    | SizeOf of AttributePath
+    | Attribute of AttributeId
+    | SizeOf of AttributeId
 
 /// Conditional expression parsed from quotation expr
 type ConditionalExpression =
@@ -84,19 +84,19 @@ let isKeyConditionCompatible (qExpr : QueryExpr) =
         | Not _
         | Or _ -> false
         | And(l,r) -> aux l && aux r
-        | BeginsWith(ap,_) when ap.RootProperty.IsHashKey -> false
-        | BeginsWith(ap,_) when ap.RootProperty.IsRangeKey -> incr rangeKeyRefs ; true
+        | BeginsWith(attr,_) when attr.IsHashKey -> false
+        | BeginsWith(attr,_) when attr.IsRangeKey -> incr rangeKeyRefs ; true
         | BeginsWith _ -> false
-        | Between (Attribute ap, (Value _ | Param _), (Value _ | Param _)) ->
-            if ap.RootProperty.IsRangeKey then incr rangeKeyRefs ; true
+        | Between (Attribute attr, (Value _ | Param _), (Value _ | Param _)) ->
+            if attr.IsRangeKey then incr rangeKeyRefs ; true
             else false
 
         | Between _ -> false
-        | Compare(cmp, Attribute ap, (Value _ | Param _))
-        | Compare(cmp, (Value _ | Param _), Attribute ap) ->
-            if ap.RootProperty.IsHashKey then
+        | Compare(cmp, Attribute attr, (Value _ | Param _))
+        | Compare(cmp, (Value _ | Param _), Attribute attr) ->
+            if attr.IsHashKey then
                 incr hashKeyRefs ; cmp = EQ
-            elif ap.RootProperty.IsRangeKey then
+            elif attr.IsRangeKey then
                 incr rangeKeyRefs ; true
             else
                 false
@@ -126,10 +126,10 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
             expr |> evalRaw |> pickler.PickleCoerced
 
         let (|AttributeGet|_|) e = 
-            match AttributePath.TryExtract r recordInfo e with
+            match QuotedAttribute.TryExtract r recordInfo e with
             | None -> None
-            | Some attr as aopt ->
-                attr.Iter (fun pickler -> 
+            | Some qa as aopt ->
+                qa.Iter (fun pickler -> 
                     if pickler.PicklerType = PicklerType.Serialized then 
                         invalidArg "expr" "cannot perform queries on serialized attributes.")
 
@@ -147,41 +147,41 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
             | PipeLeft e
             | PipeRight e -> extractOperand pickler e
 
-            | AttributeGet attr -> Attribute attr
+            | AttributeGet attr -> Attribute attr.Id
             | PVar i -> 
                 let pickler = match pickler with Some p -> p | None -> Pickler.resolveUntyped expr.Type
                 Param(i, pickler)
 
             | SpecificProperty <@ fun (s : string) -> s.Length @> (Some (AttributeGet attr), _, []) -> 
-                SizeOf attr
+                SizeOf attr.Id
 
             | SpecificProperty <@ fun (l : _ list) -> l.Length @> (Some (AttributeGet attr), _, []) -> 
-                SizeOf attr
+                SizeOf attr.Id
 
             | SpecificCall2 <@ List.length @> (None, _, _, [AttributeGet attr]) -> 
-                SizeOf attr
+                SizeOf attr.Id
 
             | SpecificProperty <@ fun (s : Set<_>) -> s.Count @> (Some (AttributeGet attr), _, []) -> 
-                SizeOf attr
+                SizeOf attr.Id
 
             | SpecificCall2 <@ Set.count @> (None, _, _, [AttributeGet attr]) -> 
-                SizeOf attr
+                SizeOf attr.Id
 
             | SpecificProperty <@ fun (m : Map<_,_>) -> m.Count @> (Some (AttributeGet attr), _, []) -> 
-                SizeOf attr
+                SizeOf attr.Id
 
             | SpecificProperty <@ fun (a : _ []) -> a.Length @> (Some (AttributeGet attr), _, []) -> 
-                SizeOf attr
+                SizeOf attr.Id
 
             | SpecificCall2 <@ Array.length @> (None, _, _, [AttributeGet attr]) -> 
-                SizeOf attr
+                SizeOf attr.Id
 
             | _ -> invalidQuery()
 
         let (|Comparison|_|) (pat : Expr) (expr : Expr) =
             match expr with
             | SpecificCall pat (None, _, args) ->
-                let pickler = args |> List.tryPick (|AttributeGet|_|) |> Option.map (fun a -> a.Pickler)
+                let pickler = args |> List.tryPick (|AttributeGet|_|) |> Option.map (fun attr -> attr.Pickler)
                 args |> List.map (extractOperand pickler) |> Some
 
             | _ -> None
@@ -234,7 +234,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
             | PipeLeft e
             | PipeRight e -> extractQuery e
 
-            | AttributeGet attr -> Compare(EQ, Attribute attr, Value (wrap (AttributeValue(BOOL = true))))
+            | AttributeGet attr -> Compare(EQ, Attribute attr.Id, Value (wrap (AttributeValue(BOOL = true))))
 
             | Comparison <@ (=) @> [left; right] -> extractComparison EQ left right
             | Comparison <@ (<>) @> [left; right] -> extractComparison NE left right
@@ -245,35 +245,35 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
 
             | SpecificCall2 <@ fun (x:string) y -> x.StartsWith y @> (Some (AttributeGet attr), _, _, [value]) ->
                 let op = extractOperand None value
-                BeginsWith(attr, op)
+                BeginsWith(attr.Id, op)
 
             | SpecificCall2 <@ fun (x:string) y -> x.Contains y @> (Some (AttributeGet attr), _, _, [value]) ->
                 let op = extractOperand None value
-                Contains(attr, op)
+                Contains(attr.Id, op)
 
             | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; AttributeGet attr]) ->
                 let ep = getElemPickler attr.Pickler
                 let op = extractOperand (Some ep) elem
-                Contains(attr, op)
+                Contains(attr.Id, op)
 
             | SpecificCall2 <@ fun (x:Set<_>) e -> x.Contains e @> (Some(AttributeGet attr), _, _, [elem]) ->
                 let ep = getElemPickler attr.Pickler
                 let op = extractOperand (Some ep) elem
-                Contains(attr, op)
+                Contains(attr.Id, op)
 
             | SpecificCall2 <@ Map.containsKey @> (None, _, _, [key; AttributeGet attr]) when key.IsClosed ->
                 let key = evalRaw key
                 if not <| isValidFieldName key then
                     invalidArg key "map key must be alphanumeric not starting with a digit"
 
-                Attribute_Exists (Suffix(key, attr))
+                Attribute_Exists (attr.Id.Append key)
 
             | SpecificCall2 <@ fun (x : Map<_,_>) y -> x.ContainsKey y @> (Some(AttributeGet attr), _, _, [key]) when key.IsClosed ->
                 let key = evalRaw key
                 if not <| isValidFieldName key then
                     invalidArg key "map key must be alphanumeric not starting with a digit"
 
-                Attribute_Exists (Suffix(key, attr))
+                Attribute_Exists (attr.Id.Append key)
 
             | SpecificCall2 <@ BETWEEN @> (None, _, _, [value ; lower; upper]) ->
                 let pickler = Pickler.resolveUntyped value.Type
@@ -285,6 +285,12 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
                     Between(vOp, lOp, uOp)
                 else
                     invalidArg "expr" "BETWEEN predicate only applies to scalar attributes."
+
+            | SpecificCall2 <@ EXISTS @> (None, _, _, [AttributeGet attr]) ->
+                Attribute_Exists attr.Id
+
+            | SpecificCall2 <@ NOT_EXISTS @> (None, _, _, [AttributeGet attr]) ->
+                Attribute_Not_Exists attr.Id
 
             | _ -> invalidQuery()
 
@@ -363,7 +369,7 @@ let writeConditionExpression (writer : AttributeWriter) (cond : ConditionalExpre
         | Undefined -> invalidOp "internal error: attempting to reference undefined value in query expression."
         | Param _ -> invalidOp "internal error: attempting to reference parameter value in query expression."
         | Value v -> !(writer.WriteValue (unwrap v))
-        | Attribute a -> !(writer.WriteAttibute a) 
+        | Attribute a -> !(writer.WriteAttibute a)
         | SizeOf a -> ! "( size ( " ; !(writer.WriteAttibute a) ; ! " ))"
 
     let rec writeOps ops =
@@ -397,6 +403,22 @@ let writeConditionExpression (writer : AttributeWriter) (cond : ConditionalExpre
 
     writeQuery cond.QueryExpr
     sb.ToString()
+
+/// Generates a conditional that verifies whether a given item exists
+let mkItemExistsCondition (schema : TableKeySchema) =
+    {
+        QueryExpr = AttributeId.FromKeySchema schema |> Attribute_Exists
+        IsKeyConditionCompatible = true
+        NParams = 0
+    }
+
+/// Generates a conditional that verifies whether a given item does not exist
+let mkItemNotExistsCondition (schema : TableKeySchema) =
+    {
+        QueryExpr = AttributeId.FromKeySchema schema |> Attribute_Not_Exists
+        IsKeyConditionCompatible = true
+        NParams = 0
+    }
 
 type ConditionalExpression with
     member cond.Apply([<ParamArray>]parameters : obj[]) =

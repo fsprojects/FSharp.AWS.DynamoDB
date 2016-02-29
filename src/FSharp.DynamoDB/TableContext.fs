@@ -598,6 +598,11 @@ type TableContext =
 module TableContextUtils =
 
     let template<'TRecord> = RecordTemplate.Define<'TRecord>()
+
+    /// A conditional which verifies that given item exists
+    let itemExists<'TRecord> = template<'TRecord>.ItemExists
+    /// A conditional which verifies that given item does not exist
+    let itemDoesNotExist<'TRecord> = template<'TRecord>.ItemDoesNotExist
     
     /// Precomputes a conditional expression
     let inline cond (tmp : RecordTemplate<'TRecord>) expr = tmp.PrecomputeConditionalExpr expr

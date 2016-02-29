@@ -165,6 +165,14 @@ module ConditionalOperators =
     let BETWEEN (x : 'T) (lower : 'T) (upper : 'T) : bool =
         lower <= x && x <= upper
 
+    /// Checks whether a record attribute exists in DynamoDB
+    let EXISTS (attr : 'T) : bool =
+        invalidOp "EXISTS predicate reserved for quoted condition expressions."
+
+    /// Checks whether a record attribute does not exist in DynamoDB
+    let NOT_EXISTS (attr : 'T) : bool =
+        invalidOp "NOT_EXISTS predicate reserved for quoted condition expressions."
+
 /// Update expression special operators
 [<AutoOpen>]
 module UpdateOperators =

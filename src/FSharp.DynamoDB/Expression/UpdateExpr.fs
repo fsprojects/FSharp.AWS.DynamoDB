@@ -36,10 +36,10 @@ open FSharp.DynamoDB.ExprCommon
 /// DynamoDB update opration
 type UpdateOperation =
     | Skip
-    | Set of AttributePath * UpdateValue
-    | Remove of AttributePath
-    | Add of AttributePath * Operand
-    | Delete of AttributePath * Operand
+    | Set of AttributeId * UpdateValue
+    | Remove of AttributeId
+    | Add of AttributeId * Operand
+    | Delete of AttributeId * Operand
 with
     member uo.Attribute =
         match uo with
@@ -67,7 +67,7 @@ and UpdateValue =
 
 /// Update value operand
 and Operand =
-    | Attribute of AttributePath
+    | Attribute of AttributeId
     | Value of AttributeValueEqWrapper
     | Param of index:int * Pickler
     | Undefined
@@ -84,7 +84,7 @@ type IntermediateUpdateExprs =
         /// Record conversion info
         RecordInfo : RecordInfo
         /// Collection of SET assignments that require further conversions
-        Assignments : (AttributePath * Expr) [] 
+        Assignments : (QuotedAttribute * Expr) [] 
         /// Already extracted update operations
         UpdateOps : UpdateOperation []
     }
@@ -156,9 +156,9 @@ let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : Intermediate
 
     match expr' with
     | Lambda(r,body) when r.Type = recordInfo.Type ->
-        let (|AttributeGet|_|) (e : Expr) = AttributePath.TryExtract r recordInfo e
-        let attrs = new ResizeArray<AttributePath>()
-        let assignments = new ResizeArray<AttributePath * Expr> ()
+        let (|AttributeGet|_|) (e : Expr) = QuotedAttribute.TryExtract r recordInfo e
+        let attrs = new ResizeArray<QuotedAttribute>()
+        let assignments = new ResizeArray<QuotedAttribute * Expr> ()
         let updateOps = new ResizeArray<UpdateOperation> ()
         let rec extract e =
             match e with
@@ -171,17 +171,17 @@ let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : Intermediate
 
             | SpecificCall2 <@ REMOVE @> (None, _, _, [AttributeGet attr]) ->
                 attrs.Add attr
-                updateOps.Add (Remove attr)
+                updateOps.Add (Remove attr.Id)
 
             | SpecificCall2 <@ ADD @> (None, _, _, [AttributeGet attr; value]) ->
                 let op = getOperand attr.Pickler value
                 attrs.Add attr
-                updateOps.Add (Add (attr, op))
+                updateOps.Add (Add (attr.Id, op))
 
             | SpecificCall2 <@ DELETE @> (None, _, _, [AttributeGet attr; value]) ->
                 let op = getOperand attr.Pickler value
                 attrs.Add attr
-                updateOps.Add (Delete (attr, op))
+                updateOps.Add (Delete (attr.Id, op))
 
             | _ -> invalidExpr()
 
@@ -204,7 +204,7 @@ let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : Intermediate
 /// Completes conversion from intermediate update expression to final update operations
 let extractUpdateOps (exprs : IntermediateUpdateExprs) =
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
-    let (|AttributeGet|_|) (e : Expr) = AttributePath.TryExtract exprs.RVar exprs.RecordInfo e
+    let (|AttributeGet|_|) (e : Expr) = QuotedAttribute.TryExtract exprs.RVar exprs.RecordInfo e
 
     let getValue (pickler : Pickler) (expr : Expr) =
         match expr |> evalRaw |> pickler.PickleCoerced with
@@ -217,7 +217,7 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
         match expr with
         | _ when expr.IsClosed -> getValue pickler expr
         | PipeRight e | PipeLeft e -> extractOperand pickler e
-        | AttributeGet attr -> Attribute attr
+        | AttributeGet attr -> Attribute attr.Id
         | PVar i -> Param (i, pickler)
         | _ -> invalidExpr()
 
@@ -268,47 +268,47 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
 
         | _ -> extractOperand pickler expr |> Operand
 
-    let rec extractUpdateOp (parent : AttributePath) (expr : Expr) : UpdateOperation =
+    let rec extractUpdateOp (parent : QuotedAttribute) (expr : Expr) : UpdateOperation =
         match expr with
         | PipeRight e | PipeLeft e -> extractUpdateOp parent e
         | SpecificCall2 <@ Set.add @> (None, _, _, [elem; AttributeGet attr]) when parent = attr ->
             let op = extractOperand parent.Pickler elem
             if op = Undefined then Skip
-            else Add(attr, op)
+            else Add(attr.Id, op)
 
         | SpecificCall2 <@ fun (s : Set<_>) e -> s.Add e @> (Some (AttributeGet attr), _, _, [elem]) when attr = parent ->
             let op = extractOperand parent.Pickler elem
             if op = Undefined then Skip
             else
-                Add(attr, op)
+                Add(attr.Id, op)
 
         | SpecificCall2 <@ Set.remove @> (None, _, _, [elem ; AttributeGet attr]) when attr = parent ->
             let op = extractOperand parent.Pickler elem
             if op = Undefined then Skip
             else
-                Delete(attr, op)
+                Delete(attr.Id, op)
 
         | SpecificCall2 <@ fun (s : Set<_>) e -> s.Remove e @> (Some (AttributeGet attr), _, _, [elem]) when attr = parent ->
             let op = extractOperand parent.Pickler elem
             if op = Undefined then Skip
             else
-                Delete(attr, op)
+                Delete(attr.Id, op)
 
         | SpecificCall2 <@ (+) @> (None, _, _, ([AttributeGet attr; other] | [other ; AttributeGet attr])) when attr = parent && not attr.Pickler.IsScalar ->
             let op = extractOperand parent.Pickler other
             if op = Undefined then Skip
             else
-                Add(attr, op)
+                Add(attr.Id, op)
 
         | SpecificCall2 <@ (-) @> (None, _, _, [AttributeGet attr; other]) when attr = parent && not attr.Pickler.IsScalar ->
             let op = extractOperand parent.Pickler other
             if op = Undefined then Skip
             else
-                Delete(attr, op)
+                Delete(attr.Id, op)
 
         | SpecificCall2 <@ Map.add @> (None, _, _, [keyE; value; AttributeGet attr]) when attr = parent ->
             let key = evalRaw keyE
-            let attr = Suffix(key, parent)
+            let attr = parent.Id.Append key
             let ep = getElemPickler parent.Pickler
             match extractUpdateValue ep value with
             | Operand op when op = Undefined -> Remove attr
@@ -316,13 +316,13 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
 
         | SpecificCall2 <@ Map.remove @> (None, _, _, [keyE; AttributeGet attr]) when attr = parent ->
             let key = evalRaw keyE
-            let attr = Suffix(key, parent)
+            let attr = parent.Id.Append key
             Remove attr
 
         | e -> 
             match extractUpdateValue parent.Pickler e with
-            | Operand op when op = Undefined -> Remove parent
-            | uv -> Set(parent, uv)
+            | Operand op when op = Undefined -> Remove parent.Id
+            | uv -> Set(parent.Id, uv)
 
     let updateOps = 
         exprs.Assignments 
@@ -330,11 +330,10 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
         |> Seq.append exprs.UpdateOps
         |> Seq.filter (function Skip _ -> false | _ -> true)
         |> Seq.map (fun uop -> 
-            let rp = uop.Attribute.RootProperty
-            if rp.IsHashKey then invalidArg "expr" "update expression cannot update hash key."
-            if rp.IsRangeKey then invalidArg "expr" "update expression cannot update range key."
+            if uop.Attribute.IsHashKey then invalidArg "expr" "update expression cannot update hash key."
+            if uop.Attribute.IsRangeKey then invalidArg "expr" "update expression cannot update range key."
             uop)
-        |> Seq.sortBy (fun uop -> uop.Id, uop.Attribute.Id)
+        |> Seq.sortBy (fun uop -> uop.Id, uop.Attribute.Path)
         |> Seq.toArray
 
     if updateOps.Length = 0 then invalidArg "expr" "No update clauses found in expression"
@@ -398,7 +397,7 @@ let applyParams (uops : UpdateOperations) (inputValues : obj[]) =
         uops.UpdateOps
         |> Seq.map applyUpdateOp
         |> Seq.filter (function Skip -> false | _ -> true)
-        |> Seq.sortBy (fun uop -> uop.Id, uop.Attribute.Id)
+        |> Seq.sortBy (fun uop -> uop.Id, uop.Attribute.Path)
         |> Seq.toArray
 
     { UpdateOps = updateOps' ; NParams = 0 }

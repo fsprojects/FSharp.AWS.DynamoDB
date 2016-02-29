@@ -18,6 +18,11 @@ open FSharp.DynamoDB
 //  Pickler implementation for F# record types
 //
 
+type AttributeType =
+    | HashKey  = 1
+    | RangeKey = 2
+    | Other    = 3
+
 [<CustomEquality; NoComparison>]
 type RecordInfo =
     {
@@ -39,8 +44,7 @@ and [<CustomEquality; NoComparison>]
         PropertyInfo : PropertyInfo
         Pickler : Pickler
         NoDefaultValue : bool
-        IsHashKey : bool
-        IsRangeKey : bool
+        AttributeType : AttributeType
         NestedRecord : RecordInfo option
         Attributes : Attribute[]
     }
@@ -49,6 +53,8 @@ with
     member rp.GetAttributes<'Attribute when 'Attribute :> Attribute> () = getAttributes<'Attribute> rp.Attributes
     member rp.ContainsAttribute<'Attribute when 'Attribute :> Attribute> () = containsAttribute<'Attribute> rp.Attributes
     member rp.IsNestedRecord = Option.isSome rp.NestedRecord
+    member rp.IsHashKey = rp.AttributeType = AttributeType.HashKey
+    member rp.IsRangeKey = rp.AttributeType = AttributeType.RangeKey
 
     override r.Equals o =
         match o with :? RecordPropertyInfo as r' -> r.PropertyInfo = r'.PropertyInfo | _ -> false
@@ -77,8 +83,11 @@ with
             Index = attrId
             PropertyInfo = prop
             Pickler = pickler
-            IsHashKey = containsAttribute<HashKeyAttribute> attributes
-            IsRangeKey = containsAttribute<RangeKeyAttribute> attributes
+            AttributeType =
+                if containsAttribute<HashKeyAttribute> attributes then AttributeType.HashKey
+                elif containsAttribute<RangeKeyAttribute> attributes then AttributeType.RangeKey
+                else AttributeType.Other
+
             NoDefaultValue = containsAttribute<NoDefaultValueAttribute> attributes
             NestedRecord = match box pickler with :? IRecordPickler as rc -> Some rc.RecordInfo | _ -> None
             Attributes = attributes

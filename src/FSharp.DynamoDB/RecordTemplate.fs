@@ -33,6 +33,16 @@ type RecordTemplate<'Record> internal () =
     member __.ExtractKey(record : 'Record) = 
         KeyStructure.ExtractKey(keyStructure, pickler.RecordInfo, record)
 
+    /// Generates a conditional which verifies whether an item already exists.
+    member __.ItemExists =
+        let cond = mkItemExistsCondition keySchema
+        new ConditionExpression<'Record>(cond)
+
+    /// Generates a conditional which verifies whether an item does not already exist.
+    member __.ItemDoesNotExist =
+        let cond = mkItemNotExistsCondition keySchema
+        new ConditionExpression<'Record>(cond)
+
     /// <summary>
     ///     Precomputes a DynamoDB conditional expression using
     ///     supplied quoted record predicate.

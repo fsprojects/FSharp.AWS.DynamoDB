@@ -18,6 +18,23 @@ open Swensen.Unquote
 //  where 'r' is an F# record.
 //
 
+/// DynamoDB Attribute identifier
+type AttributeId = 
+    { 
+        Path : string
+        RootName : string
+        RootId : string
+        Type : AttributeType 
+    }
+with
+    member id.IsHashKey = id.Type = AttributeType.HashKey
+    member id.IsRangeKey = id.Type = AttributeType.RangeKey
+    member id.Append(suffix) = { id with Path = sprintf "%s.%s" id.Path suffix }
+
+    static member FromKeySchema(schema : TableKeySchema) =
+        let rootId = "#HKEY"
+        let hkName = schema.HashKey.AttributeName
+        { Path = rootId ; RootId = rootId ; RootName = hkName ; Type = AttributeType.HashKey }
 
 type RecordPropertyInfo with
     /// Gets an attribute Id for given record property that
@@ -25,12 +42,11 @@ type RecordPropertyInfo with
     member rp.AttrId = sprintf "#ATTR%d" rp.Index
 
 /// Represents a nested field of an F# record type
-type AttributePath =
+type QuotedAttribute =
     | Root of RecordPropertyInfo
-    | Nested of RecordPropertyInfo * parent:AttributePath
-    | Item of index:int * pickler:Pickler * parent:AttributePath
-    | Optional of pickler:Pickler * parent:AttributePath
-    | Suffix of id:string * parent:AttributePath
+    | Nested of RecordPropertyInfo * parent:QuotedAttribute
+    | Item of index:int * pickler:Pickler * parent:QuotedAttribute
+    | Optional of pickler:Pickler * parent:QuotedAttribute
 with
     /// Gets the pickler corresponding to the type pointed to by the attribute path
     member ap.Pickler =
@@ -39,7 +55,6 @@ with
         | Nested (rp,_) -> rp.Pickler
         | Item(_,pickler,_) -> pickler
         | Optional(p,_) -> p
-        | _ -> invalidArg "ap" "internal error: no pickler found here"
 
     /// Gets the root record property of given attribute path
     member ap.RootProperty =
@@ -49,7 +64,6 @@ with
             | Nested(_,p) -> aux p
             | Item(_,_,p) -> aux p
             | Optional(_,p)-> aux p
-            | Suffix(_,p) -> aux p
 
         aux ap
 
@@ -61,21 +75,25 @@ with
             | Nested (rp,p) -> getTokens ("." + rp.Name :: acc) p
             | Item(i,_,p) -> getTokens (sprintf ".[%d]" i :: acc) p
             | Optional(_,p) -> getTokens acc p
-            | Suffix(id,p) -> getTokens ("." + id :: acc) p
 
         getTokens [] ap
 
-    /// Qualified path for attribute path recognizable by DynamoDB
+    /// Gets an attribute identifier for given Quoted attribute instace
     member ap.Id =
         let rec getTokens acc ap =
             match ap with
-            | Root rp -> rp.AttrId :: acc
             | Nested (rp,p) -> getTokens ("." + rp.Name :: acc) p
             | Item(i,_,p) -> getTokens (sprintf "[%d]" i :: acc) p
             | Optional(_,p) -> getTokens acc p
-            | Suffix (id,p) -> getTokens ("." + id :: acc) p
+            | Root rp ->
+                {
+                    Path = String.concat "" (rp.AttrId :: acc)
+                    RootId = rp.AttrId
+                    RootName = rp.Name
+                    Type = rp.AttributeType
+                }
 
-        getTokens [] ap |> String.concat ""
+        getTokens [] ap
 
     /// Iterates through all resolved picklers of a given attribute path
     member ap.Iter(f : Pickler -> unit) =
@@ -85,7 +103,6 @@ with
             | Nested (rp,p) -> f rp.Pickler ; aux p
             | Item(_,pickler,p) -> f pickler ; aux p
             | Optional(pickler,p) -> f pickler; aux p
-            | Suffix(_,p) -> aux p
 
         aux ap
 
@@ -173,10 +190,9 @@ type AttributeWriter(names : Dictionary<string, string>, values : Dictionary<str
             values.Add(id, av)
             id
 
-    member __.WriteAttibute(attr : AttributePath) =
-        let rp = attr.RootProperty
-        names.[rp.AttrId] <- rp.Name
-        attr.Id
+    member __.WriteAttibute(attr : AttributeId) =
+        names.[attr.RootId] <- attr.RootName
+        attr.Path
 
 /// Recognizes exprs of shape <@ fun p1 p2 ... -> body @>
 let extractExprParams (recordInfo : RecordInfo) (expr : Expr) =
@@ -204,9 +220,9 @@ let extractExprParams (recordInfo : RecordInfo) (expr : Expr) =
 // however 'r.Foo.Bar.[0]' and 'r.Foo.Bar.[1]' are not conflicting
 type private AttributeNode = { Value : string ; Children : ResizeArray<AttributeNode> }
 /// Detects conflicts in a collection of attribute paths
-let tryFindConflictingPaths (attrs : seq<AttributePath>) =
+let tryFindConflictingPaths (attrs : seq<QuotedAttribute>) =
     let root = new ResizeArray<AttributeNode>()
-    let tryAppendPath (attr : AttributePath) =
+    let tryAppendPath (attr : QuotedAttribute) =
         let tokens = attr.Tokens :> seq<string>
         let enum = tokens.GetEnumerator()
         let mutable ctx = root
