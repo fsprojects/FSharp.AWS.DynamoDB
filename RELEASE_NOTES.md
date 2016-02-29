@@ -1,3 +1,6 @@
+### 0.0.10-alpha
+* Add support for condition expressions in delete operations.
+
 ### 0.0.9-alpha
 * Add support for attribute existential primitives.
 
