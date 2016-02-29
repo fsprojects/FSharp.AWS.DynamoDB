@@ -1,3 +1,6 @@
+### 0.0.9-alpha
+* Add support for attribute existential primitives.
+
 ### 0.0.8-alpha
 * Implement string representation attribute.
 
