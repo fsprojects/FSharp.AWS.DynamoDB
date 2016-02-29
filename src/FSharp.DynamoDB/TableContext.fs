@@ -311,12 +311,29 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     }
 
     /// <summary>
+    ///     Asynchronously deletes item of given key from table.
+    /// </summary>
+    /// <param name="key">Key of item to be deleted.</param>
+    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+    member __.DeleteItemAsync(key : TableKey, precondition : Expr<'TRecord -> bool>) : Async<'TRecord> = async {
+        return! __.DeleteItemAsync(key, template.PrecomputeConditionalExpr precondition)
+    }
+
+    /// <summary>
     ///     Deletes item of given key from table.
     /// </summary>
     /// <param name="key">Key of item to be deleted.</param>
     /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
     member __.DeleteItem(key : TableKey, ?precondition : ConditionExpression<'TRecord>) =
         __.DeleteItemAsync(key, ?precondition = precondition) |> Async.RunSynchronously
+
+    /// <summary>
+    ///     Deletes item of given key from table.
+    /// </summary>
+    /// <param name="key">Key of item to be deleted.</param>
+    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+    member __.DeleteItem(key : TableKey, precondition : Expr<'TRecord -> bool>) =
+        __.DeleteItemAsync(key, precondition) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously performs batch delete operation on items of given keys.
