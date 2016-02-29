@@ -291,22 +291,32 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     ///     Asynchronously deletes item of given key from table.
     /// </summary>
     /// <param name="key">Key of item to be deleted.</param>
-    member __.DeleteItemAsync(key : TableKey) : Async<unit> = async {
+    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+    member __.DeleteItemAsync(key : TableKey, ?precondition : ConditionExpression<'TRecord>) : Async<'TRecord> = async {
         let kav = template.ToAttributeValues key
         let request = new DeleteItemRequest(tableName, kav)
-        request.ReturnValues <- ReturnValue.NONE
+        match precondition with
+        | Some pc ->
+            let writer = new AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+            request.ConditionExpression <- pc.Conditional.Write writer
+        | None -> ()
+
+        request.ReturnValues <- ReturnValue.ALL_OLD
         let! ct = Async.CancellationToken
         let! response = client.DeleteItemAsync(request, ct) |> Async.AwaitTaskCorrect
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "DeleteItem request returned error %O" response.HttpStatusCode
+
+        return template.OfAttributeValues response.Attributes
     }
 
     /// <summary>
     ///     Deletes item of given key from table.
     /// </summary>
     /// <param name="key">Key of item to be deleted.</param>
-    member __.DeleteItem(key : TableKey) =
-        __.DeleteItemAsync(key) |> Async.RunSynchronously
+    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+    member __.DeleteItem(key : TableKey, ?precondition : ConditionExpression<'TRecord>) =
+        __.DeleteItemAsync(key, ?precondition = precondition) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously performs batch delete operation on items of given keys.

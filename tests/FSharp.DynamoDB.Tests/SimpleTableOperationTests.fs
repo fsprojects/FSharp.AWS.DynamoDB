@@ -98,7 +98,8 @@ type ``Simple Table Operation Tests`` () =
         let item = mkItem()
         let key = table.PutItem item
         table.ContainsKey key |> should equal true
-        table.DeleteItem key
+        let item' = table.DeleteItem key
+        item' |> should equal item
         table.ContainsKey key |> should equal false
 
     [<Fact>]
