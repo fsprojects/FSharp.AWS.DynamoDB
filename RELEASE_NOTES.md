@@ -1,3 +1,6 @@
+### 0.0.16-alpha
+* Tweak ConstanHashKey methods in RecordTemplate.
+
 ### 0.0.15-alpha
 * Implement GetHashKeyCondition method.
 
