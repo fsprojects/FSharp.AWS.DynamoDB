@@ -472,13 +472,16 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="filterCondition">Filter condition expression.</param>
     /// <param name="limit">Maximum number of items to evaluate.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member __.ScanAsync(filterCondition : ConditionExpression<'TRecord>, ?limit : int, ?consistentRead : bool) : Async<'TRecord []> = async {
+    member __.ScanAsync(?filterCondition : ConditionExpression<'TRecord>, ?limit : int, ?consistentRead : bool) : Async<'TRecord []> = async {
 
         let downloaded = new ResizeArray<_>()
         let rec aux last = async {
             let request = new ScanRequest(tableName)
-            let writer = new AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
-            request.FilterExpression <- filterCondition.Conditional.Write writer
+            match filterCondition with
+            | None -> ()
+            | Some fc ->
+                let writer = new AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+                request.FilterExpression <- fc.Conditional.Write writer
 
             limit |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
             consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
@@ -518,8 +521,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="filterCondition">Filter condition expression.</param>
     /// <param name="limit">Maximum number of items to evaluate.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member __.Scan(filterCondition : ConditionExpression<'TRecord>, ?limit : int, ?consistentRead : bool) : 'TRecord [] =
-        __.ScanAsync(filterCondition, ?limit = limit, ?consistentRead = consistentRead)
+    member __.Scan(?filterCondition : ConditionExpression<'TRecord>, ?limit : int, ?consistentRead : bool) : 'TRecord [] =
+        __.ScanAsync(?filterCondition = filterCondition, ?limit = limit, ?consistentRead = consistentRead)
         |> Async.RunSynchronously
 
     /// <summary>

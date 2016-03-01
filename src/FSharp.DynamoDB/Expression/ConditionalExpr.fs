@@ -24,7 +24,7 @@ open FSharp.DynamoDB.ExprCommon
 /// DynamoDB query expression
 type QueryExpr =
     | False // True & False not part of the DynamoDB spec;
-    | True  // used here for simplifying and identifying tautological conditions
+    | True  // used here for reducing condition expressions
     | Not of QueryExpr
     | And of QueryExpr * QueryExpr
     | Or of QueryExpr * QueryExpr
@@ -63,6 +63,32 @@ type ConditionalExpression =
     }
 with
     member __.IsParametericExpr = __.NParams > 0
+
+type QueryExpr with
+    static member EAnd l r =
+        match l with
+        | False -> False
+        | True -> r
+        | _ ->
+            match r with
+            | False -> False
+            | True -> l
+            | _ -> And(l,r)
+
+    static member EOr l r =
+        match l with
+        | True -> True
+        | False -> r
+        | _ ->
+            match r with
+            | True -> True
+            | False -> l
+            | _ -> Or(l,r)
+
+    static member ENot q =
+        match q with
+        | Not q -> q
+        | q -> Not q
 
 // A DynamoDB key condition expression must satisfy the following conditions:
 // 1. Must only reference HashKey & RangeKey attributes.
@@ -105,7 +131,6 @@ let isKeyConditionCompatible (qExpr : QueryExpr) =
 
     if aux qExpr then !hashKeyRefs = 1 && !rangeKeyRefs <= 1
     else false
-
 
 let ensureNotTautological query =
     match query with
@@ -211,25 +236,13 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
             match expr with
             | e when e.IsClosed -> if evalRaw e then True else False
             | SpecificCall <@ not @> (None, _, [body]) -> 
-                match extractQuery body with
-                | Not q -> q
-                | q -> Not q
+                QueryExpr.ENot (extractQuery body)
 
-            | AndAlso(left, right) -> 
-                match extractQuery left, extractQuery right with
-                | False, _ -> False
-                | _, False -> False
-                | True, r -> r
-                | l, True -> l
-                | l, r -> And(l, r)
+            | AndAlso(left, right) ->
+                QueryExpr.EAnd (extractQuery left) (extractQuery right)
 
-            | OrElse(left, right) -> 
-                match extractQuery left, extractQuery right with
-                | True, _ -> True
-                | _, True -> True
-                | False, r -> r
-                | l, False -> l
-                | l, r -> Or(l, r)
+            | OrElse(left, right) ->
+                QueryExpr.EOr (extractQuery left) (extractQuery right)
 
             | PipeLeft e
             | PipeRight e -> extractQuery e
@@ -295,7 +308,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
             | _ -> invalidQuery()
 
         let queryExpr = extractQuery body
-        ensureNotTautological queryExpr
+        do ensureNotTautological queryExpr
         {
             QueryExpr = queryExpr
             NParams = nParams
@@ -319,23 +332,9 @@ let applyParams (cond : ConditionalExpression) (inputValues : obj[]) =
         match q with
         | False | True
         | Attribute_Exists _ | Attribute_Not_Exists _ -> q
-        | Not q -> 
-            match applyQuery q with
-            | Not q' -> q'
-            | q' -> Not q'
-
-        | And(q, q') -> 
-            match applyQuery q, applyQuery q' with
-            | False, _ | _, False -> False
-            | q, True  | True, q  -> q
-            | q, q' -> And(q,q')
-
-        | Or(q, q') -> 
-            match applyQuery q, applyQuery q' with
-            | True, _  | _, True  -> True
-            | q, False | q, False -> q
-            | q, q' -> Or(q, q')
-
+        | Not q -> QueryExpr.ENot (applyQuery q)
+        | And(q, q') -> QueryExpr.EAnd (applyQuery q) (applyQuery q')
+        | Or(q, q') -> QueryExpr.EOr (applyQuery q) (applyQuery q')
         | In(o, os) -> In(applyOperand o, List.map applyOperand os)
         | Between(x, l, u) -> Between(applyOperand x, applyOperand l, applyOperand u)
         | BeginsWith(attr, o) -> BeginsWith(attr, applyOperand o)
@@ -357,7 +356,7 @@ let applyParams (cond : ConditionalExpression) (inputValues : obj[]) =
             else Compare(cmp, l', r')
 
     let reduced = applyQuery cond.QueryExpr
-    ensureNotTautological reduced
+    do ensureNotTautological reduced
     { cond with QueryExpr = reduced ; NParams = 0 }
 
 /// prints a query expression to string recognizable by the DynamoDB APIs

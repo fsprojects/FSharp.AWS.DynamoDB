@@ -61,8 +61,12 @@ type Pickler() =
         | PickleType.Bool -> true
         | _ -> false
 
-    override p.Equals o = obj.ReferenceEquals(p, o)
-    override p.GetHashCode() = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode p
+    override p.Equals o = 
+        match o with 
+        | :? Pickler as p' -> p.Type = p'.Type && p.PicklerType = p'.PicklerType
+        | _ -> false
+
+    override p.GetHashCode() = hash2 p.Type p.PicklerType
 
 /// Typed pickler base class
 [<AbstractClass>]

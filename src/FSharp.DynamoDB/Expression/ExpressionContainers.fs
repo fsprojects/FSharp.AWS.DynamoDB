@@ -41,11 +41,12 @@ type ConditionExpression =
     ///     Applies the AND operation on two conditionals
     /// </summary>
     static member And(left : ConditionExpression<'TRecord>, right : ConditionExpression<'TRecord>) =
-        let lc,rc = left.Conditional, right.Conditional
+        let qExpr = QueryExpr.EAnd left.Conditional.QueryExpr right.Conditional.QueryExpr
+        ensureNotTautological qExpr
         new ConditionExpression<'TRecord>(
             { 
-                QueryExpr = And(lc.QueryExpr, rc.QueryExpr)
-                IsKeyConditionCompatible = lc.IsKeyConditionCompatible && rc.IsKeyConditionCompatible 
+                QueryExpr = qExpr
+                IsKeyConditionCompatible = isKeyConditionCompatible qExpr
                 NParams = 0   
             })
 
@@ -53,11 +54,12 @@ type ConditionExpression =
     ///     Applies the OR operation on two conditionals
     /// </summary>
     static member Or(left : ConditionExpression<'TRecord>, right : ConditionExpression<'TRecord>) =
-        let lc,rc = left.Conditional, right.Conditional
+        let qExpr = QueryExpr.EOr left.Conditional.QueryExpr right.Conditional.QueryExpr
+        ensureNotTautological qExpr
         new ConditionExpression<'TRecord>(
             { 
-                QueryExpr = Or(lc.QueryExpr, rc.QueryExpr)
-                IsKeyConditionCompatible = lc.IsKeyConditionCompatible && rc.IsKeyConditionCompatible 
+                QueryExpr = qExpr
+                IsKeyConditionCompatible = isKeyConditionCompatible qExpr 
                 NParams = 0   
             })
 
@@ -65,11 +67,12 @@ type ConditionExpression =
     ///     Applies the NOT operation on a conditional
     /// </summary>
     static member Not(conditional : ConditionExpression<'TRecord>) =
-        let c = conditional.Conditional
+        let qExpr = QueryExpr.ENot conditional.Conditional.QueryExpr
+        ensureNotTautological qExpr
         new ConditionExpression<'TRecord>(
             { 
-                QueryExpr = Not c.QueryExpr
-                IsKeyConditionCompatible = c.IsKeyConditionCompatible
+                QueryExpr = qExpr
+                IsKeyConditionCompatible = isKeyConditionCompatible qExpr
                 NParams = 0   
             })
 
