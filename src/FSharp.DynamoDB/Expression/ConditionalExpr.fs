@@ -419,6 +419,15 @@ let mkItemNotExistsCondition (schema : TableKeySchema) =
         NParams = 0
     }
 
+/// Generates a hash key equality condition for given key schema
+let mkHashKeyEqualityCondition (schema : TableKeySchema) (av : AttributeValue) =
+    let hkAttrId = AttributeId.FromKeySchema schema 
+    {
+        QueryExpr = Compare(EQ, Attribute hkAttrId, Value (wrap av))
+        IsKeyConditionCompatible = true
+        NParams = 0    
+    }
+
 type ConditionalExpression with
     member cond.Apply([<ParamArray>]parameters : obj[]) =
         applyParams cond parameters
