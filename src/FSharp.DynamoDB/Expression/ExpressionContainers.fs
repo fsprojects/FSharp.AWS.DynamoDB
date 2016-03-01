@@ -96,8 +96,10 @@ type UpdateExpression<'TRecord> internal (updateOps : UpdateOperations) =
 
     override __.GetHashCode() = hash updateOps.UpdateOps
 
+    static member (&&&) (this : UpdateExpression<'TRecord>, that : UpdateExpression<'TRecord>) =
+        UpdateExpression.Combine(this, that)
 
-type UpdateExpression =
+and UpdateExpression =
     /// Combines a collection of compatible update expressions into a single expression.
     static member Combine([<ParamArray>]exprs : UpdateExpression<'TRecord> []) =
         match exprs with
