@@ -1,3 +1,6 @@
+### 0.0.12-alpha
+* Make scan filter condition optional.
+
 ### 0.0.11-alpha
 * Implement conditional combinators.
 
