@@ -19,9 +19,26 @@ type RecordTemplate<'TRecord> internal () =
     let pickler = Pickler.resolve<'TRecord>() :?> RecordPickler<'TRecord>
     let keyStructure = KeyStructure.FromRecordInfo pickler.RecordInfo
     let keySchema = TableKeySchema.OfKeyStructure keyStructure
+    let hkeyCond = KeyStructure.TryExtractHashKeyCondition<'TRecord> keyStructure keySchema
 
     /// Key schema used by the current record
     member __.KeySchema = keySchema
+
+    /// Gets the constant HashKey if specified by the record implementation
+    member __.ConstantHashKey : obj option =
+        match keyStructure with
+        | DefaultHashKey(_, value, _, _) -> Some value
+        | _ -> None
+
+    /// Gets the constant RangeKey if specified by the record implementation
+    member __.ConstantRangeKey : obj option =
+        match keyStructure with
+        | DefaultRangeKey(_, value, _, _) -> Some value
+        | _ -> None
+
+    /// Gets a condition expression that matches the constant HashKey,
+    /// if so specified.
+    member __.ConstantHashKeyCondition = hkeyCond
 
     /// Record property info
     member internal __.Info = pickler.RecordInfo
@@ -210,17 +227,6 @@ type RecordTemplate<'TRecord> internal () =
 
     /// Constructs a record instance from attribute values
     member internal __.OfAttributeValues(ro : RestObject) = pickler.ToRecord ro
-
-    /// <summary>
-    ///     Generates a HashKey equality condition used for queries
-    ///     that match given table key. Useful for generating query
-    ///     conditions in records that specify a ConstantHashKey attribute.
-    /// </summary>
-    /// <param name="key">Key that specifies the required HashKey.</param>
-    member __.GetHashKeyCondition(key : TableKey) =
-        let av = __.ToAttributeValues(key).[keySchema.HashKey.AttributeName]
-        let cond = mkHashKeyEqualityCondition keySchema av
-        new ConditionExpression<'TRecord>(cond)
 
 /// Record template factory methods
 [<Sealed; AbstractClass>]

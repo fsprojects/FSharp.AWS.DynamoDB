@@ -51,6 +51,17 @@ with
 
         dict
 
+    /// Extract a KeyCondition for records that specify a default hashkey
+    static member TryExtractHashKeyCondition keyStructure keySchema =
+        match keyStructure with
+        | DefaultHashKey(attrName, value, pickler, _) ->
+            let av = pickler.PickleUntyped value |> Option.get
+            let cond = ConditionalExpr.mkHashKeyEqualityCondition keySchema av
+            let cexpr = new ConditionExpression<'TRecord>(cond)
+            Some cexpr
+
+        | _ -> None
+
     /// Extracts key from given record instance
     static member ExtractKey(keyStructure : KeyStructure, recordInfo : RecordInfo, record : 'Record) =
         let inline getValue (rp : RecordPropertyInfo) = rp.PropertyInfo.GetValue(record)

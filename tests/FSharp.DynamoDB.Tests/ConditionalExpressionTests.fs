@@ -423,15 +423,6 @@ type ``Conditional Expression Tests`` () =
         results.Length |> should equal 50
 
     [<Fact>]
-    let ``Extract Query expression from key`` () =
-        let item = mkItem()
-        let key = table.PutItem item
-        let kc = table.Template.GetHashKeyCondition key
-        let results = table.Query(kc)
-        results.Length |> should equal 1
-        results.[0] |> should equal item
-
-    [<Fact>]
     let ``Detect incompatible key conditions`` () =
         let test outcome q = table.Template.PrecomputeConditionalExpr(q).IsKeyConditionCompatible |> should equal outcome
 
