@@ -1,3 +1,6 @@
+### 0.0.17-alpha
+* Improve exception message in case where table item is not found.
+
 ### 0.0.16-alpha
 * Tweak ConstanHashKey methods in RecordTemplate.
 

@@ -14,6 +14,9 @@ open FSharp.DynamoDB.ExprCommon
 /// Exception raised by DynamoDB in case where write preconditions are not satisfied
 type ConditionalCheckFailedException = Amazon.DynamoDBv2.Model.ConditionalCheckFailedException
 
+/// Exception raised by DynamoDB in case where resources are not found
+type ResourceNotFoundException = Amazon.DynamoDBv2.Model.ResourceNotFoundException
+
 /// DynamoDB client object for performing table operations 
 /// in the context of given F# record representationss
 [<Sealed; AutoSerializable(false)>]
@@ -244,14 +247,16 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "GetItem request returned error %O" response.HttpStatusCode
-        elif not response.IsItemSet then
-            failwithf "Could not find item %O" key
+
+        if not response.IsItemSet then
+            let msg = sprintf "could not find item %O" key
+            raise <| new ResourceNotFoundException(msg)
 
         return template.OfAttributeValues response.Item
     }
 
     /// <summary>
-    ///     Asynchronously fetches item of given key from table.
+    ///     Fetches item of given key from table.
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
     member __.GetItem(key : TableKey) = __.GetItemAsync(key) |> Async.RunSynchronously
