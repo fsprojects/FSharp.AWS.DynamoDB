@@ -1,3 +1,6 @@
+### 0.0.13-alpha
+* Implement update expression combiners.
+
 ### 0.0.12-alpha
 * Make scan filter condition optional.
 
