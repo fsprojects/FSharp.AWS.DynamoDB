@@ -1,3 +1,6 @@
+### 0.0.15-alpha
+* Implement GetHashKeyCondition method.
+
 ### 0.0.14-alpha
 * Implement update expression combiners.
 
