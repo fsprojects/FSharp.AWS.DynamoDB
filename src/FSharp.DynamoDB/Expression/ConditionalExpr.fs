@@ -279,14 +279,14 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
                 if not <| isValidFieldName key then
                     invalidArg key "map key must be alphanumeric not starting with a digit"
 
-                Attribute_Exists (attr.Id.Append key)
+                Attribute_Exists (attr.Id.AppendField key)
 
             | SpecificCall2 <@ fun (x : Map<_,_>) y -> x.ContainsKey y @> (Some(AttributeGet attr), _, _, [key]) when key.IsClosed ->
                 let key = evalRaw key
                 if not <| isValidFieldName key then
                     invalidArg key "map key must be alphanumeric not starting with a digit"
 
-                Attribute_Exists (attr.Id.Append key)
+                Attribute_Exists (attr.Id.AppendField key)
 
             | SpecificCall2 <@ BETWEEN @> (None, _, _, [value ; lower; upper]) ->
                 let pickler = Pickler.resolveUntyped value.Type

@@ -95,3 +95,21 @@ type UpdateExpression<'TRecord> internal (updateOps : UpdateOperations) =
         | _ -> false
 
     override __.GetHashCode() = hash updateOps.UpdateOps
+
+
+type UpdateExpression =
+    /// Combines a collection of compatible update expressions into a single expression.
+    static member Combine([<ParamArray>]exprs : UpdateExpression<'TRecord> []) =
+        match exprs with
+        | [||] -> invalidArg "exprs" "must specify at least one update expression."
+        | [|expr|] -> expr
+        | _ ->
+
+        let uops = exprs |> Array.collect (fun e -> e.UpdateOps.UpdateOps)
+        match uops |> Seq.map (fun o -> o.Attribute) |> tryFindConflictingPaths with
+        | None -> ()
+        | Some(p1,p2) ->
+            let msg = sprintf "found conflicting paths '%s' and '%s' being accessed in update expression." p1 p2
+            invalidArg "expr" msg
+
+        new UpdateExpression<'TRecord>({ UpdateOps = uops ; NParams = 0 })

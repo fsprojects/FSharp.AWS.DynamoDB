@@ -21,20 +21,24 @@ open Swensen.Unquote
 /// DynamoDB Attribute identifier
 type AttributeId = 
     { 
-        Path : string
         RootName : string
         RootId : string
+        NestedPath : string list
         Type : AttributeType 
     }
 with
+    member id.Id = String.concat "" (id.RootId :: id.NestedPath)
+    member id.Name = String.concat "" (id.RootName :: id.NestedPath)
+    member id.Tokens = id.RootName :: id.NestedPath
     member id.IsHashKey = id.Type = AttributeType.HashKey
     member id.IsRangeKey = id.Type = AttributeType.RangeKey
-    member id.Append(suffix) = { id with Path = sprintf "%s.%s" id.Path suffix }
+    member id.AppendField(suffix) = { id with NestedPath = id.NestedPath @ ["." + suffix] }
+    member id.AppendIndex(index) = { id with NestedPath = id.NestedPath @ [sprintf "[%d]" index] }
 
     static member FromKeySchema(schema : TableKeySchema) =
         let rootId = "#HKEY"
         let hkName = schema.HashKey.AttributeName
-        { Path = rootId ; RootId = rootId ; RootName = hkName ; Type = AttributeType.HashKey }
+        { RootId = rootId ; RootName = hkName ; NestedPath = [] ; Type = AttributeType.HashKey }
 
 type RecordPropertyInfo with
     /// Gets an attribute Id for given record property that
@@ -67,17 +71,6 @@ with
 
         aux ap
 
-    /// Gets a list of string tokens that identify the attribute path
-    member ap.Tokens =
-        let rec getTokens acc ap =
-            match ap with
-            | Root rp -> rp.Name :: acc
-            | Nested (rp,p) -> getTokens ("." + rp.Name :: acc) p
-            | Item(i,_,p) -> getTokens (sprintf ".[%d]" i :: acc) p
-            | Optional(_,p) -> getTokens acc p
-
-        getTokens [] ap
-
     /// Gets an attribute identifier for given Quoted attribute instace
     member ap.Id =
         let rec getTokens acc ap =
@@ -87,9 +80,9 @@ with
             | Optional(_,p) -> getTokens acc p
             | Root rp ->
                 {
-                    Path = String.concat "" (rp.AttrId :: acc)
                     RootId = rp.AttrId
                     RootName = rp.Name
+                    NestedPath = acc
                     Type = rp.AttributeType
                 }
 
@@ -192,7 +185,7 @@ type AttributeWriter(names : Dictionary<string, string>, values : Dictionary<str
 
     member __.WriteAttibute(attr : AttributeId) =
         names.[attr.RootId] <- attr.RootName
-        attr.Path
+        attr.Id
 
 /// Recognizes exprs of shape <@ fun p1 p2 ... -> body @>
 let extractExprParams (recordInfo : RecordInfo) (expr : Expr) =
@@ -220,9 +213,9 @@ let extractExprParams (recordInfo : RecordInfo) (expr : Expr) =
 // however 'r.Foo.Bar.[0]' and 'r.Foo.Bar.[1]' are not conflicting
 type private AttributeNode = { Value : string ; Children : ResizeArray<AttributeNode> }
 /// Detects conflicts in a collection of attribute paths
-let tryFindConflictingPaths (attrs : seq<QuotedAttribute>) =
+let tryFindConflictingPaths (attrs : seq<AttributeId>) =
     let root = new ResizeArray<AttributeNode>()
-    let tryAppendPath (attr : QuotedAttribute) =
+    let tryAppendPath (attr : AttributeId) =
         let tokens = attr.Tokens :> seq<string>
         let enum = tokens.GetEnumerator()
         let mutable ctx = root

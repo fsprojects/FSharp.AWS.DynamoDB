@@ -187,7 +187,7 @@ let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : Intermediate
 
         do extract body
 
-        match tryFindConflictingPaths attrs with
+        match attrs |> Seq.map (fun attr -> attr.Id) |> tryFindConflictingPaths with
         | Some (p1,p2) -> 
             let msg = sprintf "found conflicting paths '%s' and '%s' being accessed in update expression." p1 p2
             invalidArg "expr" msg
@@ -308,7 +308,7 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
 
         | SpecificCall2 <@ Map.add @> (None, _, _, [keyE; value; AttributeGet attr]) when attr = parent ->
             let key = evalRaw keyE
-            let attr = parent.Id.Append key
+            let attr = parent.Id.AppendField key
             let ep = getElemPickler parent.Pickler
             match extractUpdateValue ep value with
             | Operand op when op = Undefined -> Remove attr
@@ -316,7 +316,7 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
 
         | SpecificCall2 <@ Map.remove @> (None, _, _, [keyE; AttributeGet attr]) when attr = parent ->
             let key = evalRaw keyE
-            let attr = parent.Id.Append key
+            let attr = parent.Id.AppendField key
             Remove attr
 
         | e -> 
@@ -333,7 +333,7 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
             if uop.Attribute.IsHashKey then invalidArg "expr" "update expression cannot update hash key."
             if uop.Attribute.IsRangeKey then invalidArg "expr" "update expression cannot update range key."
             uop)
-        |> Seq.sortBy (fun uop -> uop.Id, uop.Attribute.Path)
+        |> Seq.sortBy (fun uop -> uop.Id, uop.Attribute.Id)
         |> Seq.toArray
 
     if updateOps.Length = 0 then invalidArg "expr" "No update clauses found in expression"
@@ -397,7 +397,7 @@ let applyParams (uops : UpdateOperations) (inputValues : obj[]) =
         uops.UpdateOps
         |> Seq.map applyUpdateOp
         |> Seq.filter (function Skip -> false | _ -> true)
-        |> Seq.sortBy (fun uop -> uop.Id, uop.Attribute.Path)
+        |> Seq.sortBy (fun uop -> uop.Id, uop.Attribute.Id)
         |> Seq.toArray
 
     { UpdateOps = updateOps' ; NParams = 0 }
