@@ -54,7 +54,7 @@ with
     /// Extract a KeyCondition for records that specify a default hashkey
     static member TryExtractHashKeyCondition keyStructure keySchema =
         match keyStructure with
-        | DefaultHashKey(attrName, value, pickler, _) ->
+        | DefaultHashKey(_, value, pickler, _) ->
             let av = pickler.PickleUntyped value |> Option.get
             let cond = ConditionalExpr.mkHashKeyEqualityCondition keySchema av
             let cexpr = new ConditionExpression<'TRecord>(cond)
@@ -63,7 +63,7 @@ with
         | _ -> None
 
     /// Extracts key from given record instance
-    static member ExtractKey(keyStructure : KeyStructure, recordInfo : RecordInfo, record : 'Record) =
+    static member ExtractKey(keyStructure : KeyStructure, record : 'Record) =
         let inline getValue (rp : RecordPropertyInfo) = rp.PropertyInfo.GetValue(record)
         match keyStructure with
         | HashKeyOnly hkp -> let hashKey = getValue hkp in TableKey.Hash hashKey
@@ -87,7 +87,7 @@ with
             invalidArg (string recordInfo.Type) "Cannot specify both HashKey and RangeKey constant attributes in record definition."
 
         match recordInfo.Properties |> Array.filter (fun p -> p.IsHashKey) with
-        | [|hashKeyP|] when Option.isSome hkcaOpt ->
+        | [|_|] when Option.isSome hkcaOpt ->
             invalidArg (string recordInfo.Type) "Cannot attach HashKey attribute to records containing HashKeyConstant attribute."
 
         | [|hashKeyP|] when Option.isSome rkcaOpt ->

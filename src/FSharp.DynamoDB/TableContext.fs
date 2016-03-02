@@ -611,7 +611,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="createIfNotExists">Create the table instance now if it does not exist. Defaults to false.</param>
     /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
     member __.VerifyTable(?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) =
-        __.VerifyTableAsync(?provisionedThroughput = provisionedThroughput)
+        __.VerifyTableAsync(?createIfNotExists = createIfNotExists, ?provisionedThroughput = provisionedThroughput)
         |> Async.RunSynchronously
 
 /// Table context factory methods

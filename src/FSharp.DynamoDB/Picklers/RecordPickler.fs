@@ -151,5 +151,4 @@ let mkTuplePickler<'T> (resolver : IPicklerResolver) =
 let mkFSharpRecordPickler<'T> (resolver : IPicklerResolver) =
     let ctor = FSharpValue.PreComputeRecordConstructorInfo(typeof<'T>, true)
     let properties = FSharpType.GetRecordFields(typeof<'T>, true) |> Array.mapi (RecordPropertyInfo.FromPropertyInfo resolver)
-    let mkRecord values = ctor.Invoke values :?> 'T
     new RecordPickler<'T>(ctor, properties)

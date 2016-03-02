@@ -157,6 +157,8 @@ type TableKey private (hashKey : obj, rangeKey : obj) =
         if isNull hashKey then raise <| new ArgumentNullException("HashKey must not be null")
         new TableKey(hashKey, rangeKey)
 
+#nowarn "1182"
+
 /// Conditional expression special operators
 [<AutoOpen>]
 module ConditionalOperators =

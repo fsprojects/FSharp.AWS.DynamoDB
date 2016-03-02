@@ -48,7 +48,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="item">Input record instance.</param>
     member __.ExtractKey(record : 'TRecord) = 
-        KeyStructure.ExtractKey(keyStructure, pickler.RecordInfo, record)
+        KeyStructure.ExtractKey(keyStructure, record)
 
     /// Generates a conditional which verifies whether an item already exists.
     member __.ItemExists =
