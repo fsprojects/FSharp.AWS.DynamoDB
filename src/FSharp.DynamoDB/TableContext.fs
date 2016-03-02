@@ -564,15 +564,16 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
 
             match response with
             | Choice1Of2 td ->
+                if td.Table.TableStatus <> TableStatus.ACTIVE then
+                    do! Async.Sleep 1000
+                    return! verify (retries - 1)
+                else
+
                 let existingSchema = TableKeySchema.OfTableDescription td.Table
                 if existingSchema <> template.KeySchema then 
                     sprintf "table '%s' exists with key schema %A, which is incompatible with record '%O'." 
                         tableName existingSchema typeof<'TRecord>
                     |> invalidOp
-
-                if td.Table.TableStatus <> TableStatus.ACTIVE then
-                    do! Async.Sleep 1000
-                    return! verify (retries - 1)
 
             | Choice2Of2 (:? ResourceNotFoundException) when createIfNotExists ->
                 let provisionedThroughput = 
