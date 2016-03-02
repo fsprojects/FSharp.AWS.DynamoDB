@@ -1,3 +1,6 @@
+### 0.0.18-alpha
+* Fix API issue.
+
 ### 0.0.17-alpha
 * Improve exception message in case where table item is not found.
 
