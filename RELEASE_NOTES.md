@@ -1,3 +1,6 @@
+### 0.0.20-alpha
+* Fix floating point parsing issue.
+
 ### 0.0.19-alpha
 * Bugfixes.
 
