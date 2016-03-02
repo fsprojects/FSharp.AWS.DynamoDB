@@ -4,6 +4,7 @@ module internal FSharp.DynamoDB.PrimitivePicklers
 open System
 open System.Collections
 open System.Collections.Generic
+open System.Globalization
 open System.IO
 open System.Reflection
 
@@ -52,17 +53,23 @@ type StringPickler() =
     override __.Parse s = s
     override __.UnParse s = s
 
-let inline mkNumericalPickler< ^N when ^N : (static member Parse : string -> ^N)> () =
-    let inline parseNum x = ( ^N : (static member Parse : string -> ^N) x)
+let inline mkNumericalPickler< ^N when ^N : (static member Parse : string * IFormatProvider -> ^N)
+                                   and ^N : (member ToString : IFormatProvider -> string)> () =
+    let inline parseNum s = 
+        ( ^N : (static member Parse : string * IFormatProvider -> ^N) (s, CultureInfo.InvariantCulture))
+
+    let inline toString n =
+        ( ^N : (member ToString : IFormatProvider -> string) (n, CultureInfo.InvariantCulture))
+
     { new NumRepresentablePickler< ^N>() with
         member __.PickleType = PickleType.Number
         member __.PicklerType = PicklerType.Value
 
         member __.Parse s = parseNum s
-        member __.UnParse e = string e
+        member __.UnParse e = toString e
 
         member __.DefaultValue = Unchecked.defaultof< ^N>
-        member __.Pickle num = AttributeValue(N = string num) |> Some
+        member __.Pickle num = AttributeValue(N = toString num) |> Some
         member __.UnPickle a = 
             if not <| isNull a.N then parseNum a.N 
             else invalidCast a

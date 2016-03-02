@@ -25,7 +25,7 @@ type Test =
         HashKey : Guid
         [<RangeKey>]
         RangeKey : string
-        Value : int
+        Value : float
         List : int64 list
         Unions : Union list
         String : string ref
@@ -40,20 +40,10 @@ type Test =
 
 let table = TableContext.Create<Test>(ddb, "test", createIfNotExists = true)
 
-let value = { HashKey = Guid.NewGuid() ; List = [] ; RangeKey = "2" ; Value = 40 ; Date = DateTimeOffset.Now + TimeSpan.FromDays 2. ; Value2 = None ; Values = [|{ A = "foo" ; B = System.Reflection.BindingFlags.Instance }|] ; Map = Map.ofList [("A1",1)] ; Set = [set [1L];set [2L]] ; Bytes = [|1uy..10uy|]; String = ref "1a" ; Unions = [A 42; B("42",3)]}
+let value = { HashKey = Guid.NewGuid() ; List = [] ; RangeKey = "2" ; Value = 3.1415926 ; Date = DateTimeOffset.Now + TimeSpan.FromDays 2. ; Value2 = None ; Values = [|{ A = "foo" ; B = System.Reflection.BindingFlags.Instance }|] ; Map = Map.ofList [("A1",1)] ; Set = [set [1L];set [2L]] ; Bytes = [|1uy..10uy|]; String = ref "1a" ; Unions = [A 42; B("42",3)]}
 
 let key = table.PutItem value
-table.GetItem (TableKey.Combined (Guid.Empty, "asda"))
-
-let d = new System.Collections.Generic.Dictionary<string, AttributeValue>()
-d.Add("HashKey", AttributeValue("asda"))
-d.Add("RangeKey", AttributeValue("asda"))
-let gir = new GetItemRequest("test", d)
-ddb.GetItem(gir)
-
-table.Scan(<@ fun r -> r.Value2.Value < 42 @>)
-
-table.Scan <@ fun t -> t.Date < DateTimeOffset.Now @>
+table.GetItem key
 
 #time "on"
 
