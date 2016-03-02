@@ -548,37 +548,61 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
     member __.VerifyTableAsync(?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) : Async<unit> = async {
         let createIfNotExists = defaultArg createIfNotExists false
-        try
-            let dtr = new DescribeTableRequest(tableName)
+        let rec verify retries = async {
+            if retries = 0 then failwithf "failed to create table '%s'" tableName
             let! ct = Async.CancellationToken
-            let! response = client.DescribeTableAsync(dtr, ct) |> Async.AwaitTaskCorrect
-            let existingSchema = TableKeySchema.OfTableDescription response.Table
-            if existingSchema <> template.KeySchema then 
-                sprintf "table '%s' exists with key schema %A, which is incompatible with record '%O'." 
-                    tableName existingSchema typeof<'TRecord>
-                |> invalidOp
+            let! response = 
+                client.DescribeTableAsync(tableName, ct) 
+                |> Async.AwaitTaskCorrect
+                |> Async.Catch
 
-        with :? ResourceNotFoundException when createIfNotExists ->
-            let provisionedThroughput = 
-                match provisionedThroughput with
-                | None -> new ProvisionedThroughput(10L,10L)
-                | Some pt -> pt
+            let (|Conflict|_|) (e : exn) =
+                match e with
+                | :? AmazonDynamoDBException as e when e.StatusCode = HttpStatusCode.Conflict -> Some()
+                | :? ResourceInUseException -> Some ()
+                | _ -> None
 
-            let ctr = template.KeySchema.CreateCreateTableRequest (tableName, provisionedThroughput)
-            let! ct = Async.CancellationToken
-            let! response = client.CreateTableAsync(ctr, ct) |> Async.AwaitTaskCorrect
-            if response.HttpStatusCode <> HttpStatusCode.OK then
-                failwithf "CreateTable request returned error %O" response.HttpStatusCode
+            match response with
+            | Choice1Of2 td ->
+                let existingSchema = TableKeySchema.OfTableDescription td.Table
+                if existingSchema <> template.KeySchema then 
+                    sprintf "table '%s' exists with key schema %A, which is incompatible with record '%O'." 
+                        tableName existingSchema typeof<'TRecord>
+                    |> invalidOp
 
-            let rec awaitReady retries = async {
-                if retries = 0 then return failwithf "Failed to create table '%s'" tableName
-                let! descr = client.DescribeTableAsync(tableName, ct) |> Async.AwaitTaskCorrect
-                if descr.Table.TableStatus <> TableStatus.ACTIVE then
+                if td.Table.TableStatus <> TableStatus.ACTIVE then
                     do! Async.Sleep 1000
-                    return! awaitReady (retries - 1)
-            }
+                    return! verify (retries - 1)
 
-            do! awaitReady 30
+            | Choice2Of2 (:? ResourceNotFoundException) when createIfNotExists ->
+                let provisionedThroughput = 
+                    match provisionedThroughput with
+                    | None -> new ProvisionedThroughput(10L,10L)
+                    | Some pt -> pt
+
+                let ctr = template.KeySchema.CreateCreateTableRequest (tableName, provisionedThroughput)
+                let! ct = Async.CancellationToken
+                let! response = 
+                    client.CreateTableAsync(ctr, ct) 
+                    |> Async.AwaitTaskCorrect 
+                    |> Async.Catch
+
+                match response with
+                | Choice1Of2 _ -> return! verify (retries - 1)
+                | Choice2Of2 Conflict -> 
+                    do! Async.Sleep 1000
+                    return! verify (retries - 1)
+
+                | Choice2Of2 e -> do! Async.Raise e
+
+            | Choice2Of2 Conflict ->
+                do! Async.Sleep 1000
+                return! verify (retries - 1)
+
+            | Choice2Of2 e -> do! Async.Raise e
+        }
+
+        do! verify 30
     }
 
     /// <summary>

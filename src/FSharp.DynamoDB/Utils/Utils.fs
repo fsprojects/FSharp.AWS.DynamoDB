@@ -204,6 +204,9 @@ module internal Utils =
                 e :> exn
 
     type Async with
+        /// Raise an exception
+        static member Raise e = Async.FromContinuations(fun (_,ec,_) -> ec e)
+
         /// <summary>
         ///     Gets the result of given task so that in the event of exception
         ///     the actual user exception is raised as opposed to being wrapped
