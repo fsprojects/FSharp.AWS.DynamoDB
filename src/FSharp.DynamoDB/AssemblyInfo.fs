@@ -6,10 +6,10 @@ open System.Runtime.CompilerServices
 [<assembly: AssemblyProductAttribute("FSharp.DynamoDB")>]
 [<assembly: AssemblyCompanyAttribute("Eirik Tsarpalis")>]
 [<assembly: AssemblyCopyrightAttribute("Copyright © Eirik Tsarpalis 2016")>]
-[<assembly: AssemblyVersionAttribute("0.0.18")>]
-[<assembly: AssemblyFileVersionAttribute("0.0.18")>]
+[<assembly: AssemblyVersionAttribute("0.0.19")>]
+[<assembly: AssemblyFileVersionAttribute("0.0.19")>]
 [<assembly: InternalsVisibleToAttribute("FSharp.DynamoDB.Tests")>]
 do ()
 
 module internal AssemblyVersionInformation =
-    let [<Literal>] Version = "0.0.18"
+    let [<Literal>] Version = "0.0.19"

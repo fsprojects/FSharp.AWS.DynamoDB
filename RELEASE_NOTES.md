@@ -1,3 +1,6 @@
+### 0.0.19-alpha
+* Bugfixes.
+
 ### 0.0.18-alpha
 * Fix API issue.
 
