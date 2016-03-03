@@ -1,3 +1,6 @@
+### 0.0.23-alpha
+* Add parametric support in attribute ids and key lookups.
+
 ### 0.0.22-alpha
 * Add support for Array/List.isEmpty and Option.isSome/isNone in conditional expressions.
 
