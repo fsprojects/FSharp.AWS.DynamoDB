@@ -231,6 +231,20 @@ type ``Update Expression Tests`` () =
         item'.List |> should equal [1L ; 2L]
 
     [<Fact>]
+    let ``Update using defaultArg combinator (Some)`` () =
+        let item = { mkItem() with Optional = Some (guid()) }
+        let key = table.PutItem item
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with String = defaultArg r.Optional "<undefined>" } @>)
+        item'.String |> should equal item.Optional.Value
+
+    [<Fact>]
+    let ``Update using defaultArg combinator (None)`` () =
+        let item = { mkItem() with Optional = None }
+        let key = table.PutItem item
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with String = defaultArg r.Optional "<undefined>" } @>)
+        item'.String |> should equal "<undefined>"
+
+    [<Fact>]
     let ``Update set with add element`` () =
         let item = { mkItem() with Set = set [1L;2L] }
         let key = table.PutItem item

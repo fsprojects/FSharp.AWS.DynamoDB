@@ -187,6 +187,11 @@ type OptionPickler<'T>(tp : Pickler<'T>) =
     override __.DefaultValue = None
     override __.Pickle topt = match topt with None -> None | Some t -> tp.Pickle t
     override __.UnPickle a = if a.NULL then None else Some(tp.UnPickle a)
+    override __.PickleCoerced obj =
+        match obj with
+        | :? 'T as t -> tp.Pickle t
+        | :? ('T option) as topt -> __.Pickle topt
+        | _ -> raise <| new InvalidCastException()
 
 type StringRepresentationPickler<'T>(ep : StringRepresentablePickler<'T>) =
     inherit Pickler<'T> ()
