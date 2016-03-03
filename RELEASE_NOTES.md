@@ -1,3 +1,6 @@
+### 0.0.22-alpha
+* Add support for Array/List.isEmpty and Option.isSome/isNone in conditional expressions.
+
 ### 0.0.21-alpha
 * Bugfix.
 
