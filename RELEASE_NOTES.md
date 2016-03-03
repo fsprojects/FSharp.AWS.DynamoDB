@@ -1,3 +1,6 @@
+### 0.0.24-alpha
+* Bugfix.
+
 ### 0.0.23-alpha
 * Add parametric support in attribute ids and key lookups.
 
