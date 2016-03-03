@@ -60,6 +60,8 @@ module UpdateExprTypes =
 
             StringSet : Set<string>
 
+            ByteSet : Set<byte[]>
+
             [<BinaryFormatter>]
             Serialized : int64 * string
 
@@ -75,6 +77,7 @@ type ``Update Expression Tests`` () =
     let tableName = getRandomTableName()
 
     let rand = let r = Random() in fun () -> int64 <| r.Next()
+    let bytes() = Guid.NewGuid().ToByteArray()
     let mkItem() = 
         { 
             HashKey = guid() ; RangeKey = guid() ; String = guid()
@@ -86,6 +89,7 @@ type ``Update Expression Tests`` () =
             Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq 
             IntSet = seq { for i in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
             StringSet = seq { for i in 0L .. rand() % 5L -> guid() } |> Set.ofSeq
+            ByteSet = seq { for i in 0L .. rand() % 5L -> bytes() } |> Set.ofSeq
             List = [for i in 0L .. rand() % 5L -> rand() ]
             Union = if rand() % 2L = 0L then UA (rand()) else UB(guid())
             Unions = [for i in 0L .. rand() % 5L -> if rand() % 2L = 0L then UA (rand()) else UB(guid()) ]
@@ -295,6 +299,13 @@ type ``Update Expression Tests`` () =
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with StringSet = r.StringSet + set ["3"] } @>)
         item'.StringSet.Contains "3" |> should equal true
+
+    [<Fact>]
+    let ``Update byte set with append set`` () =
+        let item = { mkItem() with ByteSet = Set.empty }
+        let key = table.PutItem item
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with ByteSet = r.ByteSet + set [[|42uy|]] } @>)
+        item'.ByteSet.Contains [|42uy|] |> should equal true
 
     [<Fact>]
     let ``Update string set with remove set`` () =
