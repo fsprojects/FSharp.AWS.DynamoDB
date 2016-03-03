@@ -368,7 +368,7 @@ let applyParams (uops : UpdateOperations) (inputValues : obj[]) =
         | Operand op -> Operand(applyOperand op)
         | Op_Addition(l,r) -> UpdateValue.EOp_Addition (applyOperand l) (applyOperand r)
         | Op_Subtraction(l,r) -> UpdateValue.EOp_Subtraction (applyOperand l) (applyOperand r)
-        | List_Append(l,r) -> UpdateValue.EOp_Subtraction (applyOperand l) (applyOperand r)
+        | List_Append(l,r) -> UpdateValue.EList_Append (applyOperand l) (applyOperand r)
         | If_Not_Exists(attr, op) -> If_Not_Exists(applyAttr attr, applyOperand op)
 
     let applyUpdateOp uop =
