@@ -305,6 +305,18 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
             | SpecificCall2 <@ NOT_EXISTS @> (None, _, _, [AttributeGet attr]) ->
                 Attribute_Not_Exists attr.Id
 
+            | SpecificCall2 <@ Array.isEmpty @> (None, _, _, [AttributeGet attr]) -> 
+                Attribute_Not_Exists attr.Id
+
+            | SpecificCall2 <@ List.isEmpty @> (None, _, _, [AttributeGet attr]) -> 
+                Attribute_Not_Exists attr.Id
+
+            | SpecificCall2 <@ Option.isSome @> (None, _, _, [AttributeGet attr]) -> 
+                Attribute_Exists attr.Id
+
+            | SpecificCall2 <@ Option.isNone @> (None, _, _, [AttributeGet attr]) -> 
+                Attribute_Not_Exists attr.Id
+
             | _ -> invalidQuery()
 
         let queryExpr = extractQuery body

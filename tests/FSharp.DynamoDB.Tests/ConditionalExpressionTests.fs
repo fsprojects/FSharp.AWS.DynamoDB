@@ -309,6 +309,16 @@ type ``Conditional Expression Tests`` () =
         table.PutItem(item, <@ fun r -> List.length r.List >= list.Length @>) |> ignore
 
     [<Fact>]
+    let ``List-isEmpty precondition`` () =
+        let item = { mkItem() with List = [] }
+        let key = table.PutItem item
+        table.PutItem({item with List = [42L]}, <@ fun r -> List.isEmpty r.List @>) |> ignore
+        
+        fun () -> table.PutItem(item, <@ fun r -> List.isEmpty r.List  @>)
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+
+    [<Fact>]
     let ``Set-count precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
