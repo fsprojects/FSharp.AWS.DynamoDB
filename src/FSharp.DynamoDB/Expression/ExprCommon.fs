@@ -18,27 +18,66 @@ open Swensen.Unquote
 //  where 'r' is an F# record.
 //
 
+/// Nested Attribute field id
+type NestedAttribute =
+    | FField of string // nested field
+    | FIndex of int // nested list element
+    | FParam of vIndex:int // Attribute parameter
+with
+    member nf.Print() =
+        match nf with
+        | FParam i -> sprintf "<$param%d>" i
+        | FField f when not <| isValidFieldName f ->
+            sprintf "map keys must be alphanumeric and not starting with a digit."
+            |> invalidArg f
+
+        | FField f -> "." + f
+        | FIndex i -> sprintf "[%d]" i
+
 /// DynamoDB Attribute identifier
 type AttributeId = 
     { 
         RootName : string
         RootId : string
-        NestedPath : string list
+        NestedAttributes : NestedAttribute list
         Type : AttributeType 
     }
 with
-    member id.Id = String.concat "" (id.RootId :: id.NestedPath)
-    member id.Name = String.concat "" (id.RootName :: id.NestedPath)
-    member id.Tokens = id.RootName :: id.NestedPath
+    member id.IsParametric =
+        id.NestedAttributes |> List.exists (function FParam _ -> true | _ -> false)
+
+    member id.Id = 
+        mkString(fun append ->
+            append id.RootId
+            for nf in id.NestedAttributes do append <| nf.Print())
+
+    member id.Name =
+        mkString(fun append ->
+            append id.RootId
+            for nf in id.NestedAttributes do append <| nf.Print())
+
+    member id.Tokens = 
+        seq { yield id.RootName ; yield! id.NestedAttributes |> Seq.map (fun nf -> nf.Print()) }
+
     member id.IsHashKey = id.Type = AttributeType.HashKey
     member id.IsRangeKey = id.Type = AttributeType.RangeKey
-    member id.AppendField(suffix) = { id with NestedPath = id.NestedPath @ ["." + suffix] }
-    member id.AppendIndex(index) = { id with NestedPath = id.NestedPath @ [sprintf "[%d]" index] }
+    member id.Append nf = { id with NestedAttributes = id.NestedAttributes @ [nf] }
+    member id.Apply (inputs : obj[]) =
+        let applyField nf =
+            match nf with
+            | FParam i -> 
+                match inputs.[i] with 
+                | :? string as f -> FField f 
+                | :? int as i -> FIndex i 
+                | _ -> raise <| new InvalidCastException()
+            | _ -> nf
+
+        { id with NestedAttributes = id.NestedAttributes |> List.map applyField }
 
     static member FromKeySchema(schema : TableKeySchema) =
         let rootId = "#HKEY"
         let hkName = schema.HashKey.AttributeName
-        { RootId = rootId ; RootName = hkName ; NestedPath = [] ; Type = AttributeType.HashKey }
+        { RootId = rootId ; RootName = hkName ; NestedAttributes = [] ; Type = AttributeType.HashKey }
 
 type RecordPropertyInfo with
     /// Gets an attribute Id for given record property that
@@ -49,7 +88,7 @@ type RecordPropertyInfo with
 type QuotedAttribute =
     | Root of RecordPropertyInfo
     | Nested of RecordPropertyInfo * parent:QuotedAttribute
-    | Item of index:int * pickler:Pickler * parent:QuotedAttribute
+    | Item of NestedAttribute * pickler:Pickler * parent:QuotedAttribute
     | Optional of pickler:Pickler * parent:QuotedAttribute
 with
     /// Gets the pickler corresponding to the type pointed to by the attribute path
@@ -75,14 +114,14 @@ with
     member ap.Id =
         let rec getTokens acc ap =
             match ap with
-            | Nested (rp,p) -> getTokens ("." + rp.Name :: acc) p
-            | Item(i,_,p) -> getTokens (sprintf "[%d]" i :: acc) p
+            | Nested (rp,p) -> getTokens (FField rp.Name :: acc) p
+            | Item(nf,_,p) -> getTokens (nf :: acc) p
             | Optional(_,p) -> getTokens acc p
             | Root rp ->
                 {
                     RootId = rp.AttrId
                     RootName = rp.Name
-                    NestedPath = acc
+                    NestedAttributes = acc
                     Type = rp.AttributeType
                 }
 
@@ -100,7 +139,7 @@ with
         aux ap
 
     /// Attempt to extract an attribute path for given record info and expression
-    static member TryExtract (record : Var) (info : RecordInfo) (e : Expr) =
+    static member TryExtract ((|PVar|_|) : Expr -> int option) (record : Var) (info : RecordInfo) (e : Expr) =
         let tryGetPropInfo (info : RecordInfo) isFinalProp (p : PropertyInfo) =
             match info.Properties |> Array.tryFind (fun rp -> rp.PropertyInfo = p) with
             | None -> None
@@ -137,7 +176,7 @@ with
             | SpecificCall2 <@ Option.get @> (None, _, [et], [e]) ->
                 extractProps (Choice2Of3 et :: props) e
 
-            | IndexGet(e, et, i) when i.IsClosed -> 
+            | IndexGet(e, et, i) -> 
                 extractProps (Choice3Of3 (et, i) :: props) e
 
             | _ -> None
@@ -156,9 +195,16 @@ with
 
             | Choice3Of3 (et, ie) :: tail, None ->
                 let pickler = Pickler.resolveUntyped et
-                let i = evalRaw ie
                 let ctx = match box pickler with :? IRecordPickler as rc -> Some rc.RecordInfo | _ -> None
-                mkAttrPath (Item(i, pickler, acc)) ctx tail
+                let inline mkAttrPath indexV = mkAttrPath (Item(indexV, pickler, acc)) ctx tail
+                match ie with
+                | _ when ie.IsClosed ->
+                    match evalRaw ie : obj with
+                    | :? int as i -> mkAttrPath (FIndex i)
+                    | :? string as f -> mkAttrPath (FField f)
+                    | _ -> None
+                | PVar i -> mkAttrPath (FParam i)
+                | _ -> None
 
             | _ -> None
 
@@ -216,7 +262,7 @@ type private AttributeNode = { Value : string ; Children : ResizeArray<Attribute
 let tryFindConflictingPaths (attrs : seq<AttributeId>) =
     let root = new ResizeArray<AttributeNode>()
     let tryAppendPath (attr : AttributeId) =
-        let tokens = attr.Tokens :> seq<string>
+        let tokens = attr.Tokens
         let enum = tokens.GetEnumerator()
         let mutable ctx = root
         let mutable isNodeAdded = false

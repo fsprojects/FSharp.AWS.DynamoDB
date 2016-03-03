@@ -151,7 +151,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
             expr |> evalRaw |> pickler.PickleCoerced
 
         let (|AttributeGet|_|) e = 
-            match QuotedAttribute.TryExtract r recordInfo e with
+            match QuotedAttribute.TryExtract (|PVar|_|) r recordInfo e with
             | None -> None
             | Some qa as aopt ->
                 qa.Iter (fun pickler -> 
@@ -201,6 +201,14 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
             | SpecificCall2 <@ Array.length @> (None, _, _, [AttributeGet attr]) -> 
                 SizeOf attr.Id
 
+            | _ -> invalidQuery()
+
+        let extractNestedField (expr : Expr) =
+            let op = extractOperand None expr
+            match op with
+            | Value av when av.AttributeValue.S <> null -> FField av.AttributeValue.S
+            | Value av when av.AttributeValue.N <> null -> FIndex (int av.AttributeValue.N)
+            | Param(i, _) -> FParam i
             | _ -> invalidQuery()
 
         let (|Comparison|_|) (pat : Expr) (expr : Expr) =
@@ -274,19 +282,13 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
                 let op = extractOperand (Some ep) elem
                 Contains(attr.Id, op)
 
-            | SpecificCall2 <@ Map.containsKey @> (None, _, _, [key; AttributeGet attr]) when key.IsClosed ->
-                let key = evalRaw key
-                if not <| isValidFieldName key then
-                    invalidArg key "map key must be alphanumeric not starting with a digit"
-
-                Attribute_Exists (attr.Id.AppendField key)
+            | SpecificCall2 <@ Map.containsKey @> (None, _, _, [key; AttributeGet attr]) ->
+                let nf = extractNestedField key
+                Attribute_Exists (attr.Id.Append nf)
 
             | SpecificCall2 <@ fun (x : Map<_,_>) y -> x.ContainsKey y @> (Some(AttributeGet attr), _, _, [key]) when key.IsClosed ->
-                let key = evalRaw key
-                if not <| isValidFieldName key then
-                    invalidArg key "map key must be alphanumeric not starting with a digit"
-
-                Attribute_Exists (attr.Id.AppendField key)
+                let nf = extractNestedField key
+                Attribute_Exists (attr.Id.Append nf)
 
             | SpecificCall2 <@ BETWEEN @> (None, _, _, [value ; lower; upper]) ->
                 let pickler = Pickler.resolveUntyped value.Type
@@ -331,6 +333,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
 
 /// applies a set of input values to a parametric query expression
 let applyParams (cond : ConditionalExpression) (inputValues : obj[]) =
+    let applyAttr (attr:AttributeId) = attr.Apply inputValues
     let applyOperand (op : Operand) =
         match op with
         | Param (i, pickler) ->
@@ -338,19 +341,21 @@ let applyParams (cond : ConditionalExpression) (inputValues : obj[]) =
             | Some av -> Value (wrap av)
             | None -> Undefined
 
+        | Attribute attr -> Attribute(applyAttr attr)
         | _ -> op
 
     let rec applyQuery q =
         match q with
-        | False | True
-        | Attribute_Exists _ | Attribute_Not_Exists _ -> q
+        | False | True -> q
+        | Attribute_Exists attr -> Attribute_Exists(applyAttr attr)
+        | Attribute_Not_Exists attr -> Attribute_Not_Exists(applyAttr attr)
         | Not q -> QueryExpr.ENot (applyQuery q)
         | And(q, q') -> QueryExpr.EAnd (applyQuery q) (applyQuery q')
         | Or(q, q') -> QueryExpr.EOr (applyQuery q) (applyQuery q')
         | In(o, os) -> In(applyOperand o, List.map applyOperand os)
         | Between(x, l, u) -> Between(applyOperand x, applyOperand l, applyOperand u)
-        | BeginsWith(attr, o) -> BeginsWith(attr, applyOperand o)
-        | Contains(attr, o) -> Contains(attr, applyOperand o)
+        | BeginsWith(attr, o) -> BeginsWith(applyAttr attr, applyOperand o)
+        | Contains(attr, o) -> Contains(applyAttr attr, applyOperand o)
         | Compare(cmp, l, r) ->
             let l' = applyOperand l
             let r' = applyOperand r
@@ -358,8 +363,8 @@ let applyParams (cond : ConditionalExpression) (inputValues : obj[]) =
                 match op with
                 | Attribute attr ->
                     match cmp with
-                    | NE -> Attribute_Exists attr
-                    | EQ -> Attribute_Not_Exists attr
+                    | NE -> Attribute_Exists (applyAttr attr)
+                    | EQ -> Attribute_Not_Exists (applyAttr attr)
                     | _ -> True
                 | _ -> invalidOp "internal error; assigning undefined value to non attribute path."
 

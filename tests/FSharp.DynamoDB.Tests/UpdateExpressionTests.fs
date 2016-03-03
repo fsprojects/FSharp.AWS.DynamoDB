@@ -336,6 +336,29 @@ type ``Update Expression Tests`` () =
         item'.Map.Count |> should equal 2
 
     [<Fact>]
+    let ``Update map entry with Item access`` () =
+        let item = { mkItem() with Map = Map.ofList [("A", 1L)] }
+        let key = table.PutItem item
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> SET r.Map.["A"] 2L @>)
+        item'.Map.["A"] |> should equal 2L
+
+    [<Fact>]
+    let ``Parametric map Item access`` () =
+        let item = { mkItem() with Map = Map.ofList [("A", 1L)] }
+        let key = table.PutItem item
+        let uop = table.Template.PrecomputeUpdateExpr <@ fun i v (r : R) -> SET r.Map.[i] v @>
+        let item' = table.UpdateItem(key, uop "A" 2L)
+        item'.Map.["A"] |> should equal 2L
+
+    [<Fact>]
+    let ``Parametric map ContainsKey`` () =
+        let item = { mkItem() with Map = Map.ofList [("A", 1L)] }
+        let key = table.PutItem item
+        let cond = table.Template.PrecomputeConditionalExpr <@ fun i r -> r.Map |> Map.containsKey i @>
+        let item' = table.PutItem(item, cond "A")
+        ()
+
+    [<Fact>]
     let ``Combined update with succesful precondition`` () =
         let item = mkItem()
         let key = table.PutItem item

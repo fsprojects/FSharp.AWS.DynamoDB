@@ -361,6 +361,25 @@ type ``Conditional Expression Tests`` () =
         table.PutItem(item, <@ fun r -> r.Map.ContainsKey elem @>) |> ignore
         table.PutItem(item, <@ fun r -> r.Map |> Map.containsKey elem @>) |> ignore
 
+    [<Fact>]
+    let ``Map Item precondition`` () =
+        let item = { mkItem() with Map = Map.ofList [("A", 42L)] }
+        let key = table.PutItem item
+        fun () -> table.PutItem(item, <@ fun r -> r.Map.["A"] = 41L @>)
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+        table.PutItem(item, <@ fun r -> r.Map.["A"] = 42L @>) |> ignore
+
+    [<Fact>]
+    let ``Map Item parametric precondition`` () =
+        let item = { mkItem() with Map = Map.ofList [("A", 42L)] }
+        let key = table.PutItem item
+        let cond = table.Template.PrecomputeConditionalExpr <@ fun k v r -> r.Map.[k] = v @>
+        fun () -> table.PutItem(item, cond "A" 41L)
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+        table.PutItem(item, cond "A" 42L) |> ignore
+
 
     [<Fact>]
     let ``Fail on identical comparands`` () =

@@ -198,7 +198,7 @@ let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : Intermediate
 
     match expr' with
     | Lambda(r,body) when r.Type = recordInfo.Type ->
-        let (|AttributeGet|_|) (e : Expr) = QuotedAttribute.TryExtract r recordInfo e
+        let (|AttributeGet|_|) (e : Expr) = QuotedAttribute.TryExtract (|PVar|_|) r recordInfo e
         let attrs = new ResizeArray<QuotedAttribute>()
         let assignments = new ResizeArray<QuotedAttribute * Expr> ()
         let updateOps = new ResizeArray<UpdateOperation> ()
@@ -246,14 +246,14 @@ let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : Intermediate
 /// Completes conversion from intermediate update expression to final update operations
 let extractUpdateOps (exprs : IntermediateUpdateExprs) =
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
-    let (|AttributeGet|_|) (e : Expr) = QuotedAttribute.TryExtract exprs.RVar exprs.RecordInfo e
+    let (|PVar|_|) = exprs.ParamRecognizer
+    let (|AttributeGet|_|) (e : Expr) = QuotedAttribute.TryExtract (|PVar|_|) exprs.RVar exprs.RecordInfo e
 
     let getValue (pickler : Pickler) (expr : Expr) =
         match expr |> evalRaw |> pickler.PickleCoerced with
         | None -> Undefined
         | Some av -> Value (wrap av)
 
-    let (|PVar|_|) = exprs.ParamRecognizer
 
     let rec extractOperand (pickler : Pickler) (expr : Expr) =
         match expr with
@@ -261,6 +261,14 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
         | PipeRight e | PipeLeft e -> extractOperand pickler e
         | AttributeGet attr -> Attribute attr.Id
         | PVar i -> Param (i, pickler)
+        | _ -> invalidExpr()
+
+    let extractNestedField (expr : Expr) =
+        let op = extractOperand (Pickler.resolveUntyped expr.Type) expr
+        match op with
+        | Param(i,_) -> FParam i
+        | Value av when av.AttributeValue.S <> null -> FField av.AttributeValue.S
+        | Value av when av.AttributeValue.N <> null -> FIndex (int av.AttributeValue.N)
         | _ -> invalidExpr()
 
     let rec extractUpdateValue (pickler : Pickler) (expr : Expr) =
@@ -313,14 +321,14 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
             UpdateOperation.EDelete attr.Id (extractOperand parent.Pickler other)
 
         | SpecificCall2 <@ Map.add @> (None, _, _, [keyE; value; AttributeGet attr]) when attr = parent ->
-            let key = evalRaw keyE
-            let attr = parent.Id.AppendField key
+            let nf = extractNestedField keyE
+            let attr = attr.Id.Append(nf)
             let ep = getElemPickler parent.Pickler
             UpdateOperation.ESet attr (extractUpdateValue ep value)
 
         | SpecificCall2 <@ Map.remove @> (None, _, _, [keyE; AttributeGet attr]) when attr = parent ->
-            let key = evalRaw keyE
-            let attr = parent.Id.AppendField key
+            let nf = extractNestedField keyE
+            let attr = attr.Id.Append(nf)
             Remove attr
 
         | e -> 
@@ -344,6 +352,7 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
 
 /// applies a set of input values to parametric update operations
 let applyParams (uops : UpdateOperations) (inputValues : obj[]) =
+    let applyAttr (attr : AttributeId) = attr.Apply inputValues
     let applyOperand (op : Operand) =
         match op with
         | Param (i, pickler) ->
@@ -351,6 +360,7 @@ let applyParams (uops : UpdateOperations) (inputValues : obj[]) =
             | Some av -> Value (wrap av)
             | None -> Undefined
 
+        | Attribute attr -> Attribute(applyAttr attr)
         | _ -> op
 
     let applyUpdateValue (uv : UpdateValue) =
@@ -359,14 +369,14 @@ let applyParams (uops : UpdateOperations) (inputValues : obj[]) =
         | Op_Addition(l,r) -> UpdateValue.EOp_Addition (applyOperand l) (applyOperand r)
         | Op_Subtraction(l,r) -> UpdateValue.EOp_Subtraction (applyOperand l) (applyOperand r)
         | List_Append(l,r) -> UpdateValue.EOp_Subtraction (applyOperand l) (applyOperand r)
-        | If_Not_Exists(attr, op) -> If_Not_Exists(attr, applyOperand op)
+        | If_Not_Exists(attr, op) -> If_Not_Exists(applyAttr attr, applyOperand op)
 
     let applyUpdateOp uop =
         match uop with
         | Remove _ | Skip _ -> uop
-        | Set(attr, uv) -> UpdateOperation.ESet attr (applyUpdateValue uv)
-        | Add(attr, op) -> UpdateOperation.EAdd attr (applyOperand op)
-        | Delete(attr, op) -> UpdateOperation.EDelete attr (applyOperand op)
+        | Set(attr, uv) -> UpdateOperation.ESet (applyAttr attr) (applyUpdateValue uv)
+        | Add(attr, op) -> UpdateOperation.EAdd (applyAttr attr) (applyOperand op)
+        | Delete(attr, op) -> UpdateOperation.EDelete (applyAttr attr) (applyOperand op)
 
     let updateOps' =
         uops.UpdateOps

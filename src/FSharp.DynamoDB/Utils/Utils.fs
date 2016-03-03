@@ -4,6 +4,7 @@ open System
 open System.Collections.Generic
 open System.Reflection
 open System.Threading.Tasks
+open System.Text
 
 open Microsoft.FSharp.Core.LanguagePrimitives.IntrinsicFunctions
 open Microsoft.FSharp.Quotations
@@ -41,6 +42,11 @@ module internal Utils =
     /// quadruple hashcode generation without tuple allocation
     let inline hash4 (t : 'T) (s : 'S) (u : 'U) (v : 'V) =
         combineHash (combineHash (combineHash (hash t) (hash s)) (hash u)) (hash v)
+
+    let inline mkString (builder : (string -> unit) -> unit) : string =
+        let sb = new StringBuilder()
+        builder (fun s -> sb.Append s |> ignore)
+        sb.ToString()
 
     let tryGetAttribute<'Attribute when 'Attribute :> System.Attribute> (attrs : seq<Attribute>) : 'Attribute option =
         attrs |> Seq.tryPick(function :? 'Attribute as a -> Some a | _ -> None)
@@ -157,7 +163,7 @@ module internal Utils =
         match e with
         | SpecificCall2 <@ LanguagePrimitives.IntrinsicFunctions.GetArray @> (None,_,[t], [obj ; index]) -> 
             Some(obj, t, index)
-        | PropertyGet(Some obj, prop, [index]) when prop.Name = "Item" && index.Type = typeof<int> ->
+        | PropertyGet(Some obj, prop, [index]) when prop.Name = "Item" ->
             Some(obj, prop.PropertyType, index)
         | _ -> None
 
