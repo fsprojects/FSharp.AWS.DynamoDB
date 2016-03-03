@@ -56,7 +56,9 @@ module UpdateExprTypes =
 
             Map : Map<string, int64>
 
-            Set : Set<int64>
+            IntSet : Set<int64>
+
+            StringSet : Set<string>
 
             [<BinaryFormatter>]
             Serialized : int64 * string
@@ -82,7 +84,8 @@ type ``Update Expression Tests`` () =
             Nested = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
             NestedList = [{ NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ]
             Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq 
-            Set = seq { for i in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
+            IntSet = seq { for i in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
+            StringSet = seq { for i in 0L .. rand() % 5L -> guid() } |> Set.ofSeq
             List = [for i in 0L .. rand() % 5L -> rand() ]
             Union = if rand() % 2L = 0L then UA (rand()) else UB(guid())
             Unions = [for i in 0L .. rand() % 5L -> if rand() % 2L = 0L then UA (rand()) else UB(guid()) ]
@@ -245,32 +248,60 @@ type ``Update Expression Tests`` () =
         item'.String |> should equal "<undefined>"
 
     [<Fact>]
-    let ``Update set with add element`` () =
-        let item = { mkItem() with Set = set [1L;2L] }
+    let ``Update int set with add element`` () =
+        let item = { mkItem() with IntSet = set [1L;2L] }
         let key = table.PutItem item
-        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Set = r.Set |> Set.add 3L } @>)
-        item'.Set.Contains 3L |> should equal true
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with IntSet = r.IntSet |> Set.add 3L } @>)
+        item'.IntSet.Contains 3L |> should equal true
 
     [<Fact>]
-    let ``Update set with remove element`` () =
-        let item = { mkItem() with Set = set [1L;2L] }
+    let ``Update int set with remove element`` () =
+        let item = { mkItem() with IntSet = set [1L;2L] }
         let key = table.PutItem item
-        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Set = r.Set |> Set.remove 2L } @>)
-        item'.Set.Contains 2L |> should equal false
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with IntSet = r.IntSet |> Set.remove 2L } @>)
+        item'.IntSet.Contains 2L |> should equal false
 
     [<Fact>]
-    let ``Update set with append set`` () =
-        let item = { mkItem() with Set = set [1L;2L] }
+    let ``Update int set with append set`` () =
+        let item = { mkItem() with IntSet = Set.empty }
         let key = table.PutItem item
-        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Set = r.Set + set [3L] } @>)
-        item'.Set.Contains 3L |> should equal true
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with IntSet = r.IntSet + set [3L] } @>)
+        item'.IntSet.Contains 3L |> should equal true
 
     [<Fact>]
-    let ``Update set with remove set`` () =
-        let item = { mkItem() with Set = set [1L;2L] }
+    let ``Update int set with remove set`` () =
+        let item = { mkItem() with IntSet = set [1L;2L] }
         let key = table.PutItem item
-        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Set = r.Set - set [1L;2L;3L] } @>)
-        item'.Set.Count |> should equal 0
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with IntSet = r.IntSet - set [1L;2L;3L] } @>)
+        item'.IntSet.Count |> should equal 0
+
+    [<Fact>]
+    let ``Update string set with add element`` () =
+        let item = { mkItem() with StringSet = set ["1";"2"] }
+        let key = table.PutItem item
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with StringSet = r.StringSet |> Set.add "3" } @>)
+        item'.StringSet.Contains "3" |> should equal true
+
+    [<Fact>]
+    let ``Update string set with remove element`` () =
+        let item = { mkItem() with StringSet = set ["1";"2"] }
+        let key = table.PutItem item
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with StringSet = r.StringSet |> Set.remove "2" } @>)
+        item'.StringSet.Contains "2" |> should equal false
+
+    [<Fact>]
+    let ``Update string set with append set`` () =
+        let item = { mkItem() with StringSet = Set.empty }
+        let key = table.PutItem item
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with StringSet = r.StringSet + set ["3"] } @>)
+        item'.StringSet.Contains "3" |> should equal true
+
+    [<Fact>]
+    let ``Update string set with remove set`` () =
+        let item = { mkItem() with StringSet = set ["1";"2"] }
+        let key = table.PutItem item
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with StringSet = r.StringSet - set ["1";"2";"3"] } @>)
+        item'.StringSet.Count |> should equal 0
 
     [<Fact>]
     let ``Update map with add element`` () =
@@ -347,18 +378,18 @@ type ``Update Expression Tests`` () =
     let ``ADD to set`` () =
         let item = mkItem()
         let key = table.PutItem item
-        let item' = table.UpdateItem(key, <@ fun r -> ADD r.Set [42L] @>)
+        let item' = table.UpdateItem(key, <@ fun r -> ADD r.IntSet [42L] @>)
 
-        item'.Set.Contains 42L |> should equal true
+        item'.IntSet.Contains 42L |> should equal true
 
     [<Fact>]
     let ``DELETE from set`` () =
-        let item = { mkItem() with Set = set [1L ; 42L] }
+        let item = { mkItem() with IntSet = set [1L ; 42L] }
         let key = table.PutItem item
-        let item' = table.UpdateItem(key, <@ fun r -> DELETE r.Set [42L] @>)
+        let item' = table.UpdateItem(key, <@ fun r -> DELETE r.IntSet [42L] @>)
 
-        item'.Set.Contains 42L |> should equal false
-        item'.Set.Count |> should equal 1
+        item'.IntSet.Contains 42L |> should equal false
+        item'.IntSet.Count |> should equal 1
 
     [<Fact>]
     let ``Detect overlapping paths`` () =
@@ -387,12 +418,12 @@ type ``Update Expression Tests`` () =
     let ``Simple Parametric Updater 2`` () =
         let item = mkItem()
         let key = table.PutItem item
-        let cond = table.Template.PrecomputeUpdateExpr <@ fun v1 v2 r -> SET r.Value v1 &&& ADD r.Set v2 @>
+        let cond = table.Template.PrecomputeUpdateExpr <@ fun v1 v2 r -> SET r.Value v1 &&& ADD r.IntSet v2 @>
         let v1 = rand()
         let v2 = [ for i in 1 .. 10 -> rand()]
         let result = table.UpdateItem(key, cond v1 v2)
         result.Value |> should equal v1
-        for v in v2 do result.Set.Contains v |> should equal true
+        for v in v2 do result.IntSet.Contains v |> should equal true
 
     [<Fact>]
     let ``Parametric Updater with optional argument`` () =
@@ -407,10 +438,10 @@ type ``Update Expression Tests`` () =
         let item = mkItem()
         let key = table.PutItem item
         let values = [ for i in 1 .. 10 -> rand()]
-        let cond = table.Template.PrecomputeUpdateExpr <@ fun vs r -> SET r.List vs &&& ADD r.Set vs @>
+        let cond = table.Template.PrecomputeUpdateExpr <@ fun vs r -> SET r.List vs &&& ADD r.IntSet vs @>
         let result = table.UpdateItem(key, cond values)
         result.List |> should equal values
-        for v in values do result.Set.Contains v |> should equal true
+        for v in values do result.IntSet.Contains v |> should equal true
 
     [<Fact>]
     let ``Parametric Updater with invalid param usage`` () =
@@ -418,7 +449,7 @@ type ``Update Expression Tests`` () =
         fun () -> template.PrecomputeUpdateExpr <@ fun v (r : R) -> { r with Value = List.head v } @>
         |> shouldFailwith<_, ArgumentException>
 
-        fun () -> template.PrecomputeUpdateExpr <@ fun v (r : R) -> ADD r.Set (1L :: v) @>
+        fun () -> template.PrecomputeUpdateExpr <@ fun v (r : R) -> ADD r.IntSet (1L :: v) @>
         |> shouldFailwith<_, ArgumentException>
 
     interface IDisposable with
