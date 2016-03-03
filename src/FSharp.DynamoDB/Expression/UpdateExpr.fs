@@ -64,6 +64,7 @@ and UpdateValue =
     | Op_Addition of Operand * Operand
     | Op_Subtraction of Operand * Operand
     | List_Append of Operand * Operand
+    | If_Not_Exists of AttributeId * Operand
 
 /// Update value operand
 and Operand =
@@ -99,6 +100,47 @@ type UpdateOperations =
     }
 with
     member __.IsParametericExpr = __.NParams > 0
+
+type UpdateValue with
+    static member EOp_Addition (left : Operand) (right : Operand) =
+        match left with
+        | Undefined -> Operand right
+        | _ ->
+            match right with
+            | Undefined -> Operand left
+            | _ -> Op_Addition(left, right)
+
+    static member EOp_Subtraction (left : Operand) (right : Operand) =
+        match left with
+        | Undefined -> Operand right
+        | _ ->
+            match right with
+            | Undefined -> Operand left
+            | _ -> Op_Subtraction(left, right)
+
+    static member EList_Append (left : Operand) (right : Operand) =
+        match left with
+        | Undefined -> Operand right
+        | _ ->
+            match right with
+            | Undefined -> Operand left
+            | _ -> List_Append(left, right)
+
+type UpdateOperation with
+    static member EAdd attrId op =
+        match op with
+        | Undefined -> Skip
+        | _ -> Add(attrId, op)
+
+    static member EDelete attrId op =
+        match op with
+        | Undefined -> Skip
+        | _ -> Delete(attrId, op)
+
+    static member ESet attrId uv =
+        match uv with
+        | Operand Undefined -> Remove attrId
+        | _ -> Set(attrId, uv)
 
 /// Extracts update expressions from a quoted record update predicate
 let extractRecordExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : IntermediateUpdateExprs =
@@ -225,46 +267,22 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
         match expr with
         | PipeRight e | PipeLeft e -> extractUpdateValue pickler e
         | SpecificCall2 <@ (+) @> (None, _, _, [left; right]) when pickler.PickleType = PickleType.Number ->
-            let l, r = extractOperand pickler left, extractOperand pickler right
-            if l = Undefined then Operand r
-            elif r = Undefined then Operand l
-            else
-                Op_Addition(l, r)
+            UpdateValue.EOp_Addition (extractOperand pickler left) (extractOperand pickler right)
 
         | SpecificCall2 <@ (-) @> (None, _, _, [left; right]) when pickler.PickleType = PickleType.Number ->
-            let l, r = extractOperand pickler left, extractOperand pickler right
-            if l = Undefined then Operand r
-            elif r = Undefined then Operand l
-            else
-                Op_Subtraction(l, r)
+            UpdateValue.EOp_Subtraction (extractOperand pickler left) (extractOperand pickler right)
 
         | SpecificCall2 <@ Array.append @> (None, _, _, [left; right]) ->
-            let l, r = extractOperand pickler left, extractOperand pickler right
-            if l = Undefined then Operand r
-            elif r = Undefined then Operand l
-            else
-                List_Append(l, r)
+            UpdateValue.EList_Append (extractOperand pickler left) (extractOperand pickler right)
 
         | SpecificCall2 <@ (@) @> (None, _, _, [left; right]) ->
-            let l, r = extractOperand pickler left, extractOperand pickler right
-            if l = Undefined then Operand r
-            elif r = Undefined then Operand l
-            else
-                List_Append(l, r)
+            UpdateValue.EList_Append (extractOperand pickler left) (extractOperand pickler right)
 
         | ConsList(head, tail) ->
-            let l, r = extractOperand pickler head, extractOperand pickler tail
-            if l = Undefined then Operand r
-            elif r = Undefined then Operand l
-            else
-                List_Append(l, r)
+            UpdateValue.EList_Append (extractOperand pickler head) (extractOperand pickler tail)
 
         | SpecificCall2 <@ List.append @> (None, _, _, [left; right]) ->
-            let l, r = extractOperand pickler left, extractOperand pickler right
-            if l = Undefined then Operand r
-            elif r = Undefined then Operand l
-            else
-                List_Append(l, r)
+            UpdateValue.EList_Append (extractOperand pickler left) (extractOperand pickler right)
 
         | _ -> extractOperand pickler expr |> Operand
 
@@ -272,47 +290,28 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
         match expr with
         | PipeRight e | PipeLeft e -> extractUpdateOp parent e
         | SpecificCall2 <@ Set.add @> (None, _, _, [elem; AttributeGet attr]) when parent = attr ->
-            let op = extractOperand parent.Pickler elem
-            if op = Undefined then Skip
-            else Add(attr.Id, op)
+            UpdateOperation.EAdd attr.Id (extractOperand parent.Pickler elem)
 
         | SpecificCall2 <@ fun (s : Set<_>) e -> s.Add e @> (Some (AttributeGet attr), _, _, [elem]) when attr = parent ->
-            let op = extractOperand parent.Pickler elem
-            if op = Undefined then Skip
-            else
-                Add(attr.Id, op)
+            UpdateOperation.EAdd attr.Id (extractOperand parent.Pickler elem)
 
         | SpecificCall2 <@ Set.remove @> (None, _, _, [elem ; AttributeGet attr]) when attr = parent ->
-            let op = extractOperand parent.Pickler elem
-            if op = Undefined then Skip
-            else
-                Delete(attr.Id, op)
+            UpdateOperation.EDelete attr.Id (extractOperand parent.Pickler elem)
 
         | SpecificCall2 <@ fun (s : Set<_>) e -> s.Remove e @> (Some (AttributeGet attr), _, _, [elem]) when attr = parent ->
-            let op = extractOperand parent.Pickler elem
-            if op = Undefined then Skip
-            else
-                Delete(attr.Id, op)
+            UpdateOperation.EDelete attr.Id (extractOperand parent.Pickler elem)
 
         | SpecificCall2 <@ (+) @> (None, _, _, ([AttributeGet attr; other] | [other ; AttributeGet attr])) when attr = parent && not attr.Pickler.IsScalar ->
-            let op = extractOperand parent.Pickler other
-            if op = Undefined then Skip
-            else
-                Add(attr.Id, op)
+            UpdateOperation.EAdd attr.Id (extractOperand parent.Pickler other)
 
         | SpecificCall2 <@ (-) @> (None, _, _, [AttributeGet attr; other]) when attr = parent && not attr.Pickler.IsScalar ->
-            let op = extractOperand parent.Pickler other
-            if op = Undefined then Skip
-            else
-                Delete(attr.Id, op)
+            UpdateOperation.EDelete attr.Id (extractOperand parent.Pickler other)
 
         | SpecificCall2 <@ Map.add @> (None, _, _, [keyE; value; AttributeGet attr]) when attr = parent ->
             let key = evalRaw keyE
             let attr = parent.Id.AppendField key
             let ep = getElemPickler parent.Pickler
-            match extractUpdateValue ep value with
-            | Operand op when op = Undefined -> Remove attr
-            | uv -> Set(attr, uv)
+            UpdateOperation.ESet attr (extractUpdateValue ep value)
 
         | SpecificCall2 <@ Map.remove @> (None, _, _, [keyE; AttributeGet attr]) when attr = parent ->
             let key = evalRaw keyE
@@ -320,9 +319,7 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
             Remove attr
 
         | e -> 
-            match extractUpdateValue parent.Pickler e with
-            | Operand op when op = Undefined -> Remove parent.Id
-            | uv -> Set(parent.Id, uv)
+            UpdateOperation.ESet parent.Id (extractUpdateValue parent.Pickler e)
 
     let updateOps = 
         exprs.Assignments 
@@ -354,44 +351,17 @@ let applyParams (uops : UpdateOperations) (inputValues : obj[]) =
     let applyUpdateValue (uv : UpdateValue) =
         match uv with
         | Operand op -> Operand(applyOperand op)
-        | Op_Addition(l,r) -> 
-            let l' = applyOperand l
-            let r' = applyOperand r
-            if l' = Undefined then Operand r'
-            elif r' = Undefined then Operand l'
-            else Op_Addition(l', r')
-
-        | Op_Subtraction(l,r) -> 
-            let l' = applyOperand l
-            let r' = applyOperand r
-            if l' = Undefined then Operand r'
-            elif r' = Undefined then Operand l'
-            else Op_Addition(l', r')
-
-        | List_Append(l,r) ->
-            let l' = applyOperand l
-            let r' = applyOperand r
-            if l' = Undefined then Operand r'
-            elif r' = Undefined then Operand l'
-            else List_Append(l', r')
+        | Op_Addition(l,r) -> UpdateValue.EOp_Addition (applyOperand l) (applyOperand r)
+        | Op_Subtraction(l,r) -> UpdateValue.EOp_Subtraction (applyOperand l) (applyOperand r)
+        | List_Append(l,r) -> UpdateValue.EOp_Subtraction (applyOperand l) (applyOperand r)
+        | If_Not_Exists(attr, op) -> If_Not_Exists(attr, applyOperand op)
 
     let applyUpdateOp uop =
         match uop with
         | Remove _ | Skip _ -> uop
-        | Set(attr, uv) -> 
-            match applyUpdateValue uv with
-            | Operand Undefined -> Remove attr
-            | uv -> Set(attr, uv)
-
-        | Add(attr, op) -> 
-            match applyOperand op with
-            | Undefined -> Skip
-            | op -> Add(attr, op)
-
-        | Delete(attr, op) -> 
-            match applyOperand op with
-            | Undefined -> Skip
-            | op -> Delete(attr, op)
+        | Set(attr, uv) -> UpdateOperation.ESet attr (applyUpdateValue uv)
+        | Add(attr, op) -> UpdateOperation.EAdd attr (applyOperand op)
+        | Delete(attr, op) -> UpdateOperation.EDelete attr (applyOperand op)
 
     let updateOps' =
         uops.UpdateOps
@@ -424,6 +394,11 @@ let writeUpdateExpression (writer : AttributeWriter) (uops : UpdateOperations) =
         | Op_Addition(l, r) -> writeOp l; ! " + " ; writeOp r
         | Op_Subtraction(l, r) -> writeOp l ; ! " - " ; writeOp r
         | List_Append(l,r) -> ! "(list_append(" ; writeOp l ; ! ", " ; writeOp r ; ! "))"
+        | If_Not_Exists(attr, Undefined) -> 
+            sprintf "attempting to populate If_Not_Exists(%s) clause with value of undefined representation." attr.Id
+            |> invalidOp
+
+        | If_Not_Exists(attr, op) -> ! "(if_not_exists(" ; writeAttr attr ; ! ", " ; writeOp op ; ! "))"
 
     let isFirstGp =
         let lastId = ref -1

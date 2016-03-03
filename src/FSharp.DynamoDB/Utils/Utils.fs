@@ -183,7 +183,6 @@ module internal Utils =
                 | _ -> None
 
             unwind right
-
         | _ -> None
 
     let (|ConsList|_|) (e : Expr) =
