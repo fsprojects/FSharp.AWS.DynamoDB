@@ -11,7 +11,8 @@ open FSharp.DynamoDB
 [<AutoOpen>]
 module CondExprTypes =
 
-    type Enum = A = 0 | B = 1 | C = 2
+    [<Flags>]
+    type Enum = A = 1 | B = 2 | C = 4
 
     type Nested = { NV : string ; NE : Enum }
 
@@ -468,6 +469,23 @@ type ``Conditional Expression Tests`` () =
         test false <@ fun r -> r.HashKey = "2" && not (r.RangeKey = 2L) @>
         test false <@ fun r -> r.HashKey = "2" && r.Bool = true @>
         test false <@ fun r -> r.HashKey = "2" && BETWEEN 1L r.RangeKey 2L @>
+
+    [<Fact>]
+    let ``Detect incompatible comparisons`` () =
+        let test outcome q = 
+            let f () = table.Template.PrecomputeConditionalExpr(q)
+            if outcome then f () |> ignore
+            else shouldFailwith<_, ArgumentException> f |> ignore
+
+        test true <@ fun r -> r.Guid > Guid.Empty @>
+        test true <@ fun r -> r.Bool > false @>
+        test true <@ fun r -> r.Optional >= Some "1" @>
+        test false <@ fun r -> r.Map > Map.empty @>
+        test false <@ fun r -> r.Set > Set.empty @>
+        test false <@ fun r -> r.Ref > ref "12" @>
+        test false <@ fun r -> r.Serialized <= (1L, "32") @>
+        test false <@ fun r -> r.Tuple <= (1L, 2L) @>
+        test false <@ fun r -> r.Nested <= r.Nested @>
 
     [<Fact>]
     let ``Simple Scan Expression`` () =

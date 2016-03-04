@@ -30,6 +30,7 @@ type PicklerType =
     | Record        = 03
     | Union         = 04
     | Serialized    = 05
+    | Enum          = 06
 
 /// Untyped pickler base class
 [<AbstractClass>]
@@ -51,6 +52,11 @@ type Pickler() =
     /// Pickle any object, making an effort to coerce it to current pickler type
     abstract PickleCoerced : obj -> AttributeValue option
     default __.PickleCoerced obj = __.PickleUntyped obj
+
+    /// True if DynamoDB representation preserves
+    /// comparison semantics for query expressions
+    abstract IsComparable : bool
+    default __.IsComparable = false
     
     /// True if scalar DynamoDB instance
     member __.IsScalar = 

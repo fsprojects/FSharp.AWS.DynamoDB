@@ -44,8 +44,7 @@ module private ResolverImpl =
             s.Accept {
                 new IEnumVisitor<Pickler> with
                     member __.VisitEnum<'E, 'U when 'E : enum<'U>> () =
-                        let up = resolver.Resolve<'U>() :?> NumRepresentablePickler<'U>
-                        new EnumerationPickler<'E, 'U>(up) :> _ }
+                        new EnumerationPickler<'E, 'U>() :> _ }
 
         | ShapeNullable s ->
             s.Accept {

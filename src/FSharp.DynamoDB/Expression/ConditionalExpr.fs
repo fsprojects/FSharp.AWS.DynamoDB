@@ -43,6 +43,11 @@ and Comparator =
     | GT
     | LE
     | GE
+with
+    member cmp.IsComparison =
+        match cmp with
+        | EQ | NE -> false
+        | _ -> true
 
 and Operand =
     | Undefined
@@ -215,12 +220,18 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
             match expr with
             | SpecificCall pat (None, _, args) ->
                 let pickler = args |> List.tryPick (|AttributeGet|_|) |> Option.map (fun attr -> attr.Pickler)
-                args |> List.map (extractOperand pickler) |> Some
+                let operands = args |> List.map (extractOperand pickler)
+                let pickler = match pickler with Some p -> p | None -> Pickler.resolveUntyped args.[0].Type
+                Some(pickler, operands)
 
             | _ -> None
 
-        let extractComparison (cmp : Comparator) (left : Operand) (right : Operand) =
-            if left = right then
+        let extractComparison (p : Pickler) (cmp : Comparator) (left : Operand) (right : Operand) =
+            if cmp.IsComparison && not p.IsComparable then
+                sprintf "Representation of type '%O' does not support comparisons." p.Type
+                |> invalidArg "expr"
+
+            elif left = right then
                 match cmp with
                 | LE | EQ | GE -> True
                 | LT | NE | GT -> False
@@ -257,12 +268,12 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
 
             | AttributeGet attr -> Compare(EQ, Attribute attr.Id, Value (wrap (AttributeValue(BOOL = true))))
 
-            | Comparison <@ (=) @> [left; right] -> extractComparison EQ left right
-            | Comparison <@ (<>) @> [left; right] -> extractComparison NE left right
-            | Comparison <@ (<) @> [left; right] -> extractComparison LT left right
-            | Comparison <@ (>) @> [left; right] -> extractComparison GT left right
-            | Comparison <@ (<=) @> [left; right] -> extractComparison LE left right
-            | Comparison <@ (>=) @> [left; right] -> extractComparison GE left right
+            | Comparison <@ (=) @> (p, [left; right])  -> extractComparison p EQ left right
+            | Comparison <@ (<>) @> (p, [left; right]) -> extractComparison p NE left right
+            | Comparison <@ (<) @> (p, [left; right]) -> extractComparison p LT left right
+            | Comparison <@ (>) @> (p, [left; right]) -> extractComparison p GT left right
+            | Comparison <@ (<=) @> (p, [left; right]) -> extractComparison p LE left right
+            | Comparison <@ (>=) @> (p, [left; right]) -> extractComparison p GE left right
 
             | SpecificCall2 <@ fun (x:string) y -> x.StartsWith y @> (Some (AttributeGet attr), _, _, [value]) ->
                 let op = extractOperand None value

@@ -23,6 +23,7 @@ type BoolPickler() =
     inherit StringRepresentablePickler<bool>()
     override __.PickleType = PickleType.Bool
     override __.PicklerType = PicklerType.Value
+    override __.IsComparable = true
 
     override __.DefaultValue = false
     override __.Pickle b = AttributeValue(BOOL = b) |> Some
@@ -37,6 +38,7 @@ type StringPickler() =
     inherit StringRepresentablePickler<string> ()
     override __.PickleType = PickleType.String
     override __.PicklerType = PicklerType.Value
+    override __.IsComparable = true
 
     override __.DefaultValue = null
     override __.Pickle s =
@@ -64,6 +66,7 @@ let inline mkNumericalPickler< ^N when ^N : (static member Parse : string * IFor
     { new NumRepresentablePickler< ^N>() with
         member __.PickleType = PickleType.Number
         member __.PicklerType = PicklerType.Value
+        member __.IsComparable = true
 
         member __.Parse s = parseNum s
         member __.UnParse e = toString e
@@ -83,6 +86,7 @@ type ByteArrayPickler() =
     inherit StringRepresentablePickler<byte[]> ()
     override __.PickleType = PickleType.Bytes
     override __.PicklerType = PicklerType.Value
+    override __.IsComparable = true
 
     override __.Parse s = Convert.FromBase64String s
     override __.UnParse b = Convert.ToBase64String b
@@ -98,6 +102,7 @@ type ByteArrayPickler() =
         elif not <| isNull a.B then a.B.ToArray()
         else
             invalidCast a
+
 
 type MemoryStreamPickler() =
     inherit Pickler<MemoryStream> ()
@@ -120,6 +125,7 @@ type GuidPickler() =
     inherit StringRepresentablePickler<Guid> ()
     override __.PickleType = PickleType.String
     override __.PicklerType = PicklerType.Value
+    override __.IsComparable = true
 
     override __.DefaultValue = Guid.Empty
     override __.Pickle g = AttributeValue(string g) |> Some
@@ -138,6 +144,7 @@ type DateTimeOffsetPickler() =
 
     override __.PickleType = PickleType.String
     override __.PicklerType = PicklerType.Value
+    override __.IsComparable = true
 
     override __.DefaultValue = DateTimeOffset()
     override __.Parse s = parse s
@@ -148,10 +155,12 @@ type DateTimeOffsetPickler() =
         if not <| isNull a.S then parse a.S 
         else invalidCast a
 
+
 type TimeSpanPickler() =
     inherit NumRepresentablePickler<TimeSpan> ()
     override __.PickleType = PickleType.String
     override __.PicklerType = PicklerType.Value
+    override __.IsComparable = true
 
     override __.Parse s = TimeSpan.FromTicks(int64 s)
     override __.UnParse t = string t.Ticks
@@ -161,21 +170,26 @@ type TimeSpanPickler() =
         if not <| isNull a.N then TimeSpan.FromTicks(int64 a.N) 
         else invalidCast a
 
-type EnumerationPickler<'E, 'U when 'E : enum<'U>>(up : NumRepresentablePickler<'U>) =
-    inherit NumRepresentablePickler<'E> ()
-    override __.PickleType = PickleType.Number
-    override __.PicklerType = PicklerType.Value
+
+type EnumerationPickler<'E, 'U when 'E : enum<'U>>() =
+    inherit StringRepresentablePickler<'E> ()
+    override __.PickleType = PickleType.String
+    override __.PicklerType = PicklerType.Enum
 
     override __.DefaultValue = Unchecked.defaultof<'E>
-    override __.Pickle e = let u = EnumToValue<'E,'U> e in up.Pickle u
-    override __.UnPickle a = EnumOfValue<'U, 'E>(up.UnPickle a)
-    override __.Parse s = up.Parse s |> EnumOfValue<'U, 'E>
-    override __.UnParse e = EnumToValue<'E, 'U> e |> up.UnParse
+    override __.Pickle e = AttributeValue(S = e.ToString()) |> Some
+    override __.UnPickle a = 
+        if notNull a.S then Enum.Parse(typeof<'E>, a.S) :?> 'E
+        else invalidCast a
+
+    override __.Parse s = Enum.Parse(typeof<'E>, s) :?> 'E
+    override __.UnParse e = e.ToString()
 
 type NullablePickler<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct>(tp : Pickler<'T>) =
     inherit Pickler<Nullable<'T>> ()
     override __.PickleType = tp.PickleType
     override __.PicklerType = PicklerType.Wrapper
+    override __.IsComparable = tp.IsComparable
     override __.DefaultValue = Nullable<'T>()
     override __.Pickle n = if n.HasValue then tp.Pickle n.Value else AttributeValue(NULL = true) |> Some
     override __.UnPickle a = if a.NULL then Nullable<'T> () else new Nullable<'T>(tp.UnPickle a)
@@ -184,6 +198,7 @@ type OptionPickler<'T>(tp : Pickler<'T>) =
     inherit Pickler<'T option> ()
     override __.PickleType = tp.PickleType
     override __.PicklerType = PicklerType.Wrapper
+    override __.IsComparable = tp.IsComparable
     override __.DefaultValue = None
     override __.Pickle topt = match topt with None -> None | Some t -> tp.Pickle t
     override __.UnPickle a = if a.NULL then None else Some(tp.UnPickle a)
@@ -192,6 +207,7 @@ type OptionPickler<'T>(tp : Pickler<'T>) =
         | :? 'T as t -> tp.Pickle t
         | :? ('T option) as topt -> __.Pickle topt
         | _ -> raise <| new InvalidCastException()
+
 
 type StringRepresentationPickler<'T>(ep : StringRepresentablePickler<'T>) =
     inherit Pickler<'T> ()

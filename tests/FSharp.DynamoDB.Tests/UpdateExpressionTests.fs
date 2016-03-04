@@ -11,7 +11,8 @@ open FSharp.DynamoDB
 [<AutoOpen>]
 module UpdateExprTypes =
 
-    type Enum = A = 0 | B = 1 | C = 2
+    [<Flags>]
+    type Enum = A = 1 | B = 2 | C = 4
 
     type Nested = { NV : string ; NE : Enum }
 
