@@ -1,3 +1,7 @@
+### 0.0.25-alpha
+* Improvements to Enumeration representations.
+* Add checks for comparison compatibility in condition expressions.
+
 ### 0.0.24-alpha
 * Bugfix.
 
