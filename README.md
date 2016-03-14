@@ -43,7 +43,7 @@ let key : TableKey = table.PutItem(workItem)
 let workItem' = table.GetItem(key)
 ```
 
-Queries and scans can be performeds using quoted predicates
+Queries and scans can be performed using quoted predicates
 
 ```fsharp
 let qResults = table.Query(keyCondition = <@ fun r -> r.ProcessId = 0 @>, 
