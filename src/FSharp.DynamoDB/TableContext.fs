@@ -542,10 +542,28 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
 
 
     /// <summary>
+    ///     Asynchronously updates the underlying table with supplied provisioned throughput.
+    /// </summary>
+    /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
+    member __.UpdateProvisionedThroughputAsync(provisionedThroughput : ProvisionedThroughput) : Async<unit> = async {
+        let request = new UpdateTableRequest(tableName, provisionedThroughput)
+        let! ct = Async.CancellationToken
+        let! _response = client.UpdateTableAsync(request, ct) |> Async.AwaitTaskCorrect
+        return ()
+    }
+
+    /// <summary>
+    ///     Updates the underlying table with supplied provisioned throughput.
+    /// </summary>
+    /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
+    member __.UpdateProvisionedThroughput(provisionedThroughput : ProvisionedThroughput) =
+        __.UpdateProvisionedThroughputAsync(provisionedThroughput) |> Async.RunSynchronously
+
+    /// <summary>
     ///     Asynchronously verify that the table exists and is compatible with record key schema.
     /// </summary>
     /// <param name="createIfNotExists">Create the table instance now instance if it does not exist. Defaults to false.</param>
-    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
+    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Defaults to 10,10.</param>
     member __.VerifyTableAsync(?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) : Async<unit> = async {
         let createIfNotExists = defaultArg createIfNotExists false
         let rec verify retries = async {
@@ -625,7 +643,7 @@ type TableContext =
     /// <param name="tableName">Table name to target.</param>
     /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
     /// <param name="createIfNotExists">Create the table now instance if it does not exist. Defaults to false.</param>
-    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
+    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Defaults to 10,10.</param>
     static member CreateAsync<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool, 
                                                                     ?provisionedThroughput : ProvisionedThroughput) : Async<TableContext<'TRecord>> = async {
 
