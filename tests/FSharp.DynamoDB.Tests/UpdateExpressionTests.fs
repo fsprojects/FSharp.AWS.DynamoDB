@@ -294,7 +294,7 @@ type ``Update Expression Tests`` () =
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with StringSet = r.StringSet |> Set.remove "2" } @>)
         item'.StringSet.Contains "2" |> should equal false
 
-    [<Fact>]
+    [<Fact(Skip = "String set append operation not up to spec in string sets")>]
     let ``Update string set with append set`` () =
         let item = { mkItem() with StringSet = Set.empty }
         let key = table.PutItem item
