@@ -34,13 +34,13 @@ module Utils =
         | ev -> ev
 
     let getTestRegion () = 
-        match getEnvironmentVariable "MBrace.AWS.Tests.Region" with
+        match getEnvironmentVariable "fsddbtestsregion" with
         | null | "" -> RegionEndpoint.EUCentral1
         | region -> RegionEndpoint.GetBySystemName region
 
-    let getAWSProfileName () = getEnvironmentVariableOrDefault "MBrace.AWS.Test.ProfileName" "default"
+    let getAWSProfileName () = getEnvironmentVariableOrDefault "fsddbtestsprofile" "default"
     let tryGetAWSCredentials () = 
-        match getEnvironmentVariable "MBrace.AWS.Test.Credentials" with
+        match getEnvironmentVariable "fsddbtestscreds" with
         | null | "" -> None
         | creds -> 
             let toks = creds.Split(',')
