@@ -76,6 +76,28 @@ FSharp.AWS.DynamoDB supports the following field types:
 * F# maps with key of type string.
 * F# records and unions (recursive types not supported).
 
+## Supported methods in Query Expressions
+
+Query expressions support the following F# methods in their predicates:
+* `Array.length`, `List.length`, `Set.count` and `Map.Count`.
+* `String.StartsWith` and `String.Contains`.
+* `Set.contains` and `Map.containsKey`.
+* `Array.isEmpty` and `List.isEmpty`.
+* `Option.isSome`, `Option.isNone`, `Option.Value` and `Option.get`.
+* `fst` and `snd` for tuple records.
+
+## Supported methods in Update Expressions
+
+Update expressions support the following F# value constructors:
+* `(+)` and `(-)` in numerical and set types.
+* `Array.append` and `List.append` (or `@`).
+* List consing (`::`).
+* `defaultArg` on optional fields.
+* `Set.add` and `Set.remove`.
+* `Map.add` and `Map.remove`.
+* `Option.Value` and `Option.get`.
+* `fst` and `snd` for tuple records.
+
 ## Example: Creating an atomic counter
 
 ```fsharp
