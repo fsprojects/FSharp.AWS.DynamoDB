@@ -1,21 +1,21 @@
-# FSharp.DynamoDB
+# FSharp.AWS.DynamoDB
 
-FSharp.DynamoDB an F# wrapper over the standard Amazon.DynamoDB library which
+FSharp.AWS.DynamoDB an F# wrapper over the standard Amazon.DynamoDB library which
 allows you to represent table items using F# records and perform updates, queries and scans
 using F# quotation expressions.
 
 The API draws heavily on the corresponding [FSharp.Azure.Storage](https://github.com/fsprojects/FSharp.Azure.Storage)
 wrapper for Azure table storage.
 
-## NuGet [![NuGet Status](http://img.shields.io/nuget/v/FSharp.DynamoDB.svg?style=flat)](https://www.nuget.org/packages/FSharp.DynamoDB/)
-`Install-Package FSharp.DynamoDB`
+## NuGet [![NuGet Status](http://img.shields.io/nuget/v/FSharp.AWS.DynamoDB.svg?style=flat)](https://www.nuget.org/packages/FSharp.AWS.DynamoDB/)
+`Install-Package FSharp.AWS.DynamoDB`
 
 ## Introduction
 
 Table items can be represented using F# records:
 
 ```fsharp
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 type WorkItemInfo =
 	{
@@ -68,7 +68,7 @@ let updated = table.UpdateItem <@ fun r -> SET r.Name "newName" &&& ADD r.Depend
 
 ## Supported Field Types
 
-FSharp.DynamoDB supports the following field types:
+FSharp.AWS.DynamoDB supports the following field types:
 * Numerical types, enumerations and strings.
 * Array, Nullable, Guid, DateTimeOffset and TimeSpan.
 * F# lists
@@ -125,11 +125,11 @@ It is possible to precompute a DynamoDB expression as follows:
 ```fsharp
 let precomputedConditional = table.Template.PrecomputeConditionalExpr <@ fun w -> w.Name <> "test" && w.Dependencies.Contains "mscorlib" @>
 ```
-This precomputed conditional can now be used in place of the original expression in the FSharp.DynamoDB API:
+This precomputed conditional can now be used in place of the original expression in the FSharp.AWS.DynamoDB API:
 ```fsharp
 let results = table.Scan precomputedConditional
 ```
-FSharp.DynamoDB also supports precomputation of parametric expressions:
+FSharp.AWS.DynamoDB also supports precomputation of parametric expressions:
 ```fsharp
 let startedBefore = table.Template.PrecomputeConditionalExpr <@ fun time w -> w.StartTime.Value <= time @>
 table.Scan(startedBefore (DateTimeOffset.Now - TimeSpan.FromDays 1.))

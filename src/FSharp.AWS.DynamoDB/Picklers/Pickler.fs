@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal FSharp.DynamoDB.Pickler
+module internal FSharp.AWS.DynamoDB.Pickler
 
 open System
 open System.IO
@@ -7,7 +7,7 @@ open System.Collections.Generic
 
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 type RestObject = Dictionary<string, AttributeValue>
 

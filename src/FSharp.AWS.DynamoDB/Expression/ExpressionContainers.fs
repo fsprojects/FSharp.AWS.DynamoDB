@@ -1,13 +1,13 @@
-﻿namespace FSharp.DynamoDB
+﻿namespace FSharp.AWS.DynamoDB
 
 open System
 open System.Collections.Generic
 
 open Microsoft.FSharp.Quotations
 
-open FSharp.DynamoDB.ExprCommon
-open FSharp.DynamoDB.ConditionalExpr
-open FSharp.DynamoDB.UpdateExpr
+open FSharp.AWS.DynamoDB.ExprCommon
+open FSharp.AWS.DynamoDB.ConditionalExpr
+open FSharp.AWS.DynamoDB.UpdateExpr
 
 //
 //  Public converted condition expression wrapper implementations

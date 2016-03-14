@@ -1,4 +1,4 @@
-﻿module internal FSharp.DynamoDB.UpdateExpr
+﻿module internal FSharp.AWS.DynamoDB.UpdateExpr
 
 open System
 open System.Collections.Generic
@@ -14,7 +14,7 @@ open Swensen.Unquote
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.ExprCommon
+open FSharp.AWS.DynamoDB.ExprCommon
 
 //
 //  Converts an F# quotation into an appropriate DynamoDB update expression.

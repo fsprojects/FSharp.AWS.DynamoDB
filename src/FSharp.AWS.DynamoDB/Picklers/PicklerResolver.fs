@@ -1,4 +1,4 @@
-﻿namespace FSharp.DynamoDB
+﻿namespace FSharp.AWS.DynamoDB
 
 open System
 open System.Collections
@@ -9,8 +9,8 @@ open System.Reflection
 
 open Microsoft.FSharp.Reflection
 
-open FSharp.DynamoDB
-open FSharp.DynamoDB.TypeShape
+open FSharp.AWS.DynamoDB
+open FSharp.AWS.DynamoDB.TypeShape
 
 //
 //  Pickler resolution implementation

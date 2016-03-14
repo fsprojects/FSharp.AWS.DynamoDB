@@ -18,11 +18,11 @@ open Fake.Testing
 // Information about the project to be used at NuGet and in AssemblyInfo files
 // --------------------------------------------------------------------------------------
 
-let project = "FSharp.DynamoDB"
+let project = "FSharp.AWS.DynamoDB"
 
 let gitOwner = "eiriktsarpalis"
 let gitHome = "https://github.com/" + gitOwner
-let gitName = "FSharp.DynamoDB"
+let gitName = "FSharp.AWS.DynamoDB"
 let gitRaw = environVarOrDefault "gitRaw" "https://raw.github.com/" + gitOwner
 
 let remoteTests = environVarOrDefault "RunRemoteTests" "false" |> Boolean.Parse
@@ -38,7 +38,7 @@ Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 let release = parseReleaseNotes (File.ReadAllLines "RELEASE_NOTES.md")
 let nugetVersion = release.NugetVersion
 
-let testAssemblies = [ "bin/FSharp.DynamoDB.Tests.dll" ]
+let testAssemblies = [ "bin/FSharp.AWS.DynamoDB.Tests.dll" ]
 
 Target "BuildVersion" (fun _ ->
     Shell.Exec("appveyor", sprintf "UpdateBuild -Version \"%s\"" nugetVersion) |> ignore
@@ -54,7 +54,7 @@ Target "AssemblyInfo" (fun _ ->
             Attribute.Copyright "Copyright \169 Eirik Tsarpalis 2016"
             Attribute.Version release.AssemblyVersion
             Attribute.FileVersion release.AssemblyVersion
-            Attribute.InternalsVisibleTo "FSharp.DynamoDB.Tests"
+            Attribute.InternalsVisibleTo "FSharp.AWS.DynamoDB.Tests"
         ] 
 
     !! "**/AssemblyInfo.fs" |> Seq.iter (fun f -> CreateFSharpAssemblyInfo f attrs)

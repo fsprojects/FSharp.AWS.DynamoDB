@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal FSharp.DynamoDB.CollectionPicklers
+module internal FSharp.AWS.DynamoDB.CollectionPicklers
 
 open System
 open System.Collections
@@ -10,7 +10,7 @@ open System.Reflection
 open Amazon.Util
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 //
 //  Pickler implementations for collection types

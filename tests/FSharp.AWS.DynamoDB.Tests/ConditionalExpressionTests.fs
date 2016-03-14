@@ -1,4 +1,4 @@
-﻿namespace FSharp.DynamoDB.Tests
+﻿namespace FSharp.AWS.DynamoDB.Tests
 
 open System
 open System.Threading
@@ -6,7 +6,7 @@ open System.Threading
 open Xunit
 open FsUnit.Xunit
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 [<AutoOpen>]
 module CondExprTypes =

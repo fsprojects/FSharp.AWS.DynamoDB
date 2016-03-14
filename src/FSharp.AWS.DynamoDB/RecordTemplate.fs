@@ -1,4 +1,4 @@
-﻿namespace FSharp.DynamoDB
+﻿namespace FSharp.AWS.DynamoDB
 
 open System
 open System.Collections.Generic
@@ -9,9 +9,9 @@ open Microsoft.FSharp.Quotations
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.KeySchema
-open FSharp.DynamoDB.ConditionalExpr
-open FSharp.DynamoDB.UpdateExpr
+open FSharp.AWS.DynamoDB.KeySchema
+open FSharp.AWS.DynamoDB.ConditionalExpr
+open FSharp.AWS.DynamoDB.UpdateExpr
 
 /// DynamoDB table template defined by provided F# record type
 [<Sealed; AutoSerializable(false)>]

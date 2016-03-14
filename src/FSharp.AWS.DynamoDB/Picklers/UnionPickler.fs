@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal FSharp.DynamoDB.UnionPickler
+module internal FSharp.AWS.DynamoDB.UnionPickler
 
 open System
 open System.Text.RegularExpressions
@@ -13,7 +13,7 @@ open Microsoft.FSharp.Reflection
 open Amazon.Util
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 //
 //  Pickler implementation for F# Union types

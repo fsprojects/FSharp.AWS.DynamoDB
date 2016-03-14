@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal FSharp.DynamoDB.PrimitivePicklers
+module internal FSharp.AWS.DynamoDB.PrimitivePicklers
 
 open System
 open System.Collections
@@ -12,8 +12,8 @@ open Microsoft.FSharp.Core.LanguagePrimitives
 
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB
-open FSharp.DynamoDB.TypeShape
+open FSharp.AWS.DynamoDB
+open FSharp.AWS.DynamoDB.TypeShape
 
 //
 //  Pickler implementations for primitive types

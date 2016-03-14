@@ -1,4 +1,4 @@
-﻿namespace FSharp.DynamoDB.Tests
+﻿namespace FSharp.AWS.DynamoDB.Tests
 
 open System
 open Amazon.DynamoDBv2
@@ -8,7 +8,7 @@ open Xunit
 open FsUnit.Xunit
 open FsCheck
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 module ``Record Generation Tests`` =
 

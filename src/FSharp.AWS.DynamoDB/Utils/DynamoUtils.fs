@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal FSharp.DynamoDB.DynamoUtils
+module internal FSharp.AWS.DynamoDB.DynamoUtils
 
 open System
 open System.IO

@@ -1,4 +1,4 @@
-﻿module internal FSharp.DynamoDB.ExprCommon
+﻿module internal FSharp.AWS.DynamoDB.ExprCommon
 
 open System
 open System.Collections.Generic

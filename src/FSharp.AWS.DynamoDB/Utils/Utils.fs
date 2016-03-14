@@ -1,4 +1,4 @@
-﻿namespace FSharp.DynamoDB
+﻿namespace FSharp.AWS.DynamoDB
 
 open System
 open System.Collections.Generic

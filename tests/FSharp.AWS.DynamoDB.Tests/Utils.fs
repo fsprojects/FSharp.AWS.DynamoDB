@@ -1,4 +1,4 @@
-﻿namespace FSharp.DynamoDB.Tests
+﻿namespace FSharp.AWS.DynamoDB.Tests
 
 open System
 open System.IO

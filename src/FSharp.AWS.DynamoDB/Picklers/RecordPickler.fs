@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal FSharp.DynamoDB.RecordPickler
+module internal FSharp.AWS.DynamoDB.RecordPickler
 
 open System
 open System.Collections
@@ -12,7 +12,7 @@ open Microsoft.FSharp.Reflection
 open Amazon.Util
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 //
 //  Pickler implementation for F# record types

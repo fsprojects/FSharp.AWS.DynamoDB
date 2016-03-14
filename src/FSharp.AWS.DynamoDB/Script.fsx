@@ -1,7 +1,7 @@
 ﻿#I "../../bin"
 #r "AWSSDK.Core.dll"
 #r "AWSSDK.DynamoDBv2.dll"
-#r "FSharp.DynamoDB.dll"
+#r "FSharp.AWS.DynamoDB.dll"
 
 open System
 
@@ -10,7 +10,7 @@ open Amazon.Util
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 let account = AWSCredentialsProfile.LoadFrom("default").Credentials
 let ddb = new AmazonDynamoDBClient(account, RegionEndpoint.EUCentral1) :> IAmazonDynamoDB

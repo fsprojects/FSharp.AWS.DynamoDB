@@ -1,4 +1,4 @@
-﻿namespace FSharp.DynamoDB
+﻿namespace FSharp.AWS.DynamoDB
 
 open System.Collections.Generic
 open System.Net
@@ -8,8 +8,8 @@ open Microsoft.FSharp.Quotations
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB.KeySchema
-open FSharp.DynamoDB.ExprCommon
+open FSharp.AWS.DynamoDB.KeySchema
+open FSharp.AWS.DynamoDB.ExprCommon
 
 /// Exception raised by DynamoDB in case where write preconditions are not satisfied
 type ConditionalCheckFailedException = Amazon.DynamoDBv2.Model.ConditionalCheckFailedException
