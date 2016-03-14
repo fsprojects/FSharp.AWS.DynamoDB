@@ -93,7 +93,6 @@ Target "RunTests" (fun _ ->
     |> xUnit2 (fun (p : XUnit2Params) -> 
         { p with
             TimeOut = TimeSpan.FromMinutes 20.
-            Parallel = ParallelMode.NoParallelization
             ExcludeTraits = 
                 [ if not emulatorTests then yield ("Category", "Emulator")
                   if not remoteTests then yield ("Category", "Remote") ]

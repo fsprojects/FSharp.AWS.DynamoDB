@@ -1,3 +1,7 @@
+### 0.1.0-beta
+* Rename to FSharp.AWS.DynamoDB.
+* Add update provision throughput methods.
+
 ### 0.0.25-alpha
 * Improvements to Enumeration representations.
 * Add checks for comparison compatibility in condition expressions.
