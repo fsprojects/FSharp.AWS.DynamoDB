@@ -8,11 +8,11 @@
     <ProjectGuid>57485723-02fa-4baf-939f-570b8b3024ba</ProjectGuid>
     <OutputType>Library</OutputType>
     <RootNamespace>Rql.DynamoDB</RootNamespace>
-    <AssemblyName>FSharp.DynamoDB</AssemblyName>
+    <AssemblyName>FSharp.AWS.DynamoDB</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <TargetFSharpCoreVersion>4.3.1.0</TargetFSharpCoreVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <Name>FSharp.DynamoDB</Name>
+    <Name>FSharp.AWS.DynamoDB</Name>
     <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">

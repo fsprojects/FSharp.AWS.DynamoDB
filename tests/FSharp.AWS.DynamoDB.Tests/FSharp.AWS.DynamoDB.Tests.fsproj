@@ -7,12 +7,12 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>2c9367a6-2835-40d3-beae-00b66c7ef063</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>FSharp.DynamoDB.Tests</RootNamespace>
-    <AssemblyName>FSharp.DynamoDB.Tests</AssemblyName>
+    <RootNamespace>FSharp.AWS.DynamoDB.Tests</RootNamespace>
+    <AssemblyName>FSharp.AWS.DynamoDB.Tests</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <Name>FSharp.DynamoDB.Tests</Name>
+    <Name>FSharp.AWS.DynamoDB.Tests</Name>
     <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -23,7 +23,7 @@
     <OutputPath>..\..\bin\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
-    <DocumentationFile>..\..\bin\FSharp.DynamoDB.Tests.XML</DocumentationFile>
+    <DocumentationFile>..\..\bin\FSharp.AWS.DynamoDB.Tests.XML</DocumentationFile>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -32,7 +32,7 @@
     <OutputPath>..\..\bin\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
-    <DocumentationFile>..\..\bin\FSharp.DynamoDB.Tests.XML</DocumentationFile>
+    <DocumentationFile>..\..\bin\FSharp.AWS.DynamoDB.Tests.XML</DocumentationFile>
   </PropertyGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
@@ -75,8 +75,8 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
-    <ProjectReference Include="..\..\src\FSharp.DynamoDB\FSharp.DynamoDB.fsproj">
-      <Name>FSharp.DynamoDB</Name>
+    <ProjectReference Include="..\..\src\FSharp.AWS.DynamoDB\FSharp.AWS.DynamoDB.fsproj">
+      <Name>FSharp.AWS.DynamoDB</Name>
       <Project>{57485723-02fa-4baf-939f-570b8b3024ba}</Project>
       <Private>True</Private>
     </ProjectReference>
