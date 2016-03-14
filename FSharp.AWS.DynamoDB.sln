@@ -26,6 +26,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.AWS.DynamoDB", "src\
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.AWS.DynamoDB.Tests", "tests\FSharp.AWS.DynamoDB.Tests\FSharp.AWS.DynamoDB.Tests.fsproj", "{2C9367A6-2835-40D3-BEAE-00B66C7EF063}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{598B32DA-681A-4C0E-B6EC-97BE473B2A36}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -46,5 +48,6 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{57485723-02FA-4BAF-939F-570B8B3024BA} = {A157294B-F680-4AA4-910C-BC63840FF6E3}
+		{2C9367A6-2835-40D3-BEAE-00B66C7EF063} = {598B32DA-681A-4C0E-B6EC-97BE473B2A36}
 	EndGlobalSection
 EndGlobal
