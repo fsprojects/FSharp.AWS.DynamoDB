@@ -7,7 +7,7 @@ using F# quotation expressions.
 The API draws heavily on the corresponding [FSharp.Azure.Storage](https://github.com/fsprojects/FSharp.Azure.Storage)
 wrapper for Azure table storage.
 
-## NuGet [![NuGet Status](http://img.shields.io/nuget/v/FSharp.AWS.DynamoDB.svg?style=flat)](https://www.nuget.org/packages/FSharp.AWS.DynamoDB/)
+## NuGet [![NuGet Badge](https://buildstats.info/nuget/FSharp.AWS.DynamoDB?includePreReleases=true)](https://www.nuget.org/packages/FSharp.AWS.DynamoDB)
 `Install-Package FSharp.AWS.DynamoDB`
 
 ## Introduction
