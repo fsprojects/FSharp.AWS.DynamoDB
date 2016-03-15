@@ -17,6 +17,9 @@ type ConditionalCheckFailedException = Amazon.DynamoDBv2.Model.ConditionalCheckF
 /// Exception raised by DynamoDB in case where resources are not found
 type ResourceNotFoundException = Amazon.DynamoDBv2.Model.ResourceNotFoundException
 
+/// Represents the provisioned throughput for given table or index
+type ProvisionedThroughput = Amazon.DynamoDBv2.Model.ProvisionedThroughput
+
 /// DynamoDB client object for performing table operations 
 /// in the context of given F# record representationss
 [<Sealed; AutoSerializable(false)>]
