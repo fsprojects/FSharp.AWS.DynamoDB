@@ -72,7 +72,7 @@ FSharp.AWS.DynamoDB supports the following field types:
 * Numerical types, enumerations and strings.
 * Array, Nullable, Guid, DateTimeOffset and TimeSpan.
 * F# lists
-* F# sets with elements of type number, string or byte[].
+* F# sets with elements of type number, string or `byte[]`.
 * F# maps with key of type string.
 * F# records and unions (recursive types not supported).
 
