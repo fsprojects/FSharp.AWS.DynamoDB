@@ -1,3 +1,6 @@
+### 0.1.1-beta
+* Expose ProvisionedThroughput type to local namespace.
+
 ### 0.1.0-beta
 * Rename to FSharp.AWS.DynamoDB.
 * Add update provision throughput methods.
