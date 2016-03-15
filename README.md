@@ -156,3 +156,9 @@ FSharp.AWS.DynamoDB also supports precomputation of parametric expressions:
 let startedBefore = table.Template.PrecomputeConditionalExpr <@ fun time w -> w.StartTime.Value <= time @>
 table.Scan(startedBefore (DateTimeOffset.Now - TimeSpan.FromDays 1.))
 ```
+
+## Maintainer(s)
+
+- [@eiriktsarpalis](https://github.com/eiriktsarpalis)
+
+The default maintainer account for projects under "fsprojects" is [@fsprojectsgit](https://github.com/fsprojectsgit) - F# Community Project Incubation Space (repo management)
