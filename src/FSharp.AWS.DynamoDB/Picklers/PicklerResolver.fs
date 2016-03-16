@@ -33,6 +33,7 @@ module private ResolverImpl =
         | :? ShapeSingle -> mkNumericalPickler<single> () :> _
         | :? ShapeDouble -> mkNumericalPickler<double> () :> _
         | :? ShapeDecimal -> mkNumericalPickler<decimal> () :> _
+        | :? ShapeChar -> new CharPickler() :> _
         | :? ShapeString -> new StringPickler() :> _
         | :? ShapeGuid -> new GuidPickler() :> _
         | :? ShapeByteArray -> new ByteArrayPickler() :> _

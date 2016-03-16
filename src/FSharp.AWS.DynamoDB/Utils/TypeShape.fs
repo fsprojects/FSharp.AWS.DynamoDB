@@ -78,6 +78,10 @@ and ShapeDouble() =
     inherit TypeShape<double> ()
     override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitDouble()
 
+and ShapeChar() =
+    inherit TypeShape<char> ()
+    override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitChar()
+
 and ShapeString() =
     inherit TypeShape<string> ()
     override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitString()
@@ -101,6 +105,14 @@ and ShapeDateTime() =
 and ShapeDateTimeOffset() = 
     inherit TypeShape<DateTimeOffset> ()
     override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitDateTimeOffset()
+
+and ShapeFSharpUnit() =
+    inherit TypeShape<unit> ()
+    override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitFSharpUnit()
+
+and ShapeDBNull() =
+    inherit TypeShape<DBNull> ()
+    override __.Accept (v : ITypeShapeVisitor<'R>) = v.VisitDBNull()
 
 /////////////// Enumerations
 
@@ -592,12 +604,15 @@ and ITypeShapeVisitor<'R> =
     abstract VisitUNativeInt : unit -> 'R
     abstract VisitSingle : unit -> 'R
     abstract VisitDouble : unit -> 'R
+    abstract VisitChar : unit -> 'R
     abstract VisitString : unit -> 'R
     abstract VisitGuid : unit -> 'R
     abstract VisitTimeSpan : unit -> 'R
     abstract VisitDateTime : unit -> 'R
     abstract VisitDateTimeOffset : unit -> 'R
     abstract VisitDecimal : unit -> 'R
+    abstract VisitFSharpUnit : unit -> 'R
+    abstract VisitDBNull : unit -> 'R
 
     abstract VisitUnknown<'T> : unit -> 'R
 
@@ -700,6 +715,7 @@ module private TypeShapeImpl =
             elif t = typeof<double> then ShapeDouble() :> _
             elif t = typeof<nativeint> then ShapeNativeInt() :> _
             elif t = typeof<unativeint> then ShapeUNativeInt() :> _
+            elif t = typeof<char> then ShapeChar() :> _
             else activate1 typedefof<ShapeUnknown<_>> t
 
         elif t = typeof<decimal> then ShapeDecimal() :> _
@@ -708,6 +724,8 @@ module private TypeShapeImpl =
         elif t = typeof<TimeSpan> then ShapeTimeSpan() :> _
         elif t = typeof<DateTime> then ShapeDateTime() :> _
         elif t = typeof<DateTimeOffset> then ShapeDateTimeOffset() :> _
+        elif t = typeof<unit> then ShapeFSharpUnit() :> _
+        elif t = typeof<DBNull> then ShapeDBNull() :> _
 
         elif t.IsEnum then 
             activate2 (getGenericEnumType()) t <| Enum.GetUnderlyingType t
@@ -819,6 +837,7 @@ module TypeShapeModule =
     let (|ShapeUInt64|_|) t = test<ShapeUInt64> t
     let (|ShapeSingle|_|) t = test<ShapeSingle> t
     let (|ShapeDouble|_|) t = test<ShapeDouble> t
+    let (|ShapeChar|_|) t = test<ShapeChar> t
 
     let (|ShapeString|_|) t = test<ShapeString> t
     let (|ShapeGuid|_|) t = test<ShapeGuid> t
@@ -826,6 +845,8 @@ module TypeShapeModule =
     let (|ShapeTimeSpan|_|) t = test<ShapeTimeSpan> t
     let (|ShapeDateTime|_|) t = test<ShapeDateTime> t
     let (|ShapeDateTimeOffset|_|) t = test<ShapeDateTimeOffset> t
+    let (|ShapeDBNull|_|) t = test<ShapeDBNull> t
+    let (|ShapeFSharpUnit|_|) t = test<ShapeFSharpUnit> t
     
     let (|ShapeNullable|_|) t = test<IShapeNullable> t
     let (|ShapeEnum|_|) t = test<IShapeEnum> t

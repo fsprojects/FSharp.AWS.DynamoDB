@@ -55,6 +55,22 @@ type StringPickler() =
     override __.Parse s = s
     override __.UnParse s = s
 
+type CharPickler() =
+    inherit StringRepresentablePickler<char> ()
+    override __.PickleType = PickleType.String
+    override __.PicklerType = PicklerType.Value
+    override __.IsComparable = true
+
+    override __.DefaultValue = char 0
+    override __.Pickle c = AttributeValue(string c) |> Some
+
+    override __.UnPickle a =
+        if not <| isNull a.S then System.Char.Parse(a.S)
+        else invalidCast a
+
+    override __.Parse s = System.Char.Parse s
+    override __.UnParse c = string c
+
 let inline mkNumericalPickler< ^N when ^N : (static member Parse : string * IFormatProvider -> ^N)
                                    and ^N : (member ToString : IFormatProvider -> string)> () =
     let inline parseNum s = 
