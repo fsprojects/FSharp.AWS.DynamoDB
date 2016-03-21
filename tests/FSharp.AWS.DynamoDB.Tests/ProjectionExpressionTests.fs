@@ -156,6 +156,14 @@ type ``Projection Expression Tests`` () =
         let result = table.GetItemProjected(key, <@ fun r -> r.Bool, r.ByteSet, r.Bytes, r.Serialized2 @>)
         result |> should equal (item.Bool, item.ByteSet, item.Bytes, item.Serialized2)
 
+
+    [<Fact>]
+    let ``Nested value projection`` () =
+        let item = { mkItem() with Map = Map.ofList ["Nested", 42L ] }
+        let key = table.PutItem(item)
+        let result = table.GetItemProjected(key, <@ fun r -> r.Nested.NV, r.NestedList.[0].NV, r.Map.["Nested"] @>)
+        result |> should equal (item.Nested.NV, item.NestedList.[0].NV, item.Map.["Nested"])
+
     [<Fact>]
     let ``Projected query`` () =
         let hKey = guid()

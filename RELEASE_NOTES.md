@@ -1,3 +1,8 @@
+### 0.2.0-beta
+* Implement projection expressions.
+* Minor API improvements.
+* Minor bugfixes.
+
 ### 0.1.1-beta
 * Expose ProvisionedThroughput type to local namespace.
 
