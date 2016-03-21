@@ -8,6 +8,7 @@ open Microsoft.FSharp.Quotations
 open FSharp.AWS.DynamoDB.ExprCommon
 open FSharp.AWS.DynamoDB.ConditionalExpr
 open FSharp.AWS.DynamoDB.UpdateExpr
+open FSharp.AWS.DynamoDB.ProjectionExpr
 
 //
 //  Public converted condition expression wrapper implementations
@@ -115,3 +116,23 @@ and UpdateExpression =
             invalidArg "expr" msg
 
         new UpdateExpression<'TRecord>({ UpdateOps = uops ; NParams = 0 })
+
+/// Represents a projection expression for a given record type
+[<Sealed; AutoSerializable(false)>]
+type ProjectionExpression<'TRecord, 'TProjection> internal (expr : ProjectionExpr) =
+    let data = lazy(expr.GetDebugData())
+    /// Internal projection expression object
+    member internal __.ProjectionExpr = expr
+    /// DynamoDB projection expression string
+    member __.Expression = let expr,_ = data.Value in expr
+    /// DynamoDB attribute names
+    member __.Names = let _,names = data.Value in names
+
+    member internal __.UnPickle(ro : RestObject) = expr.Ctor ro :?> 'TProjection
+
+    override __.Equals(other : obj) =
+        match other with
+        | :? ProjectionExpression<'TRecord, 'TProjection> as other -> expr.Attributes = other.ProjectionExpr.Attributes
+        | _ -> false
+
+    override __.GetHashCode() = hash expr.Attributes

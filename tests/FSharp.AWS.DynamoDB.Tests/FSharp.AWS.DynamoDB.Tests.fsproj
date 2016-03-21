@@ -63,6 +63,7 @@
     <Compile Include="SimpleTableOperationTests.fs" />
     <Compile Include="ConditionalExpressionTests.fs" />
     <Compile Include="UpdateExpressionTests.fs" />
+    <Compile Include="ProjectionExpressionTests.fs" />
     <None Include="paket.references" />
     <Content Include="App.config" />
     <Content Include="packages.config" />

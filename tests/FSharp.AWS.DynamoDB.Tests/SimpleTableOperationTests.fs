@@ -45,8 +45,6 @@ module SimpleTableTypes =
             Values : Set<int>
         }
 
-    type FooRecord = { A : int ; B : string ; C : DateTimeOffset * string }
-
 type ``Simple Table Operation Tests`` () =
 
     let client = getDynamoDBAccount()
@@ -85,6 +83,8 @@ type ``Simple Table Operation Tests`` () =
         let value = mkItem()
         let key = table.PutItem value
         table.ContainsKey key |> should equal true
+        let _ = table.DeleteItem key
+        table.ContainsKey key |> should equal false
 
     [<Fact>]
     let ``Batch Put Operation`` () =
@@ -101,13 +101,6 @@ type ``Simple Table Operation Tests`` () =
         let item' = table.DeleteItem key
         item' |> should equal item
         table.ContainsKey key |> should equal false
-
-    [<Fact>]
-    let ``Generated picklers should be singletons`` () =
-        Array.Parallel.init 100 (fun _ -> Pickler.resolve<FooRecord>())
-        |> Seq.distinct
-        |> Seq.length
-        |> should equal 1
 
 
     interface IDisposable with

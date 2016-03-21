@@ -12,6 +12,7 @@ open Amazon.DynamoDBv2.Model
 open FSharp.AWS.DynamoDB.KeySchema
 open FSharp.AWS.DynamoDB.ConditionalExpr
 open FSharp.AWS.DynamoDB.UpdateExpr
+open FSharp.AWS.DynamoDB.ProjectionExpr
 
 /// DynamoDB table template defined by provided F# record type
 [<Sealed; AutoSerializable(false)>]
@@ -221,6 +222,15 @@ type RecordTemplate<'TRecord> internal () =
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'I4 -> 'I5 -> 'TRecord -> UpdateOp>) : 'I1 -> 'I2 -> 'I3 -> 'I4 -> 'I5 -> UpdateExpression<'TRecord> =
         let uops = UpdateOperations.ExtractOpExpr pickler.RecordInfo expr
         fun i1 i2 i3 i4 i5 -> new UpdateExpression<'TRecord>(uops.Apply(i1, i2, i3, i4, i5))
+
+    /// <summary>
+    ///     Precomputes a DynamoDB projection expression using
+    ///     supplied quoted projection expression.
+    /// </summary>
+    /// <param name="expr">Quoted record projection expression.</param>
+    member __.PrecomputeProjectionExpr(expr : Expr<'TRecord -> 'TProjection>) : ProjectionExpression<'TRecord, 'TProjection> =
+        let pexpr = ProjectionExpr.Extract pickler.RecordInfo expr
+        new ProjectionExpression<'TRecord, 'TProjection>(pexpr)
 
     /// Convert table key to attribute values
     member internal __.ToAttributeValues(key : TableKey) = 

@@ -298,3 +298,13 @@ module ``Record Generation Tests`` =
     let ``Record containing costant HashKey attribute with HashKey attribute should fail`` () =
         fun () -> RecordTemplate.Define<``Record containing costant HashKey attribute with HashKey attribute``>()
         |> shouldFailwith<_, ArgumentException>
+
+
+    type FooRecord = { A : int ; B : string ; C : DateTimeOffset * string }
+
+    [<Fact>]
+    let ``Generated picklers should be singletons`` () =
+        Array.Parallel.init 100 (fun _ -> Pickler.resolve<FooRecord>())
+        |> Seq.distinct
+        |> Seq.length
+        |> should equal 1

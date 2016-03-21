@@ -59,10 +59,12 @@
     <Compile Include="Expression\ExprCommon.fs" />
     <Compile Include="Expression\ConditionalExpr.fs" />
     <Compile Include="Expression\UpdateExpr.fs" />
+    <Compile Include="Expression\ProjectionExpr.fs" />
     <Compile Include="Expression\ExpressionContainers.fs" />
     <Compile Include="KeySchema.fs" />
     <Compile Include="RecordTemplate.fs" />
     <Compile Include="TableContext.fs" />
+    <Compile Include="Extensions.fs" />
     <None Include="Script.fsx" />
     <None Include="paket.references" />
     <None Include="paket.template" />

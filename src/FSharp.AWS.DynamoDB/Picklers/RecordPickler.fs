@@ -27,7 +27,7 @@ type AttributeType =
 type RecordInfo =
     {
         Type : Type
-        ConstructorInfo : ConstructorInfo
+        Constructor : obj[] -> obj
         Properties : RecordPropertyInfo []
     }
 with
@@ -96,10 +96,10 @@ with
 and IRecordPickler =
     abstract RecordInfo : RecordInfo
 
-type RecordPickler<'T>(ctorInfo : ConstructorInfo, properties : RecordPropertyInfo []) =
+type RecordPickler<'T>(ctor : obj[] -> obj, properties : RecordPropertyInfo []) =
     inherit Pickler<'T> ()
 
-    let recordInfo = { Type = typeof<'T> ; Properties = properties ; ConstructorInfo = ctorInfo }
+    let recordInfo = { Type = typeof<'T> ; Properties = properties ; Constructor = ctor }
 
     member __.RecordInfo = recordInfo
     member __.OfRecord (value : 'T) : RestObject =
@@ -122,7 +122,7 @@ type RecordPickler<'T>(ctorInfo : ConstructorInfo, properties : RecordPropertyIn
             elif prop.NoDefaultValue then notFound()
             else values.[i] <- prop.Pickler.DefaultValueUntyped
 
-        ctorInfo.Invoke values :?> 'T
+        ctor values :?> 'T
 
     interface IRecordPickler with
         member __.RecordInfo = recordInfo
@@ -143,12 +143,11 @@ type RecordPickler<'T>(ctorInfo : ConstructorInfo, properties : RecordPropertyIn
 
 
 let mkTuplePickler<'T> (resolver : IPicklerResolver) =
-    let ctor, rest = FSharpValue.PreComputeTupleConstructorInfo(typeof<'T>)
-    if Option.isSome rest then invalidArg (string typeof<'T>) "Tuples of arity > 7 not supported"
+    let ctor = FSharpValue.PreComputeTupleConstructor typeof<'T>
     let properties = typeof<'T>.GetProperties() |> Array.mapi (RecordPropertyInfo.FromPropertyInfo resolver)
     new RecordPickler<'T>(ctor, properties)
 
 let mkFSharpRecordPickler<'T> (resolver : IPicklerResolver) =
-    let ctor = FSharpValue.PreComputeRecordConstructorInfo(typeof<'T>, true)
+    let ctor = FSharpValue.PreComputeRecordConstructor(typeof<'T>, true)
     let properties = FSharpType.GetRecordFields(typeof<'T>, true) |> Array.mapi (RecordPropertyInfo.FromPropertyInfo resolver)
     new RecordPickler<'T>(ctor, properties)
