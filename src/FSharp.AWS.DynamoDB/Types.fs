@@ -10,20 +10,29 @@ open Amazon.DynamoDBv2.Model
 /// Declares that the carrying property contains the HashKey
 /// for the record instance. Property type must be of type
 /// string, number or byte array.
-[<Sealed; AttributeUsage(AttributeTargets.Property)>]
+[<Sealed; AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
 type HashKeyAttribute() =
     inherit Attribute()
 
 /// Declares that the carrying property contains the RangeKey
 /// for the record instance. Property type must be of type
 /// string, number or byte array.
-[<Sealed; AttributeUsage(AttributeTargets.Property)>]
+[<Sealed; AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
 type RangeKeyAttribute() =
     inherit Attribute()
 
+/// Declares the carrying property as local secondary index
+/// in the table schema.
+[<Sealed; AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
+type LocalSecondaryIndexAttribute private (indexName : string option) =
+    inherit Attribute()
+    new () = new LocalSecondaryIndexAttribute(None)
+    new (indexName : string)  = new LocalSecondaryIndexAttribute(Some indexName)
+    member internal __.IndexName = indexName
+
 /// Declares a constant HashKey attribute for the given record.
 /// Records carrying this attribute should specify a RangeKey field.
-[<Sealed; AttributeUsage(AttributeTargets.Class)>]
+[<Sealed; AttributeUsage(AttributeTargets.Class, AllowMultiple = false)>]
 type ConstantHashKeyAttribute(name : string, hashkey : obj) =
     inherit Attribute()
     do 
@@ -36,7 +45,7 @@ type ConstantHashKeyAttribute(name : string, hashkey : obj) =
 
 /// Declares a constant RangeKey attribute for the given record.
 /// Records carrying this attribute should specify a HashKey field.
-[<Sealed; AttributeUsage(AttributeTargets.Class)>]
+[<Sealed; AttributeUsage(AttributeTargets.Class, AllowMultiple = false)>]
 type ConstantRangeKeyAttribute(name : string, rangeKey : obj) =
     inherit Attribute()
     do 
@@ -49,12 +58,12 @@ type ConstantRangeKeyAttribute(name : string, rangeKey : obj) =
 
 /// Declares that annotated property should be represented
 /// as string in the DynamoDB table. Only applies to
-[<Sealed; AttributeUsage(AttributeTargets.Property)>]
+[<Sealed; AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
 type StringRepresentationAttribute() =
     inherit Attribute()
 
 /// Specify a custom DynamoDB attribute name for the given record field.
-[<AttributeUsage(AttributeTargets.Property)>]
+[<AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
 type CustomNameAttribute(name : string) =
     inherit System.Attribute()
     do if name = null then raise <| ArgumentNullException("'Name' parameter cannot be null.")
@@ -75,7 +84,7 @@ type internal IPropertySerializer =
 
 /// Declares that the given property should be serialized using the given
 /// Serialization/Deserialization methods before being uploaded to the table.
-[<AbstractClass; AttributeUsage(AttributeTargets.Property)>]
+[<AbstractClass; AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
 type PropertySerializerAttribute<'PickleType>() =
     inherit Attribute()
     /// Serializes a value to the given pickle type
@@ -89,7 +98,7 @@ type PropertySerializerAttribute<'PickleType>() =
         member __.Deserialize pickle = __.Deserialize (pickle :?> 'PickleType)
 
 /// Declares that the given property should be serialized using BinaryFormatter
-[<AttributeUsage(AttributeTargets.Property)>]
+[<AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
 type BinaryFormatterAttribute() =
     inherit PropertySerializerAttribute<byte[]>()
 
@@ -111,11 +120,24 @@ type KeyAttributeSchema =
         KeyType : ScalarAttributeType 
     }
 
+type PrimaryKeySchema =
+    {
+        HashKey : KeyAttributeSchema
+        RangeKey : KeyAttributeSchema option
+    }
+
+/// Metadata on local secondary index
+type LocalSecondaryIndexSchema =
+    {
+        IndexName : string
+        LocalSecondaryRangeKey : KeyAttributeSchema
+    }
+
 /// Metadata on a table schema
 type TableKeySchema = 
     { 
-        HashKey : KeyAttributeSchema
-        RangeKey : KeyAttributeSchema option 
+        PrimaryKey : PrimaryKeySchema
+        LocalSecondaryIndices : LocalSecondaryIndexSchema list
     }
 
 /// Table entry key identifier

@@ -21,6 +21,11 @@ open FSharp.AWS.DynamoDB.ExprCommon
 //
 //  see http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html
 
+type QueryType =
+    | PrimaryKey
+    | LocalSecondary of indexName:string
+    | Other
+
 /// DynamoDB query expression
 type QueryExpr =
     | False // True & False not part of the DynamoDB spec;
@@ -62,7 +67,7 @@ type ConditionalExpression =
         /// Query conditional expression
         QueryExpr : QueryExpr
         /// Specifies whether this query is compatible with DynamoDB key conditions
-        IsKeyConditionCompatible : bool
+        QueryType : QueryType
         /// If query expression is parametric, specifies an array of picklers for input parameters
         NParams : int
     }
@@ -102,9 +107,13 @@ type QueryExpr with
 // 4. HashKey comparison must be equality comparison only.
 // 5. Must not contain OR and NOT clauses.
 // 6. Must not contain nested operands.
-let isKeyConditionCompatible (qExpr : QueryExpr) =
-    let hashKeyRefs  = ref 0
-    let rangeKeyRefs = ref 0
+let extractQueryType (qExpr : QueryExpr) =
+    let hashKeyRef = ref None
+    let rangeKeyRef = ref None
+    let trySet r v =
+        if Option.isSome !r then false
+        else r := Some v ; true
+        
     let rec aux qExpr =
         match qExpr with
         | False | True
@@ -116,26 +125,34 @@ let isKeyConditionCompatible (qExpr : QueryExpr) =
         | Or _ -> false
         | And(l,r) -> aux l && aux r
         | BeginsWith(attr,_) when attr.IsHashKey -> false
-        | BeginsWith(attr,_) when attr.IsRangeKey -> incr rangeKeyRefs ; true
+        | BeginsWith(attr,_) when attr.IsRangeKey || attr.IsLocalSecondaryIndex -> 
+            trySet rangeKeyRef attr
+
         | BeginsWith _ -> false
-        | Between (Attribute attr, (Value _ | Param _), (Value _ | Param _)) ->
-            if attr.IsRangeKey then incr rangeKeyRefs ; true
-            else false
+        | Between (Attribute attr, (Value _ | Param _), (Value _ | Param _)) 
+            when attr.IsRangeKey || attr.IsLocalSecondaryIndex -> trySet rangeKeyRef attr
 
         | Between _ -> false
         | Compare(cmp, Attribute attr, (Value _ | Param _))
         | Compare(cmp, (Value _ | Param _), Attribute attr) ->
-            if attr.IsHashKey then
-                incr hashKeyRefs ; cmp = EQ
-            elif attr.IsRangeKey then
-                incr rangeKeyRefs ; true
+            if attr.IsHashKey && cmp = EQ then
+                trySet hashKeyRef attr
+            elif attr.IsRangeKey || attr.IsLocalSecondaryIndex then
+                trySet rangeKeyRef attr
             else
                 false
 
         | Compare _ -> false
 
-    if aux qExpr then !hashKeyRefs = 1 && !rangeKeyRefs <= 1
-    else false
+    if aux qExpr && Option.isSome !hashKeyRef then
+        match !rangeKeyRef with
+        | None -> PrimaryKey
+        | Some rk ->
+            match rk.Type with
+            | LocalSecondaryIndex name -> LocalSecondary name
+            | _ -> PrimaryKey
+
+    else Other
 
 let ensureNotTautological query =
     match query with
@@ -337,7 +354,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
         {
             QueryExpr = queryExpr
             NParams = nParams
-            IsKeyConditionCompatible = isKeyConditionCompatible queryExpr
+            QueryType = extractQueryType queryExpr
         }
 
     | _ -> invalidQuery()
@@ -435,7 +452,7 @@ let writeConditionExpression (writer : AttributeWriter) (cond : ConditionalExpre
 let mkItemExistsCondition (schema : TableKeySchema) =
     {
         QueryExpr = AttributeId.FromKeySchema schema |> Attribute_Exists
-        IsKeyConditionCompatible = true
+        QueryType = PrimaryKey
         NParams = 0
     }
 
@@ -443,7 +460,7 @@ let mkItemExistsCondition (schema : TableKeySchema) =
 let mkItemNotExistsCondition (schema : TableKeySchema) =
     {
         QueryExpr = AttributeId.FromKeySchema schema |> Attribute_Not_Exists
-        IsKeyConditionCompatible = true
+        QueryType = PrimaryKey
         NParams = 0
     }
 
@@ -452,7 +469,7 @@ let mkHashKeyEqualityCondition (schema : TableKeySchema) (av : AttributeValue) =
     let hkAttrId = AttributeId.FromKeySchema schema 
     {
         QueryExpr = Compare(EQ, Attribute hkAttrId, Value (wrap av))
-        IsKeyConditionCompatible = true
+        QueryType = PrimaryKey
         NParams = 0    
     }
 
@@ -462,6 +479,12 @@ type ConditionalExpression with
 
     member cond.Write (writer : AttributeWriter) =
         writeConditionExpression writer cond
+
+    member cond.IsKeyConditionCompatible =
+        match cond.QueryType with Other -> false | _ -> true
+
+    member cond.IndexName =
+        match cond.QueryType with LocalSecondary name -> Some name | _ -> None
 
     member cond.GetDebugData() =
         let aw = new AttributeWriter()

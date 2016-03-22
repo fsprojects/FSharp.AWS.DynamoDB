@@ -25,6 +25,7 @@ type Test =
         HashKey : Guid
         [<RangeKey>]
         RangeKey : string
+        [<LocalSecondaryIndex>]
         Value : float
         List : int64 list
         Unions : Union list
@@ -44,6 +45,14 @@ let value = { HashKey = Guid.NewGuid() ; List = [] ; RangeKey = "2" ; Value = 3.
 
 let key = table.PutItem value
 table.GetItem key
+
+table.KeySchema
+
+table.Query <@ fun r -> r.HashKey = value.HashKey && r.Value >= value.Value @>
+
+let query = table.Template.PrecomputeConditionalExpr <@ fun r -> r.HashKey = value.HashKey && r.Value >= value.Value @>
+
+query.IndexName
 
 #time "on"
 

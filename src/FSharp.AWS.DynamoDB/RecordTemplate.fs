@@ -20,20 +20,20 @@ type RecordTemplate<'TRecord> internal () =
     let pickler = Pickler.resolve<'TRecord>() :?> RecordPickler<'TRecord>
     let keyStructure = KeyStructure.FromRecordInfo pickler.RecordInfo
     let keySchema = TableKeySchema.OfKeyStructure keyStructure
-    let hkeyCond = KeyStructure.TryExtractHashKeyCondition<'TRecord> keyStructure keySchema
+    let hkeyCond = PrimaryKeyStructure.TryExtractHashKeyCondition<'TRecord> keyStructure.PrimaryKey keySchema
 
     /// Key schema used by the current record
     member __.KeySchema = keySchema
 
     /// Gets the constant HashKey if specified by the record implementation
     member __.ConstantHashKey : obj option =
-        match keyStructure with
+        match keyStructure.PrimaryKey with
         | DefaultHashKey(_, value, _, _) -> Some value
         | _ -> None
 
     /// Gets the constant RangeKey if specified by the record implementation
     member __.ConstantRangeKey : obj option =
-        match keyStructure with
+        match keyStructure.PrimaryKey with
         | DefaultRangeKey(_, value, _, _) -> Some value
         | _ -> None
 
@@ -49,7 +49,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="item">Input record instance.</param>
     member __.ExtractKey(record : 'TRecord) = 
-        KeyStructure.ExtractKey(keyStructure, record)
+        PrimaryKeyStructure.ExtractKey(keyStructure.PrimaryKey, record)
 
     /// Generates a conditional which verifies whether an item already exists.
     member __.ItemExists =
@@ -234,13 +234,13 @@ type RecordTemplate<'TRecord> internal () =
 
     /// Convert table key to attribute values
     member internal __.ToAttributeValues(key : TableKey) = 
-        KeyStructure.ExtractKey(keyStructure, key)
+        PrimaryKeyStructure.ExtractKey(keyStructure.PrimaryKey, key)
 
     /// Converts a record instance to attribute values
     member internal __.ToAttributeValues(record : 'TRecord) =
         let kv = pickler.OfRecord record
 
-        match keyStructure with
+        match keyStructure.PrimaryKey with
         | DefaultHashKey(name, hashKey, pickler, _) ->
             let av = hashKey |> pickler.PickleUntyped |> Option.get
             kv.Add(name, av)

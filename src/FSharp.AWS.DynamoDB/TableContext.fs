@@ -91,6 +91,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let downloaded = new ResizeArray<_>()
         let rec aux last = async {
             let request = new QueryRequest(tableName)
+            keyCondition.IndexName |> Option.iter (fun lsi -> request.IndexName <- lsi)
             let writer = new AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
             request.KeyConditionExpression <- keyCondition.Write writer
 
@@ -363,7 +364,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.ContainsKeyAsync(key : TableKey) : Async<bool> = async {
         let kav = template.ToAttributeValues(key)
         let request = new GetItemRequest(tableName, kav)
-        request.ExpressionAttributeNames.Add("#HKEY", template.KeySchema.HashKey.AttributeName)
+        request.ExpressionAttributeNames.Add("#HKEY", template.KeySchema.PrimaryKey.HashKey.AttributeName)
         request.ProjectionExpression <- "#HKEY"
         let! ct = Async.CancellationToken
         let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect

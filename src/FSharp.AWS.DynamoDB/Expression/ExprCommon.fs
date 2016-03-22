@@ -61,6 +61,7 @@ with
 
     member id.IsHashKey = id.Type = AttributeType.HashKey
     member id.IsRangeKey = id.Type = AttributeType.RangeKey
+    member id.IsLocalSecondaryIndex = match id.Type with LocalSecondaryIndex _ -> true | _ -> false
     member id.Append nf = { id with NestedAttributes = id.NestedAttributes @ [nf] }
     member id.Apply (inputs : obj[]) =
         let applyField nf =
@@ -78,7 +79,7 @@ with
 
     static member FromKeySchema(schema : TableKeySchema) =
         let rootId = "#HKEY"
-        let hkName = schema.HashKey.AttributeName
+        let hkName = schema.PrimaryKey.HashKey.AttributeName
         { RootId = rootId ; RootName = hkName ; NestedAttributes = [] ; Type = AttributeType.HashKey }
 
 type RecordPropertyInfo with

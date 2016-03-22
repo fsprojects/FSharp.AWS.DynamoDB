@@ -11,14 +11,14 @@ open Amazon.DynamoDBv2.Model
 //
 
 /// Describes the key structure of a given F# record
-type KeyStructure =
+type PrimaryKeyStructure =
     | HashKeyOnly of hashKeyProperty:RecordPropertyInfo
     | Combined of hashKeyProperty:RecordPropertyInfo * rangeKeyProperty:RecordPropertyInfo
     | DefaultHashKey of hkName:string * hkValue:obj * hkPickler:Pickler * rangeKeyProperty:RecordPropertyInfo
     | DefaultRangeKey of rkName:string * rkValue:obj * rkPickler:Pickler * hashKeyProperty:RecordPropertyInfo
 with
     /// Extracts given TableKey to AttributeValue form
-    static member ExtractKey(keyStructure : KeyStructure, key : TableKey) =
+    static member ExtractKey(keyStructure : PrimaryKeyStructure, key : TableKey) =
         let dict = new Dictionary<string, AttributeValue> ()
         let extractKey name (pickler : Pickler) (value:obj) =
             if isNull value then invalidArg name "Key value was not specified."
@@ -63,7 +63,7 @@ with
         | _ -> None
 
     /// Extracts key from given record instance
-    static member ExtractKey(keyStructure : KeyStructure, record : 'Record) =
+    static member ExtractKey(keyStructure : PrimaryKeyStructure, record : 'Record) =
         let inline getValue (rp : RecordPropertyInfo) = rp.PropertyInfo.GetValue(record)
         match keyStructure with
         | HashKeyOnly hkp -> let hashKey = getValue hkp in TableKey.Hash hashKey
@@ -78,99 +78,156 @@ with
             let rangeKey = getValue rkp
             TableKey.Combined(hashKey, rangeKey)
 
+
+type KeyAttributeSchema with
+    static member Create (name : string, pickler : Pickler) =
+        if pickler.PicklerType <> PicklerType.Value then
+            invalidArg name <| "DynamoDB Key attributes do not support serialization attributes."
+
+        let keyType =
+            match pickler.PickleType with
+            | PickleType.String -> ScalarAttributeType.S
+            | PickleType.Number -> ScalarAttributeType.N
+            | PickleType.Bytes -> ScalarAttributeType.B
+            | _ -> invalidArg name <| sprintf "Unsupported type '%O' for DynamoDB Key attribute." pickler.Type
+
+        { AttributeName = name ; KeyType = keyType }
+
+    static member Create(prop : RecordPropertyInfo) = KeyAttributeSchema.Create(prop.Name, prop.Pickler)
+
+type KeyStructure =
+    {
+        PrimaryKey : PrimaryKeyStructure
+        LocalSecondaryIndices : LocalSecondaryIndexSchema []
+    }
+with
     /// Builds key structure from supplied F# record info
     static member FromRecordInfo (recordInfo : RecordInfo) =
         let hkcaOpt = recordInfo.Type.TryGetAttribute<ConstantHashKeyAttribute> ()
         let rkcaOpt = recordInfo.Type.TryGetAttribute<ConstantRangeKeyAttribute> ()
 
         if Option.isSome hkcaOpt && Option.isSome rkcaOpt then
-            invalidArg (string recordInfo.Type) "Cannot specify both HashKey and RangeKey constant attributes in record definition."
+            "Cannot specify both HashKey and RangeKey constant attributes in record definition."
+            |> invalidArg (string recordInfo.Type)
 
-        match recordInfo.Properties |> Array.filter (fun p -> p.IsHashKey) with
-        | [|_|] when Option.isSome hkcaOpt ->
-            invalidArg (string recordInfo.Type) "Cannot attach HashKey attribute to records containing HashKeyConstant attribute."
+        let localSecondaryIndices =
+            recordInfo.Properties |> Array.choose(fun rp ->
+                match rp.AttributeType with
+                | LocalSecondaryIndex name ->
+                    Some { IndexName = name ; LocalSecondaryRangeKey = KeyAttributeSchema.Create rp }
+                | _ -> None)
 
-        | [|hashKeyP|] when Option.isSome rkcaOpt ->
-            let rkca = Option.get rkcaOpt
-            if not <| isValidFieldName rkca.Name then
-                invalidArg rkca.Name "invalid rangekey name; must be alphanumeric and should not begin with a number."
+        let primaryKey =
+            match recordInfo.Properties |> Array.filter (fun p -> p.IsHashKey) with
+            | [|_|] when Option.isSome hkcaOpt ->
+                invalidArg (string recordInfo.Type) "Cannot attach HashKey attribute to records containing HashKeyConstant attribute."
 
-            if recordInfo.Properties |> Array.exists(fun p -> p.Name = rkca.Name) then
-                invalidArg (string recordInfo.Type) "Default RangeKey attribute contains conflicting name."
+            | [|hashKeyP|] when Option.isSome rkcaOpt ->
+                let rkca = Option.get rkcaOpt
+                if not <| isValidFieldName rkca.Name then
+                    invalidArg rkca.Name "invalid rangekey name; must be alphanumeric and should not begin with a number."
 
-            if recordInfo.Properties |> Array.exists(fun p -> p.IsRangeKey) then
-                invalidArg (string recordInfo.Type) "Cannot attach RangeKey attribute to records containing RangeKeyConstant attribute."
+                if recordInfo.Properties |> Array.exists(fun p -> p.Name = rkca.Name) then
+                    invalidArg (string recordInfo.Type) "Default RangeKey attribute contains conflicting name."
 
-            let pickler = Pickler.resolveUntyped rkca.HashKeyType
-            DefaultRangeKey(rkca.Name, rkca.RangeKey, pickler, hashKeyP)
+                if recordInfo.Properties |> Array.exists(fun p -> p.IsRangeKey) then
+                    invalidArg (string recordInfo.Type) "Cannot attach RangeKey attribute to records containing RangeKeyConstant attribute."
 
-        | [|hashKeyP|] ->
-            match recordInfo.Properties |> Array.filter (fun p -> p.IsRangeKey) with
-            | [||] -> HashKeyOnly hashKeyP
-            | [|rangeKeyP|] -> Combined(hashKeyP, rangeKeyP)
-            | _ -> invalidArg (string recordInfo.Type) "Found more than one record fields carrying the RangeKey attribute."
+                let pickler = Pickler.resolveUntyped rkca.HashKeyType
+                DefaultRangeKey(rkca.Name, rkca.RangeKey, pickler, hashKeyP)
 
-        | [||] when Option.isSome hkcaOpt ->
-            match recordInfo.Properties |> Array.filter (fun p -> p.IsRangeKey) with
-            | [||] -> invalidArg (string recordInfo.Type) "Records carrying the RangeKeyConstant attribute must specify a RangeKey property."
-            | [|rangeKeyP|] -> 
-                let hkca = Option.get hkcaOpt
-                if not <| isValidFieldName hkca.Name then
-                    invalidArg hkca.Name "invalid hashkey name; must be alphanumeric and should not begin with a number."
+            | [|hashKeyP|] ->
+                match recordInfo.Properties |> Array.filter (fun p -> p.IsRangeKey) with
+                | [||] -> HashKeyOnly hashKeyP
+                | [|rangeKeyP|] -> Combined(hashKeyP, rangeKeyP)
+                | _ -> invalidArg (string recordInfo.Type) "Found more than one record fields carrying the RangeKey attribute."
 
-                if recordInfo.Properties |> Array.exists(fun p -> p.Name = hkca.Name) then
-                    invalidArg (string recordInfo.Type) "Default HashKey attribute contains conflicting name."
+            | [||] when Option.isSome hkcaOpt ->
+                match recordInfo.Properties |> Array.filter (fun p -> p.IsRangeKey) with
+                | [||] -> invalidArg (string recordInfo.Type) "Records carrying the RangeKeyConstant attribute must specify a RangeKey property."
+                | [|rangeKeyP|] -> 
+                    let hkca = Option.get hkcaOpt
+                    if not <| isValidFieldName hkca.Name then
+                        invalidArg hkca.Name "invalid hashkey name; must be alphanumeric and should not begin with a number."
 
-                let pickler = Pickler.resolveUntyped hkca.HashKeyType
-                DefaultHashKey(hkca.Name, hkca.HashKey, pickler, rangeKeyP)
+                    if recordInfo.Properties |> Array.exists(fun p -> p.Name = hkca.Name) then
+                        invalidArg (string recordInfo.Type) "Default HashKey attribute contains conflicting name."
 
-            | _ -> invalidArg (string recordInfo.Type) "Found more than one record fields carrying the RangeKey attribute."
+                    let pickler = Pickler.resolveUntyped hkca.HashKeyType
+                    DefaultHashKey(hkca.Name, hkca.HashKey, pickler, rangeKeyP)
 
-        | [||] -> invalidArg (string recordInfo.Type) "Found no record fields carrying the HashKey attribute."
-        | _ -> invalidArg (string recordInfo.Type) "Found more than one record fields carrying the HashKey attribute."
+                | _ -> invalidArg (string recordInfo.Type) "Found more than one record fields carrying the RangeKey attribute."
 
+            | [||] -> invalidArg (string recordInfo.Type) "Found no record fields carrying the HashKey attribute."
+            | _ -> invalidArg (string recordInfo.Type) "Found more than one record fields carrying the HashKey attribute."
+
+        { PrimaryKey = primaryKey ; LocalSecondaryIndices = localSecondaryIndices }
+
+        
+type PrimaryKeySchema with
+    static member OfKeyStructure(ks : PrimaryKeyStructure) : PrimaryKeySchema =
+        let inline mkKeySchema (name : string) (pickler : Pickler) = KeyAttributeSchema.Create(name, pickler)
+        let inline mkPropSchema (rp : RecordPropertyInfo) = KeyAttributeSchema.Create(rp)
+        let inline mkTableKeySchema h r = { HashKey = h ; RangeKey = r }
+
+        match ks with
+        | HashKeyOnly rp -> mkTableKeySchema (mkPropSchema rp) None
+        | Combined(hk, rk) -> mkTableKeySchema (mkPropSchema hk) (Some (mkPropSchema rk))
+        | DefaultHashKey(name,_,pickler,rk) -> mkTableKeySchema (mkKeySchema name pickler) (Some (mkPropSchema rk))
+        | DefaultRangeKey(name,_,pickler,hk) -> mkTableKeySchema (mkPropSchema hk) (Some (mkKeySchema name pickler))
 
 type TableKeySchema with
     /// Extracts table key schema record from key structure type
-    static member OfKeyStructure(ks : KeyStructure) =
-        let mkTableKeySchema h r = { HashKey = h ; RangeKey = r }
-        let mkKeySchema (name : string) (pickler : Pickler) =
-            if pickler.PicklerType <> PicklerType.Value then
-                invalidArg name <| "DynamoDB Key attributes do not support serialization attributes."
-
-            let keyType =
-                match pickler.PickleType with
-                | PickleType.String -> ScalarAttributeType.S
-                | PickleType.Number -> ScalarAttributeType.N
-                | PickleType.Bytes -> ScalarAttributeType.B
-                | _ -> invalidArg name <| sprintf "Unsupported type '%O' for DynamoDB Key attribute." pickler.Type
-
-            { AttributeName = name ; KeyType = keyType }
-
-        match ks with
-        | HashKeyOnly rp -> mkTableKeySchema (mkKeySchema rp.Name rp.Pickler) None
-        | Combined(hk, rk) -> mkTableKeySchema (mkKeySchema hk.Name hk.Pickler) (Some (mkKeySchema rk.Name rk.Pickler))
-        | DefaultHashKey(name,_,pickler,rk) -> mkTableKeySchema (mkKeySchema name pickler) (Some (mkKeySchema rk.Name rk.Pickler))
-        | DefaultRangeKey(name,_,pickler,hk) -> mkTableKeySchema (mkKeySchema hk.Name hk.Pickler) (Some (mkKeySchema name pickler))
+    static member OfKeyStructure(ks : KeyStructure) : TableKeySchema =
+        { PrimaryKey = PrimaryKeySchema.OfKeyStructure ks.PrimaryKey ;
+            LocalSecondaryIndices = Array.toList ks.LocalSecondaryIndices } 
 
     /// Extract key schema from DynamoDB table description object
-    static member OfTableDescription (td : TableDescription) =
+    static member OfTableDescription (td : TableDescription) : TableKeySchema =
         let mkKeySchema (kse : KeySchemaElement) =
             let ad = td.AttributeDefinitions |> Seq.find (fun ad -> ad.AttributeName = kse.AttributeName)
             { AttributeName = kse.AttributeName ; KeyType = ad.AttributeType }
-            
-        let hk = td.KeySchema |> Seq.find (fun ks -> ks.KeyType = KeyType.HASH) |> mkKeySchema
-        let rk = td.KeySchema |> Seq.tryPick (fun ks -> if ks.KeyType = KeyType.RANGE then Some(mkKeySchema ks) else None)
-        { HashKey = hk ; RangeKey = rk }
+
+        let mkLocalSecondaryIndex (lsid : LocalSecondaryIndexDescription) : LocalSecondaryIndexSchema =
+            if lsid.Projection.ProjectionType <> ProjectionType.ALL then
+                sprintf "Table '%s' contains local secondary index of unsupported projection type '%O'"
+                    td.TableName lsid.Projection.ProjectionType
+                |> invalidOp
+
+            {
+                IndexName = lsid.IndexName 
+                LocalSecondaryRangeKey = lsid.KeySchema |> Seq.find (fun ks -> ks.KeyType = KeyType.RANGE) |> mkKeySchema
+            }
+           
+        let primaryKey =
+            { 
+                HashKey = td.KeySchema |> Seq.find (fun ks -> ks.KeyType = KeyType.HASH) |> mkKeySchema
+                RangeKey = td.KeySchema |> Seq.tryPick (fun ks -> if ks.KeyType = KeyType.RANGE then Some(mkKeySchema ks) else None)
+            }
+
+        {
+            PrimaryKey = primaryKey
+            LocalSecondaryIndices = td.LocalSecondaryIndexes |> Seq.map mkLocalSecondaryIndex |> Seq.toList
+        }
 
     /// Create a CreateTableRequest using supplied key schema
     member schema.CreateCreateTableRequest (tableName : string, provisionedThroughput : ProvisionedThroughput) =
+
         let ctr = new CreateTableRequest(TableName = tableName)
         let addKey kt (ks : KeyAttributeSchema) =
             ctr.KeySchema.Add <| new KeySchemaElement(ks.AttributeName, kt)
             ctr.AttributeDefinitions.Add <| new AttributeDefinition(ks.AttributeName, ks.KeyType)
 
-        addKey KeyType.HASH schema.HashKey
-        schema.RangeKey |> Option.iter (fun rk -> addKey KeyType.RANGE rk)
+        addKey KeyType.HASH schema.PrimaryKey.HashKey
+        schema.PrimaryKey.RangeKey |> Option.iter (fun rk -> addKey KeyType.RANGE rk)
         ctr.ProvisionedThroughput <- provisionedThroughput
+        for lsi in schema.LocalSecondaryIndices do
+            let l = new LocalSecondaryIndex()
+            l.IndexName <- lsi.IndexName
+            l.KeySchema.Add <| new KeySchemaElement(schema.PrimaryKey.HashKey.AttributeName, KeyType.HASH)
+            l.KeySchema.Add <| new KeySchemaElement(lsi.LocalSecondaryRangeKey.AttributeName, KeyType.RANGE)
+            l.Projection <- new Projection(ProjectionType = ProjectionType.ALL)
+            ctr.LocalSecondaryIndexes.Add l
+            ctr.AttributeDefinitions.Add <| 
+                new AttributeDefinition(lsi.LocalSecondaryRangeKey.AttributeName, lsi.LocalSecondaryRangeKey.KeyType)
         ctr

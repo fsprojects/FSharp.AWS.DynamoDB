@@ -19,9 +19,10 @@ open FSharp.AWS.DynamoDB
 //
 
 type AttributeType =
-    | HashKey  = 1
-    | RangeKey = 2
-    | Other    = 3
+    | Other
+    | HashKey
+    | RangeKey
+    | LocalSecondaryIndex of indexName:string
 
 [<CustomEquality; NoComparison>]
 type RecordInfo =
@@ -55,6 +56,8 @@ with
     member rp.IsNestedRecord = Option.isSome rp.NestedRecord
     member rp.IsHashKey = rp.AttributeType = AttributeType.HashKey
     member rp.IsRangeKey = rp.AttributeType = AttributeType.RangeKey
+    member rp.IsLocalSecondaryIndex = match rp.AttributeType with AttributeType.LocalSecondaryIndex _ -> true | _ -> false
+
 
     override r.Equals o =
         match o with :? RecordPropertyInfo as r' -> r.PropertyInfo = r'.PropertyInfo | _ -> false
@@ -78,16 +81,26 @@ with
         if not <| isValidFieldName name then
             invalidArg name "invalid record field name; must be alphanumeric and should not begin with a number."
 
+        let attrType = ref AttributeType.Other
+        let set x = 
+            if !attrType <> AttributeType.Other then
+                sprintf "Property '%s' contains conflicting attributes %O, %O." prop.Name x !attrType
+                |> invalidArg (prop.DeclaringType.ToString())
+
+            attrType := x
+
+        if containsAttribute<HashKeyAttribute> attributes then set HashKey
+        if containsAttribute<RangeKeyAttribute> attributes then set RangeKey
+        match tryGetAttribute<LocalSecondaryIndexAttribute> attributes with
+        | Some attr -> defaultArg attr.IndexName (name + "Index") |> LocalSecondaryIndex |> set
+        | None -> ()
+
         {
             Name = name
             Index = attrId
             PropertyInfo = prop
             Pickler = pickler
-            AttributeType =
-                if containsAttribute<HashKeyAttribute> attributes then AttributeType.HashKey
-                elif containsAttribute<RangeKeyAttribute> attributes then AttributeType.RangeKey
-                else AttributeType.Other
-
+            AttributeType = !attrType
             NoDefaultValue = containsAttribute<NoDefaultValueAttribute> attributes
             NestedRecord = match box pickler with :? IRecordPickler as rc -> Some rc.RecordInfo | _ -> None
             Attributes = attributes
