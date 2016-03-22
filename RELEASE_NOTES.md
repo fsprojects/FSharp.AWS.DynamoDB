@@ -1,3 +1,6 @@
+### 0.2.1-beta
+* Projection expressions bugfixes and improvements.
+
 ### 0.2.0-beta
 * Implement projection expressions.
 * Minor API improvements.
