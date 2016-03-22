@@ -14,6 +14,7 @@ summary
     A library that provides an idiomatic F# API for AWS DynamoDB.
 licenseurl https://github.com/eiriktsarpalis/FSharp.AWS.DynamoDB/blob/master/License.md
 projecturl https://github.com/eiriktsarpalis/FSharp.AWS.DynamoDB
+iconurl https://avatars0.githubusercontent.com/u/6001315
 tags
     fsharp, f#, aws, amazon, dynamodb
 dependencies
