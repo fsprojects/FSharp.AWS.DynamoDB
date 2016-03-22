@@ -119,7 +119,14 @@ type ``Projection Expression Tests`` () =
             |> shouldFailwith<_, ArgumentException>
 
         testProj <@ fun r -> r.Bool, r.Bool @>
-        testProj <@ fun r -> r.NestedList.[0].NE, r.NestedList.[1].NV @>
+        testProj <@ fun r -> r.NestedList.[0].NE, r.NestedList.[0] @>
+
+    [<Fact>]
+    let ``Null value projection`` () =
+        let item = mkItem()
+        let key = table.PutItem(item)
+        table.GetItemProjected(key, <@ fun r -> () @>)
+        table.GetItemProjected(key, <@ ignore @>)
 
     [<Fact>]
     let ``Single value projection`` () =
@@ -158,11 +165,18 @@ type ``Projection Expression Tests`` () =
 
 
     [<Fact>]
-    let ``Nested value projection`` () =
+    let ``Nested value projection 1`` () =
         let item = { mkItem() with Map = Map.ofList ["Nested", 42L ] }
         let key = table.PutItem(item)
         let result = table.GetItemProjected(key, <@ fun r -> r.Nested.NV, r.NestedList.[0].NV, r.Map.["Nested"] @>)
         result |> should equal (item.Nested.NV, item.NestedList.[0].NV, item.Map.["Nested"])
+
+    [<Fact>]
+    let ``Nested value projection 2`` () =
+        let item = { mkItem() with List = [1L;2L;3L] }
+        let key = table.PutItem(item)
+        let result = table.GetItemProjected(key, <@ fun r -> r.List.[0], r.List.[1] @>)
+        result |> should equal (item.List.[0], item.List.[1])
 
     [<Fact>]
     let ``Projected query`` () =

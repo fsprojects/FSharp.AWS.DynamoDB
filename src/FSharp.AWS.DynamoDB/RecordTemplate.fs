@@ -229,7 +229,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record projection expression.</param>
     member __.PrecomputeProjectionExpr(expr : Expr<'TRecord -> 'TProjection>) : ProjectionExpression<'TRecord, 'TProjection> =
-        let pexpr = ProjectionExpr.Extract pickler.RecordInfo expr
+        let pexpr = ProjectionExpr.Extract pickler.RecordInfo keySchema expr
         new ProjectionExpression<'TRecord, 'TProjection>(pexpr)
 
     /// Convert table key to attribute values

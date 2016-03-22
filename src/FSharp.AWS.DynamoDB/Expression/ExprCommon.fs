@@ -68,7 +68,9 @@ with
             | FParam i -> 
                 match inputs.[i] with 
                 | :? string as f -> FField f 
-                | :? int as i -> FIndex i 
+                | :? int as i -> 
+                    if i < 0 then raise <| ArgumentOutOfRangeException()
+                    else FIndex i 
                 | _ -> raise <| new InvalidCastException()
             | _ -> nf
 
@@ -200,7 +202,9 @@ with
                 match ie with
                 | _ when ie.IsClosed ->
                     match evalRaw ie : obj with
-                    | :? int as i -> mkAttrPath (FIndex i)
+                    | :? int as i -> 
+                        if i < 0 then raise <| ArgumentOutOfRangeException() else
+                        mkAttrPath (FIndex i)
                     | :? string as f -> mkAttrPath (FField f)
                     | _ -> None
                 | PVar i -> mkAttrPath (FParam i)

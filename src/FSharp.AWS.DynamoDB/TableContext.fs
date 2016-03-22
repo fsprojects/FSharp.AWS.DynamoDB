@@ -395,7 +395,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Asynchronously fetches item of given key from table.
     ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must either be a single property or a tuple of properties.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
     /// <param name="projection">Projection expression to be applied to item.</param>
@@ -407,7 +407,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Asynchronously fetches item of given key from table.
     ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must either be a single property or a tuple of properties.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
     /// <param name="projection">Projection expression to be applied to item.</param>
@@ -418,7 +418,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Fetches item of given key from table.
     ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must either be a single property or a tuple of properties.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
     /// <param name="projection">Projection expression to be applied to item.</param>
@@ -429,7 +429,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Fetches item of given key from table.
     ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must either be a single property or a tuple of properties.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
     /// <param name="projection">Projection expression to be applied to item.</param>
@@ -638,7 +638,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Asynchronously queries table with given condition expressions.
     ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must either be a single property or a tuple of properties.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
     /// </summary>
     /// <param name="keyCondition">Key condition expression.</param>
     /// <param name="projection">Projection expression.</param>
@@ -658,7 +658,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Asynchronously queries table with given condition expressions.
     ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must either be a single property or a tuple of properties.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
     /// </summary>
     /// <param name="keyCondition">Key condition expression.</param>
     /// <param name="projection">Projection expression.</param>
@@ -679,7 +679,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Queries table with given condition expressions.
     ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must either be a single property or a tuple of properties.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
     /// </summary>
     /// <param name="keyCondition">Key condition expression.</param>
     /// <param name="projection">Projection expression.</param>
@@ -698,7 +698,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Queries table with given condition expressions.
     ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must either be a single property or a tuple of properties.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
     /// </summary>
     /// <param name="keyCondition">Key condition expression.</param>
     /// <param name="projection">Projection expression.</param>
@@ -761,7 +761,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Asynchronously scans table with given condition expressions.
     ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must either be a single property or a tuple of properties.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
     /// </summary>
     /// <param name="projection">Projection expression.</param>
     /// <param name="filterCondition">Filter condition expression.</param>
@@ -778,7 +778,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Asynchronously scans table with given condition expressions.
     ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must either be a single property or a tuple of properties.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
     /// </summary>
     /// <param name="projection">Projection expression.</param>
     /// <param name="filterCondition">Filter condition expression.</param>
@@ -795,7 +795,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Scans table with given condition expressions.
     ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must either be a single property or a tuple of properties.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
     /// </summary>
     /// <param name="projection">Projection expression.</param>
     /// <param name="filterCondition">Filter condition expression.</param>
@@ -811,7 +811,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Scans table with given condition expressions.
     ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must either be a single property or a tuple of properties.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
     /// </summary>
     /// <param name="projection">Projection expression.</param>
     /// <param name="filterCondition">Filter condition expression.</param>

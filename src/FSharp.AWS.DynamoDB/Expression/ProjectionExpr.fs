@@ -24,6 +24,53 @@ open FSharp.AWS.DynamoDB.ExprCommon
 //
 ///////////////////////////////
 
+type AttributeId with
+    member id.View(ro : RestObject, value : byref<AttributeValue>) : bool =
+        let notFound rest =
+            // only raise if the last component of the document path is missing
+            if List.isEmpty rest then false
+            else
+                sprintf "Document path '%s' not found." id.Name
+                |> KeyNotFoundException
+                |> raise
+
+        let rec aux result rest (av : AttributeValue) =
+            match rest with
+            | [] -> result := av ; true
+            | FField f :: tl ->
+                if av.IsMSet then
+                    let ok, nested = av.M.TryGetValue f
+                    if not ok then notFound tl 
+                    else aux result tl nested
+                else
+                    av.Print()
+                    |> sprintf "Expected map, but was '%s'."
+                    |> InvalidCastException
+                    |> raise
+
+            | FIndex i :: tl ->
+                if av.IsLSet then
+                    if i < 0 || i >= av.L.Count then 
+                        sprintf "Indexed path '%s' out of range." id.Name
+                        |> ArgumentOutOfRangeException
+                        |> raise
+                    else
+                        aux result tl av.L.[i]
+                else
+                    av.Print()
+                    |> sprintf "Expected list, but was '%s'."
+                    |> InvalidCastException
+                    |> raise
+
+            | FParam _ :: _ -> sprintf "internal error; unexpected attribute path '%s'." id.Name |> invalidOp
+
+        let ok, prop = ro.TryGetValue id.RootName
+        if ok then 
+            let cell = ref null
+            if aux cell id.NestedAttributes prop then value <- cell.Value; true
+            else false
+        else notFound id.NestedAttributes
+
 type ProjectionExpr = 
     {
         Attributes : AttributeId []
@@ -32,48 +79,57 @@ type ProjectionExpr =
 
 with
 
-    static member Extract (recordInfo : RecordInfo) (expr : Expr<'TRecord -> 'Tuple>) =
+    static member Extract (recordInfo : RecordInfo) (schema : TableKeySchema) (expr : Expr<'TRecord -> 'Tuple>) =
         let invalidExpr () = invalidArg "expr" "supplied expression is not a valid projection."
         match expr with
         | Lambda(r, body) when r.Type = recordInfo.Type ->
             let (|AttributeGet|_|) expr = QuotedAttribute.TryExtract (fun _ -> None) r recordInfo expr
 
+            let (|Ignore|_|) e =
+                match e with
+                | Value(null, t) when t = typeof<unit> -> Some ()
+                | SpecificCall2 <@ ignore @> _ -> Some ()
+                | _ -> None
+
             match body with
+            | Ignore -> 
+                let attr = AttributeId.FromKeySchema schema
+                { Attributes = [|attr|] ; Ctor = fun _ -> box () }
+
             | AttributeGet qa ->
                 let pickler = qa.Pickler
-                let attrId = qa.RootProperty.Name
                 let attr = qa.Id
-                let ctor (ro : RestObject) = 
-                    let ok, av = ro.TryGetValue attrId
+                let ctor (ro : RestObject) =
+                    let mutable av = null
+                    let ok = attr.View(ro, &av)
                     if ok then pickler.UnPickleUntyped av
                     else pickler.DefaultValueUntyped
 
                 { Attributes = [|attr|] ; Ctor = ctor }
 
             | NewTuple values -> 
-                let qas = 
+                let qAttrs = 
                     values 
                     |> Seq.map (function AttributeGet qa -> qa | _ -> invalidExpr ()) 
                     |> Seq.toArray
 
-                // check for conflicting projection attributes
-                qas 
-                |> Seq.groupBy (fun qa -> qa.RootProperty.AttrId)
-                |> Seq.filter (fun (_,rps) -> Seq.length rps > 1)
-                |> Seq.iter (fun (attr,_) ->
-                    sprintf "Projection expression accessing conflicting property '%s'." attr
-                    |> invalidArg "expr")
+                let attrs = qAttrs |> Array.map (fun qa -> qa.Id)
+                let picklers = qAttrs |> Array.map (fun qa -> qa.Pickler)
 
-                let attrs = qas |> Array.map (fun qa -> qa.Id)
-                let picklers = qas |> Array.map (fun attr -> attr.Pickler)
-                let attrIds = qas |> Array.map (fun attr -> attr.RootProperty.Name)
+                // check for conflicting projection attributes
+                match tryFindConflictingPaths attrs with
+                | Some(p1,p2) ->
+                    let msg = sprintf "found conflicting paths '%s' and '%s' being accessed in projection expression." p1 p2
+                    invalidArg "expr" msg
+                | None -> ()
+
                 let tupleCtor = FSharpValue.PreComputeTupleConstructor typeof<'Tuple>
 
                 let ctor (ro : RestObject) =
-                    let values = Array.zeroCreate<obj> picklers.Length
-                    for i = 0 to picklers.Length - 1 do
-                        let id = attrIds.[i]
-                        let ok, av = ro.TryGetValue (attrIds.[i])
+                    let values = Array.zeroCreate<obj> attrs.Length
+                    for i = 0 to attrs.Length - 1 do
+                        let mutable av = null
+                        let ok = attrs.[i].View(ro, &av)
                         if ok then values.[i] <- picklers.[i].UnPickleUntyped av
                         else values.[i] <- picklers.[i].DefaultValueUntyped
 
