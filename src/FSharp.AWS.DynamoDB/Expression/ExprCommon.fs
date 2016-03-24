@@ -82,15 +82,15 @@ with
         let hkName = schema.PrimaryKey.HashKey.AttributeName
         { RootId = rootId ; RootName = hkName ; NestedAttributes = [] ; Type = AttributeType.HashKey }
 
-type RecordPropertyInfo with
+type PropertyMetadata with
     /// Gets an attribute Id for given record property that
     /// is recognizable by DynamoDB
     member rp.AttrId = sprintf "#ATTR%d" rp.Index
 
 /// Represents a nested field of an F# record type
 type QuotedAttribute =
-    | Root of RecordPropertyInfo
-    | Nested of RecordPropertyInfo * parent:QuotedAttribute
+    | Root of PropertyMetadata
+    | Nested of PropertyMetadata * parent:QuotedAttribute
     | Item of NestedAttribute * pickler:Pickler * parent:QuotedAttribute
     | Optional of pickler:Pickler * parent:QuotedAttribute
 with

@@ -23,7 +23,7 @@ type private UnionCaseData =
     { 
         UCI : UnionCaseInfo
         CaseCtor : MethodInfo
-        Properties : RecordPropertyInfo []
+        Properties : PropertyMetadata []
     }
 
 type UnionPickler<'U>(resolver : IPicklerResolver) =
@@ -34,7 +34,7 @@ type UnionPickler<'U>(resolver : IPicklerResolver) =
     let tagReader = FSharpValue.PreComputeUnionTagReader(typeof<'U>, true)
     let mkUCD uci =
         let ctor = FSharpValue.PreComputeUnionConstructorInfo(uci, true)
-        let props = uci.GetFields() |> Array.mapi (RecordPropertyInfo.FromPropertyInfo resolver)
+        let props = uci.GetFields() |> Array.mapi (PropertyMetadata.FromPropertyInfo resolver)
         { UCI = uci ; CaseCtor = ctor ; Properties = props }
     
     let cases = ucis |> Array.map mkUCD

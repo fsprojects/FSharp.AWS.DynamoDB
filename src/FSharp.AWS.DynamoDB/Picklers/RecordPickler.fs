@@ -18,18 +18,12 @@ open FSharp.AWS.DynamoDB
 //  Pickler implementation for F# record types
 //
 
-type AttributeType =
-    | Other
-    | HashKey
-    | RangeKey
-    | LocalSecondaryIndex of indexName:string
-
 [<CustomEquality; NoComparison>]
 type RecordInfo =
     {
         Type : Type
         Constructor : obj[] -> obj
-        Properties : RecordPropertyInfo []
+        Properties : PropertyMetadata []
     }
 with
     override r.Equals o =
@@ -37,79 +31,10 @@ with
 
     override r.GetHashCode() = hash r.Type
 
-and [<CustomEquality; NoComparison>] 
-  RecordPropertyInfo =
-    {
-        Name : string
-        Index : int
-        PropertyInfo : PropertyInfo
-        Pickler : Pickler
-        NoDefaultValue : bool
-        AttributeType : AttributeType
-        NestedRecord : RecordInfo option
-        Attributes : Attribute[]
-    }
-with
-    member rp.TryGetAttribute<'Attribute when 'Attribute :> Attribute> () = tryGetAttribute<'Attribute> rp.Attributes
-    member rp.GetAttributes<'Attribute when 'Attribute :> Attribute> () = getAttributes<'Attribute> rp.Attributes
-    member rp.ContainsAttribute<'Attribute when 'Attribute :> Attribute> () = containsAttribute<'Attribute> rp.Attributes
-    member rp.IsNestedRecord = Option.isSome rp.NestedRecord
-    member rp.IsHashKey = rp.AttributeType = AttributeType.HashKey
-    member rp.IsRangeKey = rp.AttributeType = AttributeType.RangeKey
-    member rp.IsLocalSecondaryIndex = match rp.AttributeType with AttributeType.LocalSecondaryIndex _ -> true | _ -> false
-
-
-    override r.Equals o =
-        match o with :? RecordPropertyInfo as r' -> r.PropertyInfo = r'.PropertyInfo | _ -> false
-
-    override r.GetHashCode() = hash r.PropertyInfo
-
-    static member FromPropertyInfo (resolver : IPicklerResolver) (attrId : int) (prop : PropertyInfo) =
-        let attributes = prop.GetAttributes()
-        let pickler = 
-            match attributes |> Seq.tryPick (fun a -> match box a with :? IPropertySerializer as ps -> Some ps | _ -> None) with
-            | Some serializer -> mkSerializerAttributePickler resolver serializer prop.PropertyType
-            | None when attributes |> containsAttribute<StringRepresentationAttribute> -> 
-                mkStringRepresentationPickler resolver prop
-            | None -> resolver.Resolve prop.PropertyType
-
-        let name =
-            match attributes |> tryGetAttribute<CustomNameAttribute> with
-            | Some cn -> cn.Name
-            | None -> prop.Name
-
-        if not <| isValidFieldName name then
-            invalidArg name "invalid record field name; must be alphanumeric and should not begin with a number."
-
-        let attrType = ref AttributeType.Other
-        let set x = 
-            if !attrType <> AttributeType.Other then
-                sprintf "Property '%s' contains conflicting attributes %O, %O." prop.Name x !attrType
-                |> invalidArg (prop.DeclaringType.ToString())
-
-            attrType := x
-
-        if containsAttribute<HashKeyAttribute> attributes then set HashKey
-        if containsAttribute<RangeKeyAttribute> attributes then set RangeKey
-        match tryGetAttribute<LocalSecondaryIndexAttribute> attributes with
-        | Some attr -> defaultArg attr.IndexName (name + "Index") |> LocalSecondaryIndex |> set
-        | None -> ()
-
-        {
-            Name = name
-            Index = attrId
-            PropertyInfo = prop
-            Pickler = pickler
-            AttributeType = !attrType
-            NoDefaultValue = containsAttribute<NoDefaultValueAttribute> attributes
-            NestedRecord = match box pickler with :? IRecordPickler as rc -> Some rc.RecordInfo | _ -> None
-            Attributes = attributes
-        }
-
-and IRecordPickler =
+and private IRecordPickler =
     abstract RecordInfo : RecordInfo
 
-type RecordPickler<'T>(ctor : obj[] -> obj, properties : RecordPropertyInfo []) =
+type RecordPickler<'T>(ctor : obj[] -> obj, properties : PropertyMetadata []) =
     inherit Pickler<'T> ()
 
     let recordInfo = { Type = typeof<'T> ; Properties = properties ; Constructor = ctor }
@@ -154,13 +79,19 @@ type RecordPickler<'T>(ctor : obj[] -> obj, properties : RecordPropertyInfo []) 
         else invalidCast a
 
 
+type PropertyMetadata with
+    member rp.NestedRecord =
+        match box rp.Pickler with
+        | :? IRecordPickler as rp -> Some rp.RecordInfo
+        | _ -> None
+
 
 let mkTuplePickler<'T> (resolver : IPicklerResolver) =
     let ctor = FSharpValue.PreComputeTupleConstructor typeof<'T>
-    let properties = typeof<'T>.GetProperties() |> Array.mapi (RecordPropertyInfo.FromPropertyInfo resolver)
+    let properties = typeof<'T>.GetProperties() |> Array.mapi (PropertyMetadata.FromPropertyInfo resolver)
     new RecordPickler<'T>(ctor, properties)
 
 let mkFSharpRecordPickler<'T> (resolver : IPicklerResolver) =
     let ctor = FSharpValue.PreComputeRecordConstructor(typeof<'T>, true)
-    let properties = FSharpType.GetRecordFields(typeof<'T>, true) |> Array.mapi (RecordPropertyInfo.FromPropertyInfo resolver)
+    let properties = FSharpType.GetRecordFields(typeof<'T>, true) |> Array.mapi (PropertyMetadata.FromPropertyInfo resolver)
     new RecordPickler<'T>(ctor, properties)

@@ -21,6 +21,20 @@ type HashKeyAttribute() =
 type RangeKeyAttribute() =
     inherit Attribute()
 
+/// Declares that the carrying property should contain the RangeKey
+/// for a global secondary index.
+[<Sealed; AttributeUsage(AttributeTargets.Property)>]
+type SecondaryHashKeyAttribute(indexName : string) =
+    inherit Attribute()
+    member __.IndexName = indexName
+
+/// Declares that the carrying property should contain the HashKey
+/// for a global secondary index.
+[<Sealed; AttributeUsage(AttributeTargets.Property)>]
+type SecondaryRangeKeyAttribute(indexName : string) =
+    inherit Attribute()
+    member __.IndexName = indexName
+
 /// Declares the carrying property as local secondary index
 /// in the table schema.
 [<Sealed; AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
@@ -120,24 +134,18 @@ type KeyAttributeSchema =
         KeyType : ScalarAttributeType 
     }
 
-type PrimaryKeySchema =
+/// Key schema type
+type KeySchemaType =
+    | PrimaryKey
+    | GlobalSecondaryIndex of indexName:string
+    | LocalSecondaryIndex of indexName:string
+
+/// Schema for a secondary key table
+type TableKeySchema =
     {
         HashKey : KeyAttributeSchema
         RangeKey : KeyAttributeSchema option
-    }
-
-/// Metadata on local secondary index
-type LocalSecondaryIndexSchema =
-    {
-        IndexName : string
-        LocalSecondaryRangeKey : KeyAttributeSchema
-    }
-
-/// Metadata on a table schema
-type TableKeySchema = 
-    { 
-        PrimaryKey : PrimaryKeySchema
-        LocalSecondaryIndices : LocalSecondaryIndexSchema list
+        Type : KeySchemaType
     }
 
 /// Table entry key identifier
