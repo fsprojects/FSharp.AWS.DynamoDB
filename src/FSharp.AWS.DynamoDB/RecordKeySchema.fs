@@ -26,11 +26,14 @@ type PrimaryKeyStructure =
 
 /// Collection of all key schemata in a table, distinguished by index name.
 /// Used for compatibility comparisons
+[<Sealed; StructuredFormatDisplay("{StructuredFormatDisplay}")>]
 type TableKeySchemata (schemata : TableKeySchema[]) =
     let schemata = schemata |> Array.sortBy (fun s -> s.Type)
     member __.Schemata = schemata
     override __.Equals y = match y with :? TableKeySchemata as kss -> schemata = kss.Schemata | _ -> false
     override __.GetHashCode() = hash schemata
+    member private __.StructuredFormatDisplay = sprintf "%A" schemata
+    override __.ToString() = __.StructuredFormatDisplay
 
 /// Infered key schema metadata for an F# record
 type RecordTableInfo =
@@ -320,6 +323,7 @@ type TableKeySchemata with
                 gsi.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
                 tks.RangeKey |> Option.iter (fun rk -> gsi.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
                 gsi.Projection <- new Projection(ProjectionType = ProjectionType.ALL)
+                gsi.ProvisionedThroughput <- provisionedThroughput
                 ctr.GlobalSecondaryIndexes.Add gsi
 
             | LocalSecondaryIndex name ->
