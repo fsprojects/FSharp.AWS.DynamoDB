@@ -1,3 +1,6 @@
+### 0.3.0-beta
+* Implement secondary indices.
+
 ### 0.2.1-beta
 * Projection expressions bugfixes and improvements.
 
