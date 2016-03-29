@@ -116,6 +116,45 @@ type Counter private (table : TableContext<CounterEntry>, key : TableKey) =
         new Counter(table, key)
 ```
 
+## Projection Expressions
+
+Projection expressions can be used to fetch a subset of table attributes, which can be useful when performing large queries:
+
+```fsharp
+table.QueryProjected(<@ fun r -> r.HashKey = "Foo" @>, <@ fun r -> r.HashKey, r.Values.Nested.[0] @>)
+```
+which returns a tuple of specified attributes. Tuples can be of any arity and must contain non-conflicting document paths.
+
+## Secondary Indices
+
+[Global Secondary Indices](http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html) can be defined using the `GlobalSecondaryHashKey` and `GlobalSecondaryRangeKey` attributes:
+```fsharp
+type Record =
+    {
+        [<HashKey>] HashKey : string
+        ...
+        [<GlobalSecondaryHashKey(indexName = "Index")>]GSIH : string
+        [<GlobalSecondaryRangeKey(indexName = "Index")>]GSIR : string
+    }
+```
+Queries can now be performed on the `GSIH` and `GSIR` fields as if they were regular hashkey and rangekey attributes.
+Global secondary indices are created using the same provisioned throughput as the primary keys.
+
+[Local Secondary Indices](http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LSI.html) can be defined using the `LocalSecondaryIndex` attribute:
+```fsharp
+type Record =
+    {
+        [<HashKey>] HashKey : string
+        [<RangeKey>] RangeKey : Guid
+        ...
+        [<LocalSecondaryIndex>] LSI : double
+    }
+```
+Queries can now be performed using LSI as a secondary RangeKey.
+
+NB: Due to API restrictions, secondary indices in the scope of FSharp.AWS.DynamoDB always project *all* table attributes
+which can incur additional costs from Amazon.
+
 ## Notes on value representation
 
 Due to restrictions of DynamoDB, it may sometimes be the case that objects are not persisted faithfully.
