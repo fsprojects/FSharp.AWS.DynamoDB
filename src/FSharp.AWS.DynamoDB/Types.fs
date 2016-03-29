@@ -134,7 +134,7 @@ type KeyAttributeSchema =
         KeyType : ScalarAttributeType 
     }
 
-/// Key schema type
+/// Identifies type of DynamoDB table key schema
 type KeySchemaType =
     | PrimaryKey
     | GlobalSecondaryIndex of indexName:string
@@ -146,7 +146,7 @@ with
         | LocalSecondaryIndex name -> Some name
         | PrimaryKey -> None
 
-/// Schema for a secondary key table
+/// DynamoDB table key schema description
 type TableKeySchema =
     {
         HashKey : KeyAttributeSchema

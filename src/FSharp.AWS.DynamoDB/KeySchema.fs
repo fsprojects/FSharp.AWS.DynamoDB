@@ -13,6 +13,11 @@ open FSharp.AWS.DynamoDB
 //  Table key schema extractor methods for F# records
 //
 
+[<RequireQualifiedAccess>]
+module KeyType =
+    let [<Literal>] Hash = true
+    let [<Literal>] Range = false
+
 /// Describes the key structure of a given F# record
 type PrimaryKeyStructure =
     | HashKeyOnly of hashKeyProperty:PropertyMetadata
@@ -20,8 +25,14 @@ type PrimaryKeyStructure =
     | DefaultHashKey of hkName:string * hkValue:obj * hkPickler:Pickler * rangeKeyProperty:PropertyMetadata
     | DefaultRangeKey of rkName:string * rkValue:obj * rkPickler:Pickler * hashKeyProperty:PropertyMetadata
 
-type TableKeySchemata = { Schemata : Map<KeySchemaType, TableKeySchema> } 
+/// Collection of all key schemata in a table, distinguished by index name.
+/// Used for compatibility comparisons
+type TableKeySchemata = 
+    { 
+        Schemata : Map<KeySchemaType, TableKeySchema> 
+    } 
 
+/// Infered key schema metadata for an F# record
 type RecordTableInfo =
     {
         Type : Type
@@ -126,29 +137,38 @@ type RecordTableInfo with
 
         let extractKeyType (rp : PropertyMetadata) (attr : Attribute) =
             match attr with
-            | :? HashKeyAttribute -> Some(rp, true, PrimaryKey)
-            | :? RangeKeyAttribute -> Some(rp, false, PrimaryKey)
-            | :? SecondaryHashKeyAttribute as hk -> Some(rp, true, GlobalSecondaryIndex hk.IndexName)
-            | :? SecondaryRangeKeyAttribute as rk -> Some(rp, false, GlobalSecondaryIndex rk.IndexName)
+            | :? HashKeyAttribute -> Some(rp, KeyType.Hash, PrimaryKey)
+            | :? RangeKeyAttribute -> Some(rp, KeyType.Range, PrimaryKey)
+            | :? SecondaryHashKeyAttribute as hk -> Some(rp, KeyType.Hash, GlobalSecondaryIndex hk.IndexName)
+            | :? SecondaryRangeKeyAttribute as rk -> Some(rp, KeyType.Range, GlobalSecondaryIndex rk.IndexName)
             | :? LocalSecondaryIndexAttribute as lsi ->
                 let name = defaultArg lsi.IndexName (rp.Name + "Index")
                 Some(rp, false, LocalSecondaryIndex name)
             | _ -> None
 
 
-        let primaryKeyStructure = ref None
-        let extractKeySchema (kst : KeySchemaType) (groupedAttrs : (bool * PropertyMetadata) []) =
+        let primaryKey = ref None
+        let extractKeySchema (kst : KeySchemaType) (attributes : seq<PropertyMetadata * bool * KeySchemaType>) =
+            let groupedAttrs = 
+                attributes
+                |> Seq.distinctBy (fun (rp,_,_) -> rp)
+                |> Seq.map (fun (rp,isHashKey,_) -> isHashKey, rp)
+                |> Seq.sortBy (fun (isHashKey,_) -> not isHashKey)
+                |> Seq.toArray
+
             match kst, groupedAttrs with
             | PrimaryKey, _ ->
                 let setResult (pks : PrimaryKeyStructure) = 
-                    primaryKeyStructure := Some pks ; TableKeySchema.OfKeyStructure pks
+                    let ks = TableKeySchema.OfKeyStructure pks
+                    primaryKey := Some (pks, ks)
+                    ks
 
                 match hkcaOpt, rkcaOpt, groupedAttrs with
                 | Some _, Some _, _ ->
                     "Cannot specify both HashKey and RangeKey constant attributes in record definition."
                     |> invalidArg (string typeof<'T>)
 
-                | Some hkca, None, [|(false, rk)|] -> 
+                | Some hkca, None, [|(KeyType.Range, rk)|] -> 
                     if not <| isValidFieldName hkca.Name then
                         invalidArg hkca.Name "invalid hashkey name; must be alphanumeric and should not begin with a number."
 
@@ -158,7 +178,7 @@ type RecordTableInfo with
                     let pickler = Pickler.resolveUntyped hkca.HashKeyType
                     DefaultHashKey(hkca.Name, hkca.HashKey, pickler, rk) |> setResult
 
-                | None, Some rkca, [|(true, hk)|] ->
+                | None, Some rkca, [|(KeyType.Hash, hk)|] ->
                     if not <| isValidFieldName rkca.Name then
                         invalidArg rkca.Name "invalid rangekey name; must be alphanumeric and should not begin with a number."
 
@@ -168,22 +188,25 @@ type RecordTableInfo with
                     let pickler = Pickler.resolveUntyped rkca.HashKeyType
                     DefaultRangeKey(rkca.Name, rkca.RangeKey, pickler, hk) |> setResult
 
-                | None, None, [|(true, hk)|] -> HashKeyOnly(hk) |> setResult
-                | None, None, [|(true, hk) ; (false, rk)|] -> Combined(hk, rk) |> setResult
+                | None, None, [|(KeyType.Hash, hk)|] -> HashKeyOnly(hk) |> setResult
+                | None, None, [|(KeyType.Hash, hk) ; (KeyType.Range, rk)|] -> Combined(hk, rk) |> setResult
                 | _ -> invalidArg (string typeof<'T>) "Invalid combination of HashKey and RangeKey attributes."
 
-            | LocalSecondaryIndex _, [|(false, rk)|] ->
-                match !primaryKeyStructure with
+            | LocalSecondaryIndex _, [|(KeyType.Range, rk)|] ->
+                match !primaryKey with
                 | None -> "Does not specify a HashKey attribute." |> invalidArg (string typeof<'T>)
-                | Some pks -> { TableKeySchema.OfKeyStructure pks with RangeKey = Some (mkKAS rk) ; Type = kst }
+                | Some(_,ks) when Option.isNone ks.RangeKey -> 
+                    "LocalSecondaryIndex tables must specify a primary RangeKey" |> invalidArg (string typeof<'T>)
+
+                | Some(_,ks) -> { ks with RangeKey = Some (mkKAS rk) ; Type = kst }
 
             | LocalSecondaryIndex _, ([||] | [|_|]) -> invalidOp "internal error when infering LocalSecondaryIndex."
             | LocalSecondaryIndex id, _ ->
                 sprintf "Specified more than one LocalSecondaryIndex properties for '%s'." id
                 |> invalidArg (string typeof<'T>)
 
-            | GlobalSecondaryIndex _, [|(true, hk)|] -> { HashKey = mkKAS hk ; RangeKey = None ; Type = kst }
-            | GlobalSecondaryIndex _, [|(true, hk) ; (false, rk)|] -> 
+            | GlobalSecondaryIndex _, [|(KeyType.Hash, hk)|] -> { HashKey = mkKAS hk ; RangeKey = None ; Type = kst }
+            | GlobalSecondaryIndex _, [|(KeyType.Hash, hk) ; (KeyType.Range, rk)|] -> 
                 { HashKey = mkKAS hk ; RangeKey = Some (mkKAS rk); Type = kst }
             | GlobalSecondaryIndex id, _ ->
                 sprintf "Invalid combination of SecondaryHashKey and SecondaryRangeKey attributes for index name '%s'." id
@@ -194,23 +217,14 @@ type RecordTableInfo with
             |> Seq.collect (fun rp -> rp.Attributes |> Seq.choose (extractKeyType rp))
             |> Seq.distinct
             |> Seq.groupBy (fun (_,_,ty) -> ty)
-            |> Seq.sortBy (fun (ty,_) -> match ty with PrimaryKey -> 0 | _ -> 1)
-            |> Seq.map (fun (ty, attributes) ->
-                let groupedAttrs = 
-                    attributes
-                    |> Seq.distinctBy (fun (rp,_,_) -> rp)
-                    |> Seq.map (fun (rp,isHashKey,_) -> isHashKey, rp)
-                    |> Seq.sortBy (fun (isHashKey,_) -> not isHashKey)
-                    |> Seq.toArray
-                    
-                extractKeySchema ty groupedAttrs)
+            |> Seq.sortBy (fun (ty,_) -> match ty with PrimaryKey -> 0 | _ -> 1) // ensure PrimaryKey is processed first
+            |> Seq.map (fun (ty, attributes) -> extractKeySchema ty attributes)
             |> Seq.toArray
 
-        match !primaryKeyStructure with
+        match !primaryKey with
         | None -> "Does not specify a HashKey attribute." |> invalidArg (string typeof<'T>)
-        | Some pkStruct ->
+        | Some (pkStruct, pkSchema) ->
 
-        let pkSchema = TableKeySchema.OfKeyStructure pkStruct
         let gsis = attributes |> Array.filter (fun ks -> match ks.Type with GlobalSecondaryIndex _ -> true | _ -> false)
         let lsis = attributes |> Array.filter (fun ks -> match ks.Type with LocalSecondaryIndex _ -> true | _ -> false)
 
@@ -218,8 +232,8 @@ type RecordTableInfo with
             attributes
             |> Seq.collect (fun attr -> 
                 seq { 
-                    yield (attr.HashKey, true, attr)
-                    match attr.RangeKey with Some rk -> yield (rk, false, attr) | None -> () })
+                    yield (attr.HashKey, KeyType.Hash, attr)
+                    match attr.RangeKey with Some rk -> yield (rk, KeyType.Range, attr) | None -> () })
             |> Seq.groupBy (fun (a, _, _) -> a.AttributeName)
             |> Seq.map (fun (name, kss) -> 
                 let schemata = kss |> Seq.map (fun (_,isHashKey,ks) -> ks,isHashKey) |> Seq.toArray
