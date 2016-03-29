@@ -39,6 +39,13 @@ module CondExprTypes =
 
             DateTimeOffset : DateTimeOffset
 
+            [<LocalSecondaryIndex>]
+            LSI : int64
+            [<GlobalSecondaryHashKey(indexName = "GSI")>]
+            GSIH : string
+            [<GlobalSecondaryRangeKey(indexName = "GSI")>]
+            GSIR : int
+
             Guid : Guid
 
             Bool : bool
@@ -73,6 +80,8 @@ type ``Conditional Expression Tests`` () =
             Bool = false ; Optional = Some (guid()) ; Ref = ref (guid()) ; Bytes = Guid.NewGuid().ToByteArray()
             Nested = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
             NestedList = [{ NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ]
+            LSI = rand()
+            GSIH = guid() ; GSIR = int (rand())
             Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq 
             Set = seq { for i in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
             List = [for i in 0L .. rand() % 5L -> rand() ]
@@ -459,6 +468,8 @@ type ``Conditional Expression Tests`` () =
         test true <@ fun r -> r.HashKey = "2" @>
         test true <@ fun r -> r.HashKey = "2" && r.RangeKey < 2L @>
         test true <@ fun r -> r.HashKey = "2" && BETWEEN r.RangeKey 1L 2L @>
+        test true <@ fun r -> r.HashKey = "1" && r.LSI > 1L @>
+        test true <@ fun r -> r.GSIH = "1" && r.GSIR < 1 @>
         test false <@ fun r -> r.HashKey < "2" @>
         test false <@ fun r -> r.HashKey >= "2" @>
         test false <@ fun r -> BETWEEN r.HashKey "2" "3" @>
@@ -469,6 +480,8 @@ type ``Conditional Expression Tests`` () =
         test false <@ fun r -> r.HashKey = "2" && not (r.RangeKey = 2L) @>
         test false <@ fun r -> r.HashKey = "2" && r.Bool = true @>
         test false <@ fun r -> r.HashKey = "2" && BETWEEN 1L r.RangeKey 2L @>
+        test false <@ fun r -> r.HashKey = "2" && r.GSIR = 2 @>
+        test false <@ fun r -> r.GSIH = "1" && r.LSI > 1L @>
 
     [<Fact>]
     let ``Detect incompatible comparisons`` () =
@@ -523,6 +536,36 @@ type ``Conditional Expression Tests`` () =
 
         fun () -> template.PrecomputeConditionalExpr <@ fun v r -> r.Value = Option.get v @>
         |> shouldFailwith<_, ArgumentException>
+
+    [<Fact>]
+    let ``Global Secondary index query`` () =
+        let hKey = guid()
+
+        seq { for i in 1 .. 200 -> { mkItem() with GSIH = hKey ; GSIR = i }}
+        |> Seq.splitInto 25
+        |> Seq.map table.BatchPutItemsAsync
+        |> Async.Parallel
+        |> Async.Ignore
+        |> Async.RunSynchronously
+
+        let result = table.Query <@ fun r -> r.GSIH = hKey && BETWEEN r.GSIR 101 200 @>
+        result.Length |> should equal 100
+
+
+    [<Fact>]
+    let ``Local Secondary index query`` () =
+        let hKey = guid()
+
+        seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; LSI = int64 i }}
+        |> Seq.splitInto 25
+        |> Seq.map table.BatchPutItemsAsync
+        |> Async.Parallel
+        |> Async.Ignore
+        |> Async.RunSynchronously
+
+        let result = table.Query <@ fun r -> r.HashKey = hKey && BETWEEN r.LSI 101L 200L @>
+        result.Length |> should equal 100
+        
 
     interface IDisposable with
         member __.Dispose() =
