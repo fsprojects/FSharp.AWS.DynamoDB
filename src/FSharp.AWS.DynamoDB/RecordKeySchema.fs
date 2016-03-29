@@ -13,10 +13,9 @@ open FSharp.AWS.DynamoDB
 //  Table key schema extractor methods for F# records
 //
 
-[<RequireQualifiedAccess>]
-module KeyType =
-    let [<Literal>] Hash = true
-    let [<Literal>] Range = false
+type KeyType =
+    | Hash  = 1
+    | Range = 2
 
 /// Describes the key structure of a given F# record
 type PrimaryKeyStructure =
@@ -27,10 +26,11 @@ type PrimaryKeyStructure =
 
 /// Collection of all key schemata in a table, distinguished by index name.
 /// Used for compatibility comparisons
-type TableKeySchemata = 
-    { 
-        Schemata : Map<KeySchemaType, TableKeySchema> 
-    } 
+type TableKeySchemata (schemata : TableKeySchema[]) =
+    let schemata = schemata |> Array.sortBy (fun s -> s.Type)
+    member __.Schemata = schemata
+    override __.Equals y = match y with :? TableKeySchemata as kss -> schemata = kss.Schemata | _ -> false
+    override __.GetHashCode() = hash schemata
 
 /// Infered key schema metadata for an F# record
 type RecordTableInfo =
@@ -39,12 +39,14 @@ type RecordTableInfo =
         Pickler : Pickler
         Properties : PropertyMetadata []
 
+        /// Primary Key record structure
         PrimaryKeyStructure : PrimaryKeyStructure
+        /// Primary Key schema
         PrimaryKeySchema : TableKeySchema
-        GlobalSecondaryIndices : TableKeySchema []
-        LocalSecondaryIndices : TableKeySchema []
-        PropertySchemata : Map<string, (TableKeySchema * bool) []>
+        /// All key schemata defined in the table
         Schemata : TableKeySchemata
+        /// Key schemata grouped by property name
+        PropertySchemata : Map<string, (TableKeySchema * KeyType) []>
     }
 
 
@@ -143,17 +145,17 @@ type RecordTableInfo with
             | :? SecondaryRangeKeyAttribute as rk -> Some(rp, KeyType.Range, GlobalSecondaryIndex rk.IndexName)
             | :? LocalSecondaryIndexAttribute as lsi ->
                 let name = defaultArg lsi.IndexName (rp.Name + "Index")
-                Some(rp, false, LocalSecondaryIndex name)
+                Some(rp, KeyType.Range, LocalSecondaryIndex name)
             | _ -> None
 
 
         let primaryKey = ref None
-        let extractKeySchema (kst : KeySchemaType) (attributes : seq<PropertyMetadata * bool * KeySchemaType>) =
+        let extractKeySchema (kst : KeySchemaType) (attributes : seq<PropertyMetadata * KeyType * KeySchemaType>) =
             let groupedAttrs = 
                 attributes
                 |> Seq.distinctBy (fun (rp,_,_) -> rp)
-                |> Seq.map (fun (rp,isHashKey,_) -> isHashKey, rp)
-                |> Seq.sortBy (fun (isHashKey,_) -> not isHashKey)
+                |> Seq.map (fun (rp,kt,_) -> kt, rp)
+                |> Seq.sortBy (fun (kt,_) -> kt <> KeyType.Hash)
                 |> Seq.toArray
 
             match kst, groupedAttrs with
@@ -212,7 +214,7 @@ type RecordTableInfo with
                 sprintf "Invalid combination of SecondaryHashKey and SecondaryRangeKey attributes for index name '%s'." id
                 |> invalidArg (string typeof<'T>)
 
-        let attributes =
+        let schemata =
             pickler.Properties
             |> Seq.collect (fun rp -> rp.Attributes |> Seq.choose (extractKeyType rp))
             |> Seq.distinct
@@ -225,11 +227,8 @@ type RecordTableInfo with
         | None -> "Does not specify a HashKey attribute." |> invalidArg (string typeof<'T>)
         | Some (pkStruct, pkSchema) ->
 
-        let gsis = attributes |> Array.filter (fun ks -> match ks.Type with GlobalSecondaryIndex _ -> true | _ -> false)
-        let lsis = attributes |> Array.filter (fun ks -> match ks.Type with LocalSecondaryIndex _ -> true | _ -> false)
-
         let propSchema =
-            attributes
+            schemata
             |> Seq.collect (fun attr -> 
                 seq { 
                     yield (attr.HashKey, KeyType.Hash, attr)
@@ -240,11 +239,6 @@ type RecordTableInfo with
                 name, schemata)
             |> Map.ofSeq
 
-        let allSchemata = 
-            seq { yield pkSchema ; yield! gsis ; yield! lsis }
-            |> Seq.map (fun pks -> pks.Type, pks)
-            |> Map.ofSeq
-
         {
             Type = typeof<'T>
             Pickler = pickler :> Pickler
@@ -252,10 +246,8 @@ type RecordTableInfo with
 
             PrimaryKeyStructure = pkStruct
             PrimaryKeySchema = pkSchema
-            GlobalSecondaryIndices = gsis
-            LocalSecondaryIndices = lsis
             PropertySchemata = propSchema
-            Schemata = { Schemata = allSchemata }
+            Schemata = new TableKeySchemata(schemata)
         }
 
     member info.GetPropertySchemata(propName : string) =
@@ -300,26 +292,20 @@ type TableKeySchemata with
                 Type = LocalSecondaryIndex lsid.IndexName
             }
            
-        let tkss = seq {
-            yield primaryKey
-            yield! td.GlobalSecondaryIndexes |> Seq.map mkGlobalSecondaryIndex
-            yield! td.LocalSecondaryIndexes |> Seq.map mkLocalSecondaryIndex
-        }
-
-        { Schemata = tkss |> Seq.map (fun tks -> tks.Type, tks) |> Map.ofSeq }
+        new TableKeySchemata(
+            [|  yield primaryKey
+                yield! td.GlobalSecondaryIndexes |> Seq.map mkGlobalSecondaryIndex
+                yield! td.LocalSecondaryIndexes |> Seq.map mkLocalSecondaryIndex |])
 
     /// Create a CreateTableRequest using supplied key schema
     member schema.CreateCreateTableRequest (tableName : string, provisionedThroughput : ProvisionedThroughput) =
-        if not <| schema.Schemata.ContainsKey PrimaryKey then
-            invalidArg "schema" "Key schema does not supply a primary key definition."
-
         let ctr = new CreateTableRequest(TableName = tableName)
         let inline mkKSE n t = new KeySchemaElement(n, t)
 
         ctr.ProvisionedThroughput <- provisionedThroughput
 
         let keyAttrs = new Dictionary<string, KeyAttributeSchema>()
-        for KeyValue(_, tks) in schema.Schemata do
+        for tks in schema.Schemata do
             keyAttrs.[tks.HashKey.AttributeName] <- tks.HashKey
             tks.RangeKey |> Option.iter (fun rk -> keyAttrs.[rk.AttributeName] <- rk)
 

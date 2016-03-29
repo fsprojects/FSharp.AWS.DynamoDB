@@ -58,7 +58,7 @@
     <Compile Include="Picklers\RecordPickler.fs" />
     <Compile Include="Picklers\UnionPickler.fs" />
     <Compile Include="Picklers\PicklerResolver.fs" />
-    <Compile Include="KeySchema.fs" />
+    <Compile Include="RecordKeySchema.fs" />
     <Compile Include="Expression\ExprCommon.fs" />
     <Compile Include="Expression\ConditionalExpr.fs" />
     <Compile Include="Expression\UpdateExpr.fs" />

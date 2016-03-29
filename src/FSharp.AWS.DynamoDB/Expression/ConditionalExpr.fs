@@ -144,10 +144,9 @@ let extractKeyCondition (qExpr : QueryExpr) =
         | Some hk ->
 
         match !rangeKeyRef with
-        | None -> hk.KeySchemata |> Array.tryPick (function (ks,true) -> Some ks | _ -> None)
+        | None -> hk.KeySchemata |> Array.tryPick (function (ks,KeyType.Hash) -> Some ks | _ -> None)
         | Some rk ->
-            (hk.KeySchemata, rk.KeySchemata)
-            ||> Seq.joinBy (fun (a,aIsHashKey) (b,bIsHashKey) -> aIsHashKey && not bIsHashKey && a = b)
+            Seq.joinBy (fun (ks,kt) (ks',kt') -> kt = KeyType.Hash && kt' = KeyType.Range && ks = ks') hk.KeySchemata rk.KeySchemata
             |> Seq.tryPick (fun ((a,_),_) -> Some a)
 
     else None

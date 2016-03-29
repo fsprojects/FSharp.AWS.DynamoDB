@@ -30,9 +30,9 @@ type RecordTemplate<'TRecord> internal () =
     /// Key schema used by the current record
     member __.PrimaryKey = recordInfo.PrimaryKeySchema
     /// Global Secondary index key schemata
-    member __.GlobalSecondaryIndices = recordInfo.GlobalSecondaryIndices
+    member __.GlobalSecondaryIndices = recordInfo.Schemata.Schemata |> Array.filter (fun ks -> match ks.Type with GlobalSecondaryIndex _ -> true | _ -> false)
     /// Local Secondary index key schemata
-    member __.LocalSecondaryIndices = recordInfo.LocalSecondaryIndices
+    member __.LocalSecondaryIndices = recordInfo.Schemata.Schemata |> Array.filter (fun ks -> match ks.Type with LocalSecondaryIndex _ -> true | _ -> false)
 
     /// Gets the constant HashKey if specified by the record implementation
     member __.ConstantHashKey : obj option =

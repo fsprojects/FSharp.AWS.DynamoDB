@@ -40,7 +40,7 @@ type AttributeId =
         RootName : string
         RootId : string
         NestedAttributes : NestedAttribute list
-        KeySchemata : (TableKeySchema * bool) [] 
+        KeySchemata : (TableKeySchema * KeyType) [] 
     }
 with
     member id.IsParametric =
@@ -61,11 +61,11 @@ with
 
     member id.IsHashKey =
         List.isEmpty id.NestedAttributes &&
-        id.KeySchemata |> Array.exists(function (_, true) -> true | _ -> false)
+        id.KeySchemata |> Array.exists(function (_, KeyType.Hash) -> true | _ -> false)
 
     member id.IsRangeKey =
         List.isEmpty id.NestedAttributes &&
-        id.KeySchemata |> Array.exists(function (_, false) -> true | _ -> false)
+        id.KeySchemata |> Array.exists(function (_, KeyType.Range) -> true | _ -> false)
 
     member id.Append nf = { id with NestedAttributes = id.NestedAttributes @ [nf] }
     member id.Apply (inputs : obj[]) =
@@ -85,7 +85,7 @@ with
     static member FromKeySchema(schema : TableKeySchema) =
         let rootId = "#HKEY"
         let hkName = schema.HashKey.AttributeName
-        { RootId = rootId ; RootName = hkName ; NestedAttributes = [] ; KeySchemata = [|(schema, true)|] }
+        { RootId = rootId ; RootName = hkName ; NestedAttributes = [] ; KeySchemata = [|(schema, KeyType.Hash)|] }
 
 type PropertyMetadata with
     /// Gets an attribute Id for given record property that
@@ -94,7 +94,7 @@ type PropertyMetadata with
 
 /// Represents a nested field of an F# record type
 type QuotedAttribute =
-    | Root of PropertyMetadata * keyAttrs:(TableKeySchema * bool)[]
+    | Root of PropertyMetadata * keyAttrs:(TableKeySchema * KeyType)[]
     | Nested of PropertyMetadata * parent:QuotedAttribute
     | Item of NestedAttribute * pickler:Pickler * parent:QuotedAttribute
     | Optional of pickler:Pickler * parent:QuotedAttribute
