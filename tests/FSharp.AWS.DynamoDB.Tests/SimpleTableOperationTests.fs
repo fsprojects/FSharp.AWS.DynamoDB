@@ -64,12 +64,12 @@ type ``Simple Table Operation Tests`` () =
     [<Fact>]
     let ``Convert to compatible table`` () =
         let table' = table.WithRecordType<CompatibleRecord> ()
-        table'.KeySchema |> should equal table.KeySchema
+        table'.PrimaryKey |> should equal table.PrimaryKey
 
     [<Fact>]
     let ``Convert to compatible table 2`` () =
         let table' = table.WithRecordType<CompatibleRecord2> ()
-        table'.KeySchema |> should equal table.KeySchema
+        table'.PrimaryKey |> should equal table.PrimaryKey
 
     [<Fact>]
     let ``Simple Put Operation`` () =

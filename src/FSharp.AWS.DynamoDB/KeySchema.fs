@@ -126,8 +126,8 @@ type RecordTableInfo with
 
         let extractKeyType (rp : PropertyMetadata) (attr : Attribute) =
             match attr with
-            | :? RangeKeyAttribute -> Some(rp, true, PrimaryKey)
-            | :? HashKeyAttribute -> Some(rp, false, PrimaryKey)
+            | :? HashKeyAttribute -> Some(rp, true, PrimaryKey)
+            | :? RangeKeyAttribute -> Some(rp, false, PrimaryKey)
             | :? SecondaryHashKeyAttribute as hk -> Some(rp, true, GlobalSecondaryIndex hk.IndexName)
             | :? SecondaryRangeKeyAttribute as rk -> Some(rp, false, GlobalSecondaryIndex rk.IndexName)
             | :? LocalSecondaryIndexAttribute as lsi ->
@@ -203,8 +203,7 @@ type RecordTableInfo with
                     |> Seq.sortBy (fun (isHashKey,_) -> not isHashKey)
                     |> Seq.toArray
                     
-                let schema = extractKeySchema ty groupedAttrs
-                schema, groupedAttrs)
+                extractKeySchema ty groupedAttrs)
             |> Seq.toArray
 
         match !primaryKeyStructure with
@@ -212,26 +211,19 @@ type RecordTableInfo with
         | Some pkStruct ->
 
         let pkSchema = TableKeySchema.OfKeyStructure pkStruct
-
-        let gsis = 
-            attributes 
-            |> Seq.filter (fun (ks,_) -> match ks.Type with GlobalSecondaryIndex _ -> true | _ -> false)
-            |> Seq.map fst
-            |> Seq.toArray
-
-        let lsis =
-            attributes
-            |> Seq.filter (fun (ks,_) -> match ks.Type with LocalSecondaryIndex _ -> true | _ -> false)
-            |> Seq.map fst
-            |> Seq.toArray
+        let gsis = attributes |> Array.filter (fun ks -> match ks.Type with GlobalSecondaryIndex _ -> true | _ -> false)
+        let lsis = attributes |> Array.filter (fun ks -> match ks.Type with LocalSecondaryIndex _ -> true | _ -> false)
 
         let propSchema =
             attributes
-            |> Seq.collect (fun (ks, props) -> props |> Seq.map (fun p -> ks, p))
-            |> Seq.groupBy (fun (_, (_,prop)) -> prop)
-            |> Seq.map (fun (prop, ks) -> 
-                let schemata = ks |> Seq.map (fun (ks,(isHashKey,_)) -> ks, isHashKey) |> Seq.toArray
-                prop.Name, schemata)
+            |> Seq.collect (fun attr -> 
+                seq { 
+                    yield (attr.HashKey, true, attr)
+                    match attr.RangeKey with Some rk -> yield (rk, false, attr) | None -> () })
+            |> Seq.groupBy (fun (a, _, _) -> a.AttributeName)
+            |> Seq.map (fun (name, kss) -> 
+                let schemata = kss |> Seq.map (fun (_,isHashKey,ks) -> ks,isHashKey) |> Seq.toArray
+                name, schemata)
             |> Map.ofSeq
 
         let allSchemata = 
@@ -335,6 +327,8 @@ type TableKeySchemata with
                 lsi.IndexName <- name
                 lsi.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
                 tks.RangeKey |> Option.iter (fun rk -> lsi.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
+                lsi.Projection <- new Projection(ProjectionType = ProjectionType.ALL)
+                ctr.LocalSecondaryIndexes.Add lsi
 
         for attr in keyAttrs.Values do
             let ad = new AttributeDefinition(attr.AttributeName, attr.KeyType)

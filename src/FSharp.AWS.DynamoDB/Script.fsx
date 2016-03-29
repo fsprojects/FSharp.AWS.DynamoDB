@@ -46,7 +46,8 @@ let value = { HashKey = Guid.NewGuid() ; List = [] ; RangeKey = "2" ; Value = 3.
 let key = table.PutItem value
 table.GetItem key
 
-table.KeySchema
+table.PrimaryKey
+table.LocalSecondaryIndices
 
 table.Query <@ fun r -> r.HashKey = value.HashKey && r.Value >= value.Value @>
 

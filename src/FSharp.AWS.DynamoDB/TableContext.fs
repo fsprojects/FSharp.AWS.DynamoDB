@@ -166,8 +166,12 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.Client = client
     /// DynamoDB table name targeted by the context
     member __.TableName = tableName
-    /// Key schema used by the current record/table
-    member __.KeySchema = template.PrimaryKey
+    /// Primary Key schema used by the current record/table
+    member __.PrimaryKey = template.PrimaryKey
+    /// Global Secondary indices specified by the table
+    member __.GlobalSecondaryIndices = template.GlobalSecondaryIndices
+    /// Local Secondary indices specified by the table
+    member __.LocalSecondaryIndices = template.LocalSecondaryIndices
     /// Record-induced table template
     member __.Template = template
 
