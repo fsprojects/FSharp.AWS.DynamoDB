@@ -144,8 +144,8 @@ type RecordTableInfo with
             match attr with
             | :? HashKeyAttribute -> Some(rp, KeyType.Hash, PrimaryKey)
             | :? RangeKeyAttribute -> Some(rp, KeyType.Range, PrimaryKey)
-            | :? SecondaryHashKeyAttribute as hk -> Some(rp, KeyType.Hash, GlobalSecondaryIndex hk.IndexName)
-            | :? SecondaryRangeKeyAttribute as rk -> Some(rp, KeyType.Range, GlobalSecondaryIndex rk.IndexName)
+            | :? GlobalSecondaryHashKeyAttribute as hk -> Some(rp, KeyType.Hash, GlobalSecondaryIndex hk.IndexName)
+            | :? GlobalSecondaryRangeKeyAttribute as rk -> Some(rp, KeyType.Range, GlobalSecondaryIndex rk.IndexName)
             | :? LocalSecondaryIndexAttribute as lsi ->
                 let name = defaultArg lsi.IndexName (rp.Name + "Index")
                 Some(rp, KeyType.Range, LocalSecondaryIndex name)
@@ -158,7 +158,7 @@ type RecordTableInfo with
                 attributes
                 |> Seq.distinctBy (fun (rp,_,_) -> rp)
                 |> Seq.map (fun (rp,kt,_) -> kt, rp)
-                |> Seq.sortBy (fun (kt,_) -> kt <> KeyType.Hash)
+                |> Seq.sortBy (fun (kt,_) -> kt) // NB: should satisfy Hash < Range
                 |> Seq.toArray
 
             match kst, groupedAttrs with
@@ -213,8 +213,11 @@ type RecordTableInfo with
             | GlobalSecondaryIndex _, [|(KeyType.Hash, hk)|] -> { HashKey = mkKAS hk ; RangeKey = None ; Type = kst }
             | GlobalSecondaryIndex _, [|(KeyType.Hash, hk) ; (KeyType.Range, rk)|] -> 
                 { HashKey = mkKAS hk ; RangeKey = Some (mkKAS rk); Type = kst }
+            | GlobalSecondaryIndex id, [|(KeyType.Range, _)|] ->
+                sprintf "Global secondary index '%s' is missing a HashKey declaration." id
+                |> invalidArg (string typeof<'T>)
             | GlobalSecondaryIndex id, _ ->
-                sprintf "Invalid combination of SecondaryHashKey and SecondaryRangeKey attributes for index name '%s'." id
+                sprintf "Invalid combination of GlobalSecondaryHashKey and GlobalSecondaryRangeKey attributes for index name '%s'." id
                 |> invalidArg (string typeof<'T>)
 
         let schemata =

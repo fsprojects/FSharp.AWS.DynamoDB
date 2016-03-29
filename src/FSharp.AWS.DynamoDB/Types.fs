@@ -24,14 +24,14 @@ type RangeKeyAttribute() =
 /// Declares that the carrying property should contain the RangeKey
 /// for a global secondary index.
 [<Sealed; AttributeUsage(AttributeTargets.Property)>]
-type SecondaryHashKeyAttribute(indexName : string) =
+type GlobalSecondaryHashKeyAttribute(indexName : string) =
     inherit Attribute()
     member __.IndexName = indexName
 
 /// Declares that the carrying property should contain the HashKey
 /// for a global secondary index.
 [<Sealed; AttributeUsage(AttributeTargets.Property)>]
-type SecondaryRangeKeyAttribute(indexName : string) =
+type GlobalSecondaryRangeKeyAttribute(indexName : string) =
     inherit Attribute()
     member __.IndexName = indexName
 
