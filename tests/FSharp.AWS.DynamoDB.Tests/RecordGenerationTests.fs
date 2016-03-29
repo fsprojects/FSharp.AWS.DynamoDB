@@ -308,3 +308,101 @@ module ``Record Generation Tests`` =
         |> Seq.distinct
         |> Seq.length
         |> should equal 1
+
+
+    // Section D. Secondary index generation
+
+    type GSI1 =
+        {
+            [<HashKey>]
+            PH : string
+            [<GlobalSecondaryHashKey(indexName = "GSI")>]
+            SH : string
+        }
+
+    type GSI2 =
+        {
+            [<HashKey>]
+            PH : string
+            [<GlobalSecondaryHashKey(indexName = "GSI")>]
+            SH : string
+            [<GlobalSecondaryRangeKey(indexName = "GSI")>]
+            SR : string
+        }
+
+    type GSI3 =
+        {
+            [<HashKey>]
+            PH : string
+            [<GlobalSecondaryRangeKey(indexName = "GSI")>]
+            SR : string
+        }
+
+    type GSI4 =
+        {
+            [<HashKey>]
+            PH : string
+            [<GlobalSecondaryHashKey(indexName = "GSI")>]
+            SH : int * string
+        }
+
+    [<Fact>]
+    let ``GSI Simple HashKey`` () =
+        let template = RecordTemplate.Define<GSI1>()
+        template.GlobalSecondaryIndices.Length |> should equal 1
+        let gsi = template.GlobalSecondaryIndices.[0]
+        gsi.RangeKey |> should equal None
+        match gsi.Type with GlobalSecondaryIndex _ -> true | _ -> false
+        |> should equal true
+
+
+    [<Fact>]
+    let ``GSI Simple Combined key`` () =
+        let template = RecordTemplate.Define<GSI2>()
+        template.GlobalSecondaryIndices.Length |> should equal 1
+        let gsi = template.GlobalSecondaryIndices.[0]
+        gsi.RangeKey |> Option.isSome |> should equal true
+        match gsi.Type with GlobalSecondaryIndex _ -> true | _ -> false
+        |> should equal true
+
+    [<Fact>]
+    let ``GSI should fail if supplying RangeKey only`` () =
+        fun () -> RecordTemplate.Define<GSI3>()
+        |> shouldFailwith<_, ArgumentException>
+
+    [<Fact>]
+    let ``GSI should fail if invalid key type`` () =
+        fun () -> RecordTemplate.Define<GSI4>()
+        |> shouldFailwith<_, ArgumentException>        
+
+
+    type LSI1 =
+        {
+            [<HashKey>]
+            HashKey : string
+            [<RangeKey>]
+            RangeKey : string
+            [<LocalSecondaryIndex>]
+            LSI : string
+        }
+
+    type LSI2 =
+        {
+            [<HashKey>]
+            HashKey : string
+            [<LocalSecondaryIndex>]
+            LSI : string
+        }
+
+    [<Fact>]
+    let ``LSI Simple`` () =
+        let template = RecordTemplate.Define<LSI1>()
+        template.LocalSecondaryIndices.Length |> should equal 1
+        let lsi = template.LocalSecondaryIndices.[0]
+        lsi.HashKey |> should equal template.PrimaryKey.HashKey
+        lsi.RangeKey |> Option.isSome |> should equal true
+
+    [<Fact>]
+    let ``LSI should fail if no RangeKey is specified`` () =
+        fun () -> RecordTemplate.Define<LSI2>()
+        |> shouldFailwith<_, ArgumentException>
