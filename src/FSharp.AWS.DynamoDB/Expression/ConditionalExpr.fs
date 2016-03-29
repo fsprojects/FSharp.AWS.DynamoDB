@@ -21,11 +21,6 @@ open FSharp.AWS.DynamoDB.ExprCommon
 //
 //  see http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html
 
-type QueryType =
-    | PrimaryKey
-    | LocalSecondary of indexName:string
-    | Other
-
 /// DynamoDB query expression
 type QueryExpr =
     | False // True & False not part of the DynamoDB spec;
@@ -67,7 +62,7 @@ type ConditionalExpression =
         /// Query conditional expression
         QueryExpr : QueryExpr
         /// Specifies whether this query is compatible with DynamoDB key conditions
-        QueryType : QueryType
+        KeyCondition : TableKeySchema option
         /// If query expression is parametric, specifies an array of picklers for input parameters
         NParams : int
     }
@@ -107,14 +102,14 @@ type QueryExpr with
 // 4. HashKey comparison must be equality comparison only.
 // 5. Must not contain OR and NOT clauses.
 // 6. Must not contain nested operands.
-let extractQueryType (qExpr : QueryExpr) =
+let extractKeyCondition (qExpr : QueryExpr) =
     let hashKeyRef = ref None
     let rangeKeyRef = ref None
     let trySet r v =
         if Option.isSome !r then false
         else r := Some v ; true
         
-    let rec aux qExpr =
+    let rec isKeyCond qExpr =
         match qExpr with
         | False | True
         | Attribute_Exists _
@@ -123,36 +118,39 @@ let extractQueryType (qExpr : QueryExpr) =
         | In _
         | Not _
         | Or _ -> false
-        | And(l,r) -> aux l && aux r
+        | And(l,r) -> isKeyCond l && isKeyCond r
         | BeginsWith(attr,_) when attr.IsHashKey -> false
-        | BeginsWith(attr,_) when attr.IsRangeKey || attr.IsLocalSecondaryIndex -> 
+        | BeginsWith(attr,_) when attr.IsRangeKey -> 
             trySet rangeKeyRef attr
 
         | BeginsWith _ -> false
-        | Between (Attribute attr, (Value _ | Param _), (Value _ | Param _)) 
-            when attr.IsRangeKey || attr.IsLocalSecondaryIndex -> trySet rangeKeyRef attr
+        | Between (Attribute attr, (Value _ | Param _), (Value _ | Param _)) when attr.IsRangeKey -> trySet rangeKeyRef attr
 
         | Between _ -> false
         | Compare(cmp, Attribute attr, (Value _ | Param _))
         | Compare(cmp, (Value _ | Param _), Attribute attr) ->
             if attr.IsHashKey && cmp = EQ then
                 trySet hashKeyRef attr
-            elif attr.IsRangeKey || attr.IsLocalSecondaryIndex then
+            elif attr.IsRangeKey then
                 trySet rangeKeyRef attr
             else
                 false
 
         | Compare _ -> false
 
-    if aux qExpr && Option.isSome !hashKeyRef then
-        match !rangeKeyRef with
-        | None -> PrimaryKey
-        | Some rk ->
-            match rk.Type with
-            | LocalSecondaryIndex name -> LocalSecondary name
-            | _ -> PrimaryKey
+    if isKeyCond qExpr then
+        match !hashKeyRef with
+        | None -> None
+        | Some hk ->
 
-    else Other
+        match !rangeKeyRef with
+        | None -> hk.KeySchemata |> Array.tryPick (function (ks,true) -> Some ks | _ -> None)
+        | Some rk ->
+            (hk.KeySchemata, rk.KeySchemata)
+            ||> Seq.joinBy (fun (a,aIsHashKey) (b,bIsHashKey) -> aIsHashKey && not bIsHashKey && a = b)
+            |> Seq.tryPick (fun ((a,_),_) -> Some a)
+
+    else None
 
 let ensureNotTautological query =
     match query with
@@ -160,7 +158,7 @@ let ensureNotTautological query =
     | _ -> ()
 
 /// Extracts a query expression from a quoted F# predicate
-let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpression =
+let extractQueryExpr (recordInfo : RecordTableInfo) (expr : Expr) : ConditionalExpression =
     if not expr.IsClosed then invalidArg "expr" "supplied query is not a closed expression."
     let invalidQuery() = invalidArg "expr" <| sprintf "Supplied expression is not a valid conditional."
 
@@ -354,7 +352,7 @@ let extractQueryExpr (recordInfo : RecordInfo) (expr : Expr) : ConditionalExpres
         {
             QueryExpr = queryExpr
             NParams = nParams
-            QueryType = extractQueryType queryExpr
+            KeyCondition = extractKeyCondition queryExpr
         }
 
     | _ -> invalidQuery()
@@ -452,7 +450,7 @@ let writeConditionExpression (writer : AttributeWriter) (cond : ConditionalExpre
 let mkItemExistsCondition (schema : TableKeySchema) =
     {
         QueryExpr = AttributeId.FromKeySchema schema |> Attribute_Exists
-        QueryType = PrimaryKey
+        KeyCondition = Some schema
         NParams = 0
     }
 
@@ -460,7 +458,7 @@ let mkItemExistsCondition (schema : TableKeySchema) =
 let mkItemNotExistsCondition (schema : TableKeySchema) =
     {
         QueryExpr = AttributeId.FromKeySchema schema |> Attribute_Not_Exists
-        QueryType = PrimaryKey
+        KeyCondition = Some schema
         NParams = 0
     }
 
@@ -469,7 +467,7 @@ let mkHashKeyEqualityCondition (schema : TableKeySchema) (av : AttributeValue) =
     let hkAttrId = AttributeId.FromKeySchema schema 
     {
         QueryExpr = Compare(EQ, Attribute hkAttrId, Value (wrap av))
-        QueryType = PrimaryKey
+        KeyCondition = Some schema
         NParams = 0    
     }
 
@@ -480,11 +478,11 @@ type ConditionalExpression with
     member cond.Write (writer : AttributeWriter) =
         writeConditionExpression writer cond
 
-    member cond.IsKeyConditionCompatible =
-        match cond.QueryType with Other -> false | _ -> true
-
+    member cond.IsKeyConditionCompatible = Option.isSome cond.KeyCondition
     member cond.IndexName =
-        match cond.QueryType with LocalSecondary name -> Some name | _ -> None
+        match cond.KeyCondition with
+        | Some kc -> kc.Type.IndexName
+        | None -> None
 
     member cond.GetDebugData() =
         let aw = new AttributeWriter()
@@ -493,5 +491,14 @@ type ConditionalExpression with
         let values = aw.Values |> Seq.map (fun kv -> kv.Key, kv.Value.Print()) |> Seq.toList
         expr, names, values
 
-    static member Extract (recordInfo : RecordInfo) (expr : Expr) =
+    static member Extract (recordInfo : RecordTableInfo) (expr : Expr) =
         extractQueryExpr recordInfo expr
+
+    /// Extract a KeyCondition for records that specify a default hashkey
+    static member TryExtractHashKeyCondition (recordInfo : RecordTableInfo) =
+        match recordInfo.PrimaryKeyStructure with
+        | DefaultHashKey(_, value, pickler, _) ->
+            let av = pickler.PickleUntyped value |> Option.get
+            let cond = mkHashKeyEqualityCondition recordInfo.PrimaryKeySchema av
+            Some cond
+        | _ -> None

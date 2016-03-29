@@ -83,7 +83,7 @@ type IntermediateUpdateExprs =
         /// Parameter variable recognizer
         ParamRecognizer : Expr -> int option
         /// Record conversion info
-        RecordInfo : RecordInfo
+        RecordInfo : RecordTableInfo
         /// Collection of SET assignments that require further conversions
         Assignments : (QuotedAttribute * Expr) [] 
         /// Already extracted update operations
@@ -143,7 +143,7 @@ type UpdateOperation with
         | _ -> Set(attrId, uv)
 
 /// Extracts update expressions from a quoted record update predicate
-let extractRecordExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : IntermediateUpdateExprs =
+let extractRecordExprUpdaters (recordInfo : RecordTableInfo) (expr : Expr) : IntermediateUpdateExprs =
     if not expr.IsClosed then invalidArg "expr" "supplied update expression contains free variables."
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
@@ -163,8 +163,8 @@ let extractRecordExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : Intermed
             let rp = recordInfo.Properties.[i]
             match assignment with
             | PropertyGet(Some (Var y), prop, []) when r = y && rp.PropertyInfo = prop -> None
-            | Var v when bindings.ContainsKey v -> Some(Root rp, bindings.[v])
-            | e -> Some (Root rp, e)
+            | Var v when bindings.ContainsKey v -> Some(Root (rp, recordInfo.GetPropertySchemata rp.Name), bindings.[v])
+            | e -> Some (Root (rp, recordInfo.GetPropertySchemata rp.Name), e)
 
         let assignmentExprs = 
             assignments 
@@ -179,7 +179,7 @@ let extractRecordExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : Intermed
 
 
 /// Extracts update expressions from a quoted update operation predicate
-let extractOpExprUpdaters (recordInfo : RecordInfo) (expr : Expr) : IntermediateUpdateExprs =
+let extractOpExprUpdaters (recordInfo : RecordTableInfo) (expr : Expr) : IntermediateUpdateExprs =
     if not expr.IsClosed then invalidArg "expr" "supplied update expression contains free variables."
     let invalidExpr() = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
@@ -461,10 +461,10 @@ type UpdateOperations with
         let values = aw.Values |> Seq.map (fun kv -> kv.Key, kv.Value.Print()) |> Seq.toList
         expr, names, values
 
-    static member ExtractUpdateExpr (recordInfo : RecordInfo) (expr : Expr) =
+    static member ExtractUpdateExpr (recordInfo : RecordTableInfo) (expr : Expr) =
         let iexprs = extractRecordExprUpdaters recordInfo expr
         extractUpdateOps iexprs
 
-    static member ExtractOpExpr (recordInfo : RecordInfo) (expr : Expr) =
+    static member ExtractOpExpr (recordInfo : RecordTableInfo) (expr : Expr) =
         let iexprs = extractOpExprUpdaters recordInfo expr
         extractUpdateOps iexprs

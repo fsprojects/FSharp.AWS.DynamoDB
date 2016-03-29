@@ -79,7 +79,7 @@ type ProjectionExpr =
 
 with
 
-    static member Extract (recordInfo : RecordInfo) (schema : TableKeySchema) (expr : Expr<'TRecord -> 'Tuple>) =
+    static member Extract (recordInfo : RecordTableInfo) (expr : Expr<'TRecord -> 'Tuple>) =
         let invalidExpr () = invalidArg "expr" "supplied expression is not a valid projection."
         match expr with
         | Lambda(r, body) when r.Type = recordInfo.Type ->
@@ -93,7 +93,7 @@ with
 
             match body with
             | Ignore -> 
-                let attr = AttributeId.FromKeySchema schema
+                let attr = AttributeId.FromKeySchema recordInfo.PrimaryKeySchema
                 { Attributes = [|attr|] ; Ctor = fun _ -> box () }
 
             | AttributeGet qa ->

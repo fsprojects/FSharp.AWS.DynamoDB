@@ -91,7 +91,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let downloaded = new ResizeArray<_>()
         let rec aux last = async {
             let request = new QueryRequest(tableName)
-            keyCondition.IndexName |> Option.iter (fun lsi -> request.IndexName <- lsi)
+            keyCondition.IndexName |> Option.iter (fun name -> request.IndexName <- name)
             let writer = new AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
             request.KeyConditionExpression <- keyCondition.Write writer
 
@@ -167,7 +167,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// DynamoDB table name targeted by the context
     member __.TableName = tableName
     /// Key schema used by the current record/table
-    member __.KeySchema = template.KeySchema
+    member __.KeySchema = template.PrimaryKey
     /// Record-induced table template
     member __.Template = template
 
@@ -176,7 +176,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// must define a compatible key schema.
     member __.WithRecordType<'TRecord2>() : TableContext<'TRecord2> =
         let rd = RecordTemplate.Define<'TRecord2>()
-        if template.KeySchema <> rd.KeySchema then
+        if template.PrimaryKey <> rd.PrimaryKey then
             invalidArg (string typeof<'TRecord2>) "incompatible key schema."
         
         new TableContext<'TRecord2>(client, tableName, rd)
@@ -364,7 +364,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.ContainsKeyAsync(key : TableKey) : Async<bool> = async {
         let kav = template.ToAttributeValues(key)
         let request = new GetItemRequest(tableName, kav)
-        request.ExpressionAttributeNames.Add("#HKEY", template.KeySchema.PrimaryKey.HashKey.AttributeName)
+        request.ExpressionAttributeNames.Add("#HKEY", template.PrimaryKey.HashKey.AttributeName)
         request.ProjectionExpression <- "#HKEY"
         let! ct = Async.CancellationToken
         let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
@@ -875,8 +875,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                     return! verify None retries
                 else
 
-                let existingSchema = TableKeySchema.OfTableDescription td.Table
-                if existingSchema <> template.KeySchema then 
+                let existingSchema = TableKeySchemata.OfTableDescription td.Table
+                if existingSchema <> template.Info.Schemata then 
                     sprintf "table '%s' exists with key schema %A, which is incompatible with record '%O'." 
                         tableName existingSchema typeof<'TRecord>
                     |> invalidOp
@@ -887,7 +887,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                     | None -> new ProvisionedThroughput(10L,10L)
                     | Some pt -> pt
 
-                let ctr = template.KeySchema.CreateCreateTableRequest (tableName, provisionedThroughput)
+                let ctr = template.Info.Schemata.CreateCreateTableRequest (tableName, provisionedThroughput)
                 let! ct = Async.CancellationToken
                 let! response = 
                     client.CreateTableAsync(ctr, ct) 

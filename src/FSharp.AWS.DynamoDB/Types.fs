@@ -139,6 +139,12 @@ type KeySchemaType =
     | PrimaryKey
     | GlobalSecondaryIndex of indexName:string
     | LocalSecondaryIndex of indexName:string
+with
+    member kst.IndexName =
+        match kst with
+        | GlobalSecondaryIndex name
+        | LocalSecondaryIndex name -> Some name
+        | PrimaryKey -> None
 
 /// Schema for a secondary key table
 type TableKeySchema =

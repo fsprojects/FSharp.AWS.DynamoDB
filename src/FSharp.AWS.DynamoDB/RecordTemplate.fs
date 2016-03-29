@@ -5,6 +5,7 @@ open System.Collections.Generic
 open System.Collections.Concurrent
 
 open Microsoft.FSharp.Quotations
+open Microsoft.FSharp.Reflection
 
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
@@ -17,23 +18,31 @@ open FSharp.AWS.DynamoDB.ProjectionExpr
 /// DynamoDB table template defined by provided F# record type
 [<Sealed; AutoSerializable(false)>]
 type RecordTemplate<'TRecord> internal () =
+    do if not <| FSharpType.IsRecord(typeof<'TRecord>, true) then
+        invalidArg (string typeof<'TRecord>) "not a valid F# record type."
+
     let pickler = Pickler.resolve<'TRecord>() :?> RecordPickler<'TRecord>
-    let keyStructure = KeyStructure.FromRecordInfo pickler.RecordInfo
-    let keySchema = TableKeySchema.OfKeyStructure keyStructure
-    let hkeyCond = PrimaryKeyStructure.TryExtractHashKeyCondition<'TRecord> keyStructure.PrimaryKey keySchema
+    let recordInfo = RecordTableInfo.FromRecordPickler pickler
+    let hkeyCond = 
+        ConditionalExpression.TryExtractHashKeyCondition recordInfo
+        |> Option.map (fun cond -> new ConditionExpression<'TRecord>(cond))
 
     /// Key schema used by the current record
-    member __.KeySchema = keySchema
+    member __.PrimaryKey = recordInfo.PrimaryKeySchema
+    /// Global Secondary index key schemata
+    member __.GlobalSecondaryIndices = recordInfo.GlobalSecondaryIndices
+    /// Local Secondary index key schemata
+    member __.LocalSecondaryIndices = recordInfo.LocalSecondaryIndices
 
     /// Gets the constant HashKey if specified by the record implementation
     member __.ConstantHashKey : obj option =
-        match keyStructure.PrimaryKey with
+        match recordInfo.PrimaryKeyStructure with
         | DefaultHashKey(_, value, _, _) -> Some value
         | _ -> None
 
     /// Gets the constant RangeKey if specified by the record implementation
     member __.ConstantRangeKey : obj option =
-        match keyStructure.PrimaryKey with
+        match recordInfo.PrimaryKeyStructure with
         | DefaultRangeKey(_, value, _, _) -> Some value
         | _ -> None
 
@@ -42,23 +51,23 @@ type RecordTemplate<'TRecord> internal () =
     member __.ConstantHashKeyCondition = hkeyCond
 
     /// Record property info
-    member internal __.Info = pickler.RecordInfo
+    member internal __.Info = recordInfo
 
     /// <summary>
     ///     Extracts the key that corresponds to supplied record instance.
     /// </summary>
     /// <param name="item">Input record instance.</param>
     member __.ExtractKey(record : 'TRecord) = 
-        PrimaryKeyStructure.ExtractKey(keyStructure.PrimaryKey, record)
+        PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, record)
 
     /// Generates a conditional which verifies whether an item already exists.
     member __.ItemExists =
-        let cond = mkItemExistsCondition keySchema
+        let cond = mkItemExistsCondition recordInfo.PrimaryKeySchema
         new ConditionExpression<'TRecord>(cond)
 
     /// Generates a conditional which verifies whether an item does not already exist.
     member __.ItemDoesNotExist =
-        let cond = mkItemNotExistsCondition keySchema
+        let cond = mkItemNotExistsCondition recordInfo.PrimaryKeySchema
         new ConditionExpression<'TRecord>(cond)
 
     /// <summary>
@@ -67,7 +76,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record predicate.</param>
     member __.PrecomputeConditionalExpr(expr : Expr<'TRecord -> bool>) : ConditionExpression<'TRecord> =
-        let cexpr = ConditionalExpression.Extract pickler.RecordInfo expr
+        let cexpr = ConditionalExpression.Extract recordInfo expr
         new ConditionExpression<'TRecord>(cexpr)
 
     /// <summary>
@@ -76,7 +85,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record predicate.</param>
     member __.PrecomputeConditionalExpr(expr : Expr<'I1 -> 'TRecord -> bool>) : 'I1 -> ConditionExpression<'TRecord> =
-        let f = ConditionalExpression.Extract pickler.RecordInfo expr
+        let f = ConditionalExpression.Extract recordInfo expr
         fun i1 -> new ConditionExpression<'TRecord>(f.Apply(i1))
 
     /// <summary>
@@ -85,7 +94,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record predicate.</param>
     member __.PrecomputeConditionalExpr(expr : Expr<'I1 -> 'I2 -> 'TRecord -> bool>) : 'I1 -> 'I2 -> ConditionExpression<'TRecord> =
-        let f = ConditionalExpression.Extract pickler.RecordInfo expr
+        let f = ConditionalExpression.Extract recordInfo expr
         fun i1 i2 -> new ConditionExpression<'TRecord>(f.Apply(i1, i2))
 
     /// <summary>
@@ -94,7 +103,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record predicate.</param>
     member __.PrecomputeConditionalExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'TRecord -> bool>) : 'I1 -> 'I2 -> 'I3 -> ConditionExpression<'TRecord> =
-        let f = ConditionalExpression.Extract pickler.RecordInfo expr
+        let f = ConditionalExpression.Extract recordInfo expr
         fun i1 i2 i3 -> new ConditionExpression<'TRecord>(f.Apply(i1, i2, i3))
 
     /// <summary>
@@ -103,7 +112,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record predicate.</param>
     member __.PrecomputeConditionalExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'I4 -> 'TRecord -> bool>) : 'I1 -> 'I2 -> 'I3 -> 'I4 -> ConditionExpression<'TRecord> =
-        let f = ConditionalExpression.Extract pickler.RecordInfo expr
+        let f = ConditionalExpression.Extract recordInfo expr
         fun i1 i2 i3 i4 -> new ConditionExpression<'TRecord>(f.Apply(i1, i2, i3, i4))
 
     /// <summary>
@@ -112,7 +121,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record predicate.</param>
     member __.PrecomputeConditionalExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'I4 -> 'I5 -> 'TRecord -> bool>) : 'I1 -> 'I2 -> 'I3 -> 'I4 -> 'I5 -> ConditionExpression<'TRecord> =
-        let f = ConditionalExpression.Extract pickler.RecordInfo expr
+        let f = ConditionalExpression.Extract recordInfo expr
         fun i1 i2 i3 i4 i5 -> new ConditionExpression<'TRecord>(f.Apply(i1, i2, i3, i4, i5))
 
     /// <summary>
@@ -121,7 +130,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update expression.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'TRecord -> 'TRecord>) : UpdateExpression<'TRecord> =
-        let uops = UpdateOperations.ExtractUpdateExpr pickler.RecordInfo expr
+        let uops = UpdateOperations.ExtractUpdateExpr recordInfo expr
         new UpdateExpression<'TRecord>(uops)
 
     /// <summary>
@@ -130,7 +139,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update expression.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'TRecord -> 'TRecord>) : 'I1 -> UpdateExpression<'TRecord> =
-        let uops = UpdateOperations.ExtractUpdateExpr pickler.RecordInfo expr
+        let uops = UpdateOperations.ExtractUpdateExpr recordInfo expr
         fun i1 -> new UpdateExpression<'TRecord>(uops.Apply(i1))
 
     /// <summary>
@@ -139,7 +148,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update expression.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'TRecord -> 'TRecord>) : 'I1 -> 'I2 -> UpdateExpression<'TRecord> =
-        let uops = UpdateOperations.ExtractUpdateExpr pickler.RecordInfo expr
+        let uops = UpdateOperations.ExtractUpdateExpr recordInfo expr
         fun i1 i2 -> new UpdateExpression<'TRecord>(uops.Apply(i1, i2))
 
     /// <summary>
@@ -148,7 +157,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update expression.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'TRecord -> 'TRecord>) : 'I1 -> 'I2 -> 'I3 -> UpdateExpression<'TRecord> =
-        let uops = UpdateOperations.ExtractUpdateExpr pickler.RecordInfo expr
+        let uops = UpdateOperations.ExtractUpdateExpr recordInfo expr
         fun i1 i2 i3 -> new UpdateExpression<'TRecord>(uops.Apply(i1, i2, i3))
 
     /// <summary>
@@ -157,7 +166,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update expression.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'I4 -> 'TRecord -> 'TRecord>) : 'I1 -> 'I2 -> 'I3 -> 'I4 -> UpdateExpression<'TRecord> =
-        let uops = UpdateOperations.ExtractUpdateExpr pickler.RecordInfo expr
+        let uops = UpdateOperations.ExtractUpdateExpr recordInfo expr
         fun i1 i2 i3 i4 -> new UpdateExpression<'TRecord>(uops.Apply(i1, i2, i3, i4))
 
     /// <summary>
@@ -166,7 +175,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update expression.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'I4 -> 'I5 -> 'TRecord -> 'TRecord>) : 'I1 -> 'I2 -> 'I3 -> 'I4 -> 'I5 -> UpdateExpression<'TRecord> =
-        let uops = UpdateOperations.ExtractUpdateExpr pickler.RecordInfo expr
+        let uops = UpdateOperations.ExtractUpdateExpr recordInfo expr
         fun i1 i2 i3 i4 i5 -> new UpdateExpression<'TRecord>(uops.Apply(i1, i2, i3, i4, i5))
 
     /// <summary>
@@ -175,7 +184,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update operations.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'TRecord -> UpdateOp>) : UpdateExpression<'TRecord> =
-        let uops = UpdateOperations.ExtractOpExpr pickler.RecordInfo expr
+        let uops = UpdateOperations.ExtractOpExpr recordInfo expr
         new UpdateExpression<'TRecord>(uops)
 
     /// <summary>
@@ -184,7 +193,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update operations.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'TRecord -> UpdateOp>) : 'I1 -> UpdateExpression<'TRecord> =
-        let uops = UpdateOperations.ExtractOpExpr pickler.RecordInfo expr
+        let uops = UpdateOperations.ExtractOpExpr recordInfo expr
         fun i1 -> new UpdateExpression<'TRecord>(uops.Apply i1)
 
     /// <summary>
@@ -193,7 +202,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update operations.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'TRecord -> UpdateOp>) : 'I1 -> 'I2 -> UpdateExpression<'TRecord> =
-        let uops = UpdateOperations.ExtractOpExpr pickler.RecordInfo expr
+        let uops = UpdateOperations.ExtractOpExpr recordInfo expr
         fun i1 i2 -> new UpdateExpression<'TRecord>(uops.Apply(i1, i2))
 
     /// <summary>
@@ -202,7 +211,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update operations.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'TRecord -> UpdateOp>) : 'I1 -> 'I2 -> 'I3 -> UpdateExpression<'TRecord> =
-        let uops = UpdateOperations.ExtractOpExpr pickler.RecordInfo expr
+        let uops = UpdateOperations.ExtractOpExpr recordInfo expr
         fun i1 i2 i3 -> new UpdateExpression<'TRecord>(uops.Apply(i1, i2, i3))
 
     /// <summary>
@@ -211,7 +220,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update operations.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'I4 -> 'TRecord -> UpdateOp>) : 'I1 -> 'I2 -> 'I3 -> 'I4 -> UpdateExpression<'TRecord> =
-        let uops = UpdateOperations.ExtractOpExpr pickler.RecordInfo expr
+        let uops = UpdateOperations.ExtractOpExpr recordInfo expr
         fun i1 i2 i3 i4 -> new UpdateExpression<'TRecord>(uops.Apply(i1, i2, i3, i4))
 
     /// <summary>
@@ -220,7 +229,7 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record update operations.</param>
     member __.PrecomputeUpdateExpr(expr : Expr<'I1 -> 'I2 -> 'I3 -> 'I4 -> 'I5 -> 'TRecord -> UpdateOp>) : 'I1 -> 'I2 -> 'I3 -> 'I4 -> 'I5 -> UpdateExpression<'TRecord> =
-        let uops = UpdateOperations.ExtractOpExpr pickler.RecordInfo expr
+        let uops = UpdateOperations.ExtractOpExpr recordInfo expr
         fun i1 i2 i3 i4 i5 -> new UpdateExpression<'TRecord>(uops.Apply(i1, i2, i3, i4, i5))
 
     /// <summary>
@@ -229,18 +238,18 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="expr">Quoted record projection expression.</param>
     member __.PrecomputeProjectionExpr(expr : Expr<'TRecord -> 'TProjection>) : ProjectionExpression<'TRecord, 'TProjection> =
-        let pexpr = ProjectionExpr.Extract pickler.RecordInfo keySchema expr
+        let pexpr = ProjectionExpr.Extract recordInfo expr
         new ProjectionExpression<'TRecord, 'TProjection>(pexpr)
 
     /// Convert table key to attribute values
     member internal __.ToAttributeValues(key : TableKey) = 
-        PrimaryKeyStructure.ExtractKey(keyStructure.PrimaryKey, key)
+        PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, key)
 
     /// Converts a record instance to attribute values
     member internal __.ToAttributeValues(record : 'TRecord) =
         let kv = pickler.OfRecord record
 
-        match keyStructure.PrimaryKey with
+        match recordInfo.PrimaryKeyStructure with
         | DefaultHashKey(name, hashKey, pickler, _) ->
             let av = hashKey |> pickler.PickleUntyped |> Option.get
             kv.Add(name, av)

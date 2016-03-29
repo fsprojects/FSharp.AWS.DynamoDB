@@ -40,7 +40,7 @@ type AttributeId =
         RootName : string
         RootId : string
         NestedAttributes : NestedAttribute list
-        Type : AttributeType 
+        KeySchemata : (TableKeySchema * bool) [] 
     }
 with
     member id.IsParametric =
@@ -59,9 +59,14 @@ with
     member id.Tokens = 
         seq { yield id.RootName ; yield! id.NestedAttributes |> Seq.map (fun nf -> nf.Print()) }
 
-    member id.IsHashKey = id.Type = AttributeType.HashKey
-    member id.IsRangeKey = id.Type = AttributeType.RangeKey
-    member id.IsLocalSecondaryIndex = match id.Type with LocalSecondaryIndex _ -> true | _ -> false
+    member id.IsHashKey =
+        List.isEmpty id.NestedAttributes &&
+        id.KeySchemata |> Array.exists(function (_, true) -> true | _ -> false)
+
+    member id.IsRangeKey =
+        List.isEmpty id.NestedAttributes &&
+        id.KeySchemata |> Array.exists(function (_, false) -> true | _ -> false)
+
     member id.Append nf = { id with NestedAttributes = id.NestedAttributes @ [nf] }
     member id.Apply (inputs : obj[]) =
         let applyField nf =
@@ -79,8 +84,8 @@ with
 
     static member FromKeySchema(schema : TableKeySchema) =
         let rootId = "#HKEY"
-        let hkName = schema.PrimaryKey.HashKey.AttributeName
-        { RootId = rootId ; RootName = hkName ; NestedAttributes = [] ; Type = AttributeType.HashKey }
+        let hkName = schema.HashKey.AttributeName
+        { RootId = rootId ; RootName = hkName ; NestedAttributes = [] ; KeySchemata = [|(schema, true)|] }
 
 type PropertyMetadata with
     /// Gets an attribute Id for given record property that
@@ -89,7 +94,7 @@ type PropertyMetadata with
 
 /// Represents a nested field of an F# record type
 type QuotedAttribute =
-    | Root of PropertyMetadata
+    | Root of PropertyMetadata * keyAttrs:(TableKeySchema * bool)[]
     | Nested of PropertyMetadata * parent:QuotedAttribute
     | Item of NestedAttribute * pickler:Pickler * parent:QuotedAttribute
     | Optional of pickler:Pickler * parent:QuotedAttribute
@@ -97,7 +102,7 @@ with
     /// Gets the pickler corresponding to the type pointed to by the attribute path
     member ap.Pickler =
         match ap with
-        | Root rp -> rp.Pickler
+        | Root (rp,_) -> rp.Pickler
         | Nested (rp,_) -> rp.Pickler
         | Item(_,pickler,_) -> pickler
         | Optional(p,_) -> p
@@ -106,7 +111,7 @@ with
     member ap.RootProperty =
         let rec aux ap =
             match ap with
-            | Root rp -> rp
+            | Root (rp,_) -> rp
             | Nested(_,p) -> aux p
             | Item(_,_,p) -> aux p
             | Optional(_,p)-> aux p
@@ -120,12 +125,12 @@ with
             | Nested (rp,p) -> getTokens (FField rp.Name :: acc) p
             | Item(nf,_,p) -> getTokens (nf :: acc) p
             | Optional(_,p) -> getTokens acc p
-            | Root rp ->
+            | Root (rp,schema) ->
                 {
                     RootId = rp.AttrId
                     RootName = rp.Name
                     NestedAttributes = acc
-                    Type = rp.AttributeType
+                    KeySchemata = schema
                 }
 
         getTokens [] ap
@@ -134,7 +139,7 @@ with
     member ap.Iter(f : Pickler -> unit) =
         let rec aux ap =
             match ap with
-            | Root rp -> f rp.Pickler
+            | Root (rp,_) -> f rp.Pickler
             | Nested (rp,p) -> f rp.Pickler ; aux p
             | Item(_,pickler,p) -> f pickler ; aux p
             | Optional(pickler,p) -> f pickler; aux p
@@ -142,9 +147,9 @@ with
         aux ap
 
     /// Attempt to extract an attribute path for given record info and expression
-    static member TryExtract ((|PVar|_|) : Expr -> int option) (record : Var) (info : RecordInfo) (e : Expr) =
-        let tryGetPropInfo (info : RecordInfo) isFinalProp (p : PropertyInfo) =
-            match info.Properties |> Array.tryFind (fun rp -> rp.PropertyInfo = p) with
+    static member TryExtract ((|PVar|_|) : Expr -> int option) (record : Var) (info : RecordTableInfo) (e : Expr) =
+        let tryGetPropInfo (properties : PropertyMetadata []) isFinalProp (p : PropertyInfo) =
+            match properties |> Array.tryFind (fun rp -> rp.PropertyInfo = p) with
             | None -> None
             | Some rp when rp.Pickler.PicklerType = PicklerType.Serialized && not isFinalProp ->
                 invalidArg "expr" "cannot access nested properties of serialized fields."
@@ -155,9 +160,11 @@ with
         let rec extractProps props e =
             match e with
             | PropertyGet(Some (Var r'), p, []) when record = r' -> 
-                match tryGetPropInfo info (List.isEmpty props) p with
+                match tryGetPropInfo info.Properties (List.isEmpty props) p with
                 | None -> None
-                | Some rp -> mkAttrPath (Root rp) rp.NestedRecord props
+                | Some rp -> 
+                    let root = Root(rp, info.GetPropertySchemata rp.Name)
+                    mkAttrPath root rp.NestedRecord props
 
             | SpecificProperty <@ fun (t : _ option) -> t.Value @> (Some e,[et],_) ->
                 extractProps (Choice2Of3 et :: props) e
@@ -184,7 +191,7 @@ with
 
             | _ -> None
 
-        and mkAttrPath acc (ctx : RecordInfo option) rest =
+        and mkAttrPath acc (ctx : PropertyMetadata [] option) rest =
             match rest, ctx with
             | [], _ -> Some acc
             | Choice1Of3 p :: tail, Some rI ->
@@ -198,7 +205,7 @@ with
 
             | Choice3Of3 (et, ie) :: tail, None ->
                 let pickler = Pickler.resolveUntyped et
-                let ctx = match box pickler with :? IRecordPickler as rc -> Some rc.RecordInfo | _ -> None
+                let ctx = match box pickler with :? IRecordPickler as rc -> Some rc.Properties | _ -> None
                 let inline mkAttrPath indexV = mkAttrPath (Item(indexV, pickler, acc)) ctx tail
                 match ie with
                 | _ when ie.IsClosed ->
@@ -239,7 +246,7 @@ type AttributeWriter(names : Dictionary<string, string>, values : Dictionary<str
         attr.Id
 
 /// Recognizes exprs of shape <@ fun p1 p2 ... -> body @>
-let extractExprParams (recordInfo : RecordInfo) (expr : Expr) =
+let extractExprParams (recordInfo : RecordTableInfo) (expr : Expr) =
     let vars = new Dictionary<Var, int> ()
     let rec aux i expr =
         match expr with

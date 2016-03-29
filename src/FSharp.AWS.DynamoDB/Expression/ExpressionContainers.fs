@@ -21,7 +21,10 @@ type ConditionExpression<'TRecord> internal (cond : ConditionalExpression) =
     /// Gets whether given conditional is a valid key condition
     member __.IsKeyConditionCompatible = cond.IsKeyConditionCompatible
     /// Gets the infered local secondary index for the query, if applicable
+    member __.KeyCondition = cond.KeyCondition
+    /// Secondary index name for condition expression, if applicable
     member __.IndexName = cond.IndexName
+
     /// Internal condition expression object
     member internal __.Conditional = cond
     /// DynamoDB condition expression string
@@ -49,7 +52,7 @@ type ConditionExpression =
         new ConditionExpression<'TRecord>(
             { 
                 QueryExpr = qExpr
-                QueryType = extractQueryType qExpr
+                KeyCondition = extractKeyCondition qExpr
                 NParams = 0   
             })
 
@@ -62,7 +65,7 @@ type ConditionExpression =
         new ConditionExpression<'TRecord>(
             { 
                 QueryExpr = qExpr
-                QueryType = extractQueryType qExpr
+                KeyCondition = extractKeyCondition qExpr
                 NParams = 0   
             })
 
@@ -75,7 +78,7 @@ type ConditionExpression =
         new ConditionExpression<'TRecord>(
             { 
                 QueryExpr = qExpr
-                QueryType = extractQueryType qExpr
+                KeyCondition = extractKeyCondition qExpr
                 NParams = 0   
             })
 

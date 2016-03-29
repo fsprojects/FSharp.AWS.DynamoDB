@@ -18,28 +18,13 @@ open FSharp.AWS.DynamoDB
 //  Pickler implementation for F# record types
 //
 
-[<CustomEquality; NoComparison>]
-type RecordInfo =
-    {
-        Type : Type
-        Constructor : obj[] -> obj
-        Properties : PropertyMetadata []
-    }
-with
-    override r.Equals o =
-        match o with :? RecordInfo as r' -> r.Type = r'.Type | _ -> false
-
-    override r.GetHashCode() = hash r.Type
-
-and private IRecordPickler =
-    abstract RecordInfo : RecordInfo
+type IRecordPickler =
+    abstract Properties : PropertyMetadata []
 
 type RecordPickler<'T>(ctor : obj[] -> obj, properties : PropertyMetadata []) =
     inherit Pickler<'T> ()
 
-    let recordInfo = { Type = typeof<'T> ; Properties = properties ; Constructor = ctor }
-
-    member __.RecordInfo = recordInfo
+    member __.Properties = properties
     member __.OfRecord (value : 'T) : RestObject =
         let values = new RestObject()
         for prop in properties do
@@ -63,7 +48,7 @@ type RecordPickler<'T>(ctor : obj[] -> obj, properties : PropertyMetadata []) =
         ctor values :?> 'T
 
     interface IRecordPickler with
-        member __.RecordInfo = recordInfo
+        member __.Properties = properties
 
     override __.PicklerType = PicklerType.Record
     override __.PickleType = PickleType.Map
@@ -82,7 +67,7 @@ type RecordPickler<'T>(ctor : obj[] -> obj, properties : PropertyMetadata []) =
 type PropertyMetadata with
     member rp.NestedRecord =
         match box rp.Pickler with
-        | :? IRecordPickler as rp -> Some rp.RecordInfo
+        | :? IRecordPickler as rp -> Some rp.Properties
         | _ -> None
 
 

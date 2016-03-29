@@ -239,3 +239,11 @@ module internal Utils =
                     elif task.IsCanceled then cc(new OperationCanceledException())
                     else sc ())
                 |> ignore)
+
+    [<RequireQualifiedAccess>]
+    module Seq =
+        let joinBy (pred : 'T -> 'S -> bool) (ts : seq<'T>) (ss : seq<'S>) : seq<'T * 'S> = seq {
+            for t in ts do
+                for s in ss do
+                    if pred t s then yield (t,s)
+        }

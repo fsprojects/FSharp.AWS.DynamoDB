@@ -49,71 +49,71 @@ module ``Record Generation Tests`` =
     [<Fact>]
     let ``Generate correct schema for S Record`` () =
         let rt = RecordTemplate.Define<``S Record``>()
-        rt.KeySchema.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.KeySchema.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.S
-        rt.KeySchema.PrimaryKey.RangeKey |> should equal None
+        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
+        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.S
+        rt.PrimaryKey.RangeKey |> should equal None
 
     [<Fact>]
     let ``Generate correct schema for N Record`` () =
         let rt = RecordTemplate.Define<``N Record``>()
-        rt.KeySchema.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.KeySchema.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.N
-        rt.KeySchema.PrimaryKey.RangeKey |> should equal None
+        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
+        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.N
+        rt.PrimaryKey.RangeKey |> should equal None
 
     [<Fact>]
     let ``Generate correct schema for B Record`` () =
         let rt = RecordTemplate.Define<``B Record``>()
-        rt.KeySchema.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.KeySchema.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.B
-        rt.KeySchema.PrimaryKey.RangeKey |> should equal None
+        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
+        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.B
+        rt.PrimaryKey.RangeKey |> should equal None
 
     [<Fact>]
     let ``Generate correct schema for SN Record`` () =
         let rt = RecordTemplate.Define<``SN Record``>()
-        rt.KeySchema.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.KeySchema.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.S
-        rt.KeySchema.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.N })
+        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
+        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.S
+        rt.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.N })
 
     [<Fact>]
     let ``Generate correct schema for NB Record`` () =
         let rt = RecordTemplate.Define<``NB Record``>()
-        rt.KeySchema.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.KeySchema.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.N
-        rt.KeySchema.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.B })
+        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
+        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.N
+        rt.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.B })
 
     [<Fact>]
     let ``Generate correct schema for BS Record`` () =
         let rt = RecordTemplate.Define<``BS Record``>()
-        rt.KeySchema.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.KeySchema.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.B
-        rt.KeySchema.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.S })
+        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
+        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.B
+        rt.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.S })
 
     [<Fact>]
     let ``Generate correct schema for NS Constant HashKey Record`` () =
         let rt = RecordTemplate.Define<``NS Constant HashKey Record``> ()
-        rt.KeySchema.PrimaryKey.HashKey.AttributeName |> should equal "HashKey"
-        rt.KeySchema.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.N
-        rt.KeySchema.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.S })
+        rt.PrimaryKey.HashKey.AttributeName |> should equal "HashKey"
+        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.N
+        rt.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.S })
 
     [<Fact>]
     let ``Generate correct schema for BS Constant RangeKey Record`` () =
         let rt = RecordTemplate.Define<``BS Constant RangeKey Record``> ()
-        rt.KeySchema.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.KeySchema.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.B
-        rt.KeySchema.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "RangeKey" ; KeyType = ScalarAttributeType.S })
+        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
+        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.B
+        rt.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "RangeKey" ; KeyType = ScalarAttributeType.S })
 
     [<Fact>]
     let ``Generate correct schema for SS String representation Record`` () =
         let rt = RecordTemplate.Define<``SS Record``> ()
         let rt' = RecordTemplate.Define<``SS String Representation Record``> ()
-        rt'.KeySchema |> should equal rt.KeySchema
+        rt'.PrimaryKey |> should equal rt.PrimaryKey
 
     [<Fact>]
     let ``Generate correct schema for Custom HashKey Name Record`` () =
         let rt = RecordTemplate.Define<``Custom HashKey Name Record``> ()
-        rt.KeySchema.PrimaryKey.HashKey.AttributeName |> should equal "CustomHashKeyName"
-        rt.KeySchema.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.S
-        rt.KeySchema.PrimaryKey.RangeKey |> should equal None
+        rt.PrimaryKey.HashKey.AttributeName |> should equal "CustomHashKeyName"
+        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.S
+        rt.PrimaryKey.RangeKey |> should equal None
 
 
     [<Fact>]
