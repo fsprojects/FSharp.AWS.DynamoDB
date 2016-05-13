@@ -196,6 +196,16 @@ let startedBefore = table.Template.PrecomputeConditionalExpr <@ fun time w -> w.
 table.Scan(startedBefore (DateTimeOffset.Now - TimeSpan.FromDays 1.))
 ```
 
+### Building & Running Tests
+
+Depending on your platform, you can build and run tests running `build.bat` or `build.cmd`. 
+To successfully run unit tests, you need to have credentials set to your `default` profile in 
+your local credentials store. Alternative, you could set the following environment variables:
+```bash
+export fsddbtestsregion="eu-central-1" # default region
+export fsddbtestscreds="<access key>,<secret key>"
+```
+
 ## Maintainer(s)
 
 - [@eiriktsarpalis](https://github.com/eiriktsarpalis)
