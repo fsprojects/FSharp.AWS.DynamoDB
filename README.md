@@ -203,7 +203,7 @@ To successfully run unit tests, you need to have credentials set to your `defaul
 your local credentials store. Alternative, you could set the following environment variables:
 ```bash
 export fsddbtestsregion="eu-central-1" # default region is eu-central-1
-export fsddbtestscreds="<access key>,<secret key>" # your IAM access & secret keys to run dynamo tests
+export fsddbtestscreds="<access key>,<secret key>" # your access & secret keys for accessing DynamoDB
 ```
 
 ## Maintainer(s)
