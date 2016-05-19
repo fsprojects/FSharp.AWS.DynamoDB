@@ -33,7 +33,7 @@
     <OutputPath>..\..\bin\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
-    <DocumentationFile>..\..\bin\Rql.DynamoDB.XML</DocumentationFile>
+    <DocumentationFile>..\..\bin\FSharp.AWS.DynamoDB.XML</DocumentationFile>
     <OtherFlags>--warnon:1182</OtherFlags>
   </PropertyGroup>
   <ItemGroup>
