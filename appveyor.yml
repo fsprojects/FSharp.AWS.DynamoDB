@@ -1,0 +1,6 @@
+init:
+  - git config --global core.autocrlf input
+
+test:
+  assemblies:
+    - FSharp.AWS.DynamoDB.Tests.dll
