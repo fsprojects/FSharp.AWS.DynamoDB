@@ -4,6 +4,7 @@ open System
 open System.IO
 
 open Xunit
+open FsCheck
 
 open Amazon
 open Amazon.Util
@@ -59,3 +60,12 @@ module Utils =
         let creds = getAWSCredentials()
         let region = getTestRegion()
         new AmazonDynamoDBClient(creds, region) :> IAmazonDynamoDB
+
+
+    type MemoryStreamGenerator =
+        static member MemoryStream = 
+            Arb.generate<byte[]>
+            |> Gen.map (function null -> null | bs -> new MemoryStream(bs))
+            |> Arb.fromGen
+
+        static member Register() = Arb.register<MemoryStreamGenerator>() |> ignore

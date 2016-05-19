@@ -19,7 +19,7 @@ module ``Record Generation Tests`` =
             |> rt.OfAttributeValues
             |> should equal r
 
-        Check.Quick round
+        Check.Quick roundTrip
 
     // Section A. Simple Record schemata
 
@@ -235,6 +235,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Roundtrip complex record C`` () =
+        MemoryStreamGenerator.Register()
         testRoundTrip<``Complex Record C``> ()
 
     [<Fact>]
