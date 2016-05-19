@@ -206,6 +206,10 @@ export fsddbtestsregion="eu-central-1" # default region is eu-central-1
 export fsddbtestscreds="<access key>,<secret key>" # your access & secret keys for accessing DynamoDB
 ```
 
+### Build Status
+
+* Windows/.NET [![Build status](https://ci.appveyor.com/api/projects/status/n72o2uj09lr9o3sa/branch/master?svg=true)](https://ci.appveyor.com/project/nessos/fsharp-aws-dynamodb/branch/master)
+
 ## Maintainer(s)
 
 - [@eiriktsarpalis](https://github.com/eiriktsarpalis)
