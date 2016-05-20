@@ -213,3 +213,4 @@ ModelManifest.xml
 .paket/paket.exe
 temp/*
 paket-files/*
+xunit.html

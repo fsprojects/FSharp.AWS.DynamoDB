@@ -190,6 +190,8 @@ module ``Record Generation Tests`` =
             Nested : NestedRecord
             Union : NestedUnion
 
+            Ref : int64 ref ref ref
+
             [<BinaryFormatter>]
             BlobValue : (int * string) [][]
         }

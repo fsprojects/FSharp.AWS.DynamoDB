@@ -1,3 +1,6 @@
+### 0.3.1-beta
+* Minor bugfixes.
+
 ### 0.3.0-beta
 * Implement secondary indices.
 
