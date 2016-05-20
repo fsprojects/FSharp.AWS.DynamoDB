@@ -123,4 +123,4 @@ let isValidTableName (tableName : string) =
 
 let private fieldNameRegex = new Regex("^[a-zA-Z][a-zA-Z0-9]*", RegexOptions.Compiled)
 let isValidFieldName (name : string) =
-    fieldNameRegex.IsMatch name
+    name <> null && fieldNameRegex.IsMatch name

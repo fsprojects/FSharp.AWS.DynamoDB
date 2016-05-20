@@ -93,9 +93,10 @@ Target "RunTests" (fun _ ->
     |> xUnit2 (fun (p : XUnit2Params) -> 
         { p with
             TimeOut = TimeSpan.FromMinutes 20.
-            ExcludeTraits = 
-                [ if not emulatorTests then yield ("Category", "Emulator")
-                  if not remoteTests then yield ("Category", "Remote") ]
+            Parallel = ParallelMode.Collections
+//            ExcludeTraits = 
+//                [ if not emulatorTests then yield ("Category", "Emulator")
+//                  if not remoteTests then yield ("Category", "Remote") ]
 
             HtmlOutputPath = Some "xunit.html"})
 )

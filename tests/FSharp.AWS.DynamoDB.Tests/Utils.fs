@@ -62,10 +62,8 @@ module Utils =
         new AmazonDynamoDBClient(creds, region) :> IAmazonDynamoDB
 
 
-    type MemoryStreamGenerator =
+    type FsCheckGenerators =
         static member MemoryStream = 
-            Arb.generate<byte[]>
-            |> Gen.map (function null -> null | bs -> new MemoryStream(bs))
+            Arb.generate<byte[] option>
+            |> Gen.map (function None -> null | Some bs -> new MemoryStream(bs))
             |> Arb.fromGen
-
-        static member Register() = Arb.register<MemoryStreamGenerator>() |> ignore

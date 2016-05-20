@@ -81,7 +81,7 @@ type UnionPickler<'U>(resolver : IPicklerResolver) =
 
     override __.PicklerType = PicklerType.Union
     override __.PickleType = PickleType.Map
-    override __.DefaultValue = invalidOp <| sprintf "default values not supported for records."
+    override __.DefaultValue = invalidOp <| sprintf "default values not supported for unions."
 
     override __.Pickle (union : 'U) =
         let ro = __.OfUnion union 

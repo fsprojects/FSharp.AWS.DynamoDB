@@ -31,8 +31,8 @@ module private ResolverImpl =
         | :? ShapeUInt32 -> mkNumericalPickler<uint32> () :> _
         | :? ShapeUInt64 -> mkNumericalPickler<uint64> () :> _
         | :? ShapeSingle -> mkNumericalPickler<single> () :> _
-        | :? ShapeDouble -> mkNumericalPickler<double> () :> _
         | :? ShapeDecimal -> mkNumericalPickler<decimal> () :> _
+        | :? ShapeDouble -> new DoublePickler() :> _
         | :? ShapeChar -> new CharPickler() :> _
         | :? ShapeString -> new StringPickler() :> _
         | :? ShapeGuid -> new GuidPickler() :> _

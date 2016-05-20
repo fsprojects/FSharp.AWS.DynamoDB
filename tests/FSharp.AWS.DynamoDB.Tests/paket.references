@@ -4,4 +4,3 @@ xunit.extensions
 xunit.runner.visualstudio
 FsUnit.XUnit
 FsCheck
-FSharp.Core

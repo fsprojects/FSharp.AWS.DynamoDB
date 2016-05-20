@@ -98,6 +98,28 @@ let inline mkNumericalPickler< ^N when ^N : (static member Parse : string * IFor
             __.Pickle n
     }
 
+type DoublePickler() =
+    inherit NumRepresentablePickler<Double>()
+    let parse s = Double.Parse(s, CultureInfo.InvariantCulture)
+    let unparse (d:double) = d.ToString("G17", CultureInfo.InvariantCulture)
+
+    override __.PickleType = PickleType.Number
+    override __.PicklerType = PicklerType.Value
+    override __.IsComparable = true
+
+    override __.Parse s = parse s
+    override __.UnParse e = unparse e
+
+    override __.DefaultValue = Unchecked.defaultof<double>
+    override __.Pickle num = AttributeValue(N = unparse num) |> Some
+    override __.UnPickle a = 
+        if not <| isNull a.N then parse a.N 
+        else invalidCast a
+
+    override __.PickleCoerced o =
+        let n = match o with :? double as n -> n | other -> string other |> parse
+        __.Pickle n
+
 type ByteArrayPickler() =
     inherit StringRepresentablePickler<byte[]> ()
     override __.PickleType = PickleType.Bytes
@@ -223,7 +245,6 @@ type OptionPickler<'T>(tp : Pickler<'T>) =
         | :? 'T as t -> tp.Pickle t
         | :? ('T option) as topt -> __.Pickle topt
         | _ -> raise <| new InvalidCastException()
-
 
 type StringRepresentationPickler<'T>(ep : StringRepresentablePickler<'T>) =
     inherit Pickler<'T> ()

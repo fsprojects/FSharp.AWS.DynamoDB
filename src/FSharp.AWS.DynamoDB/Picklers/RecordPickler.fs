@@ -52,7 +52,9 @@ type RecordPickler<'T>(ctor : obj[] -> obj, properties : PropertyMetadata []) =
 
     override __.PicklerType = PicklerType.Record
     override __.PickleType = PickleType.Map
-    override __.DefaultValue = invalidOp <| sprintf "default values not supported for records."
+    override __.DefaultValue = 
+        let defaultFields = properties |> Array.map (fun p -> p.Pickler.DefaultValueUntyped)
+        ctor defaultFields :?> 'T
 
     override __.Pickle (record : 'T) =
         let ro = __.OfRecord record 
@@ -62,7 +64,6 @@ type RecordPickler<'T>(ctor : obj[] -> obj, properties : PropertyMetadata []) =
     override __.UnPickle a =
         if a.IsMSet then __.ToRecord a.M
         else invalidCast a
-
 
 type PropertyMetadata with
     member rp.NestedRecord =
