@@ -1,3 +1,6 @@
+### 0.4.0-beta
+* Implement credential helper methods.
+
 ### 0.3.1-beta
 * Minor bugfixes.
 
