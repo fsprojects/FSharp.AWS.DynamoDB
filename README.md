@@ -211,6 +211,7 @@ export AWS_SECRET_ACCESS_KEY=<your secret key>     # your account's secret key
 ### Build Status
 
 * Windows/.NET [![Build status](https://ci.appveyor.com/api/projects/status/n72o2uj09lr9o3sa/branch/master?svg=true)](https://ci.appveyor.com/project/nessos/fsharp-aws-dynamodb/branch/master)
+* Linux/Mono 4.2 [![Build Status](https://travis-ci.org/fsprojects/FSharp.AWS.DynamoDB.png?branch=master)](https://travis-ci.org/fsprojects/FSharp.AWS.DynamoDB/branches)
 
 ## Maintainer(s)
 
