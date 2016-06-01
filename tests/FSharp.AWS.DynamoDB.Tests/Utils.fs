@@ -11,6 +11,8 @@ open Amazon.Util
 open Amazon.DynamoDBv2
 open Amazon.Runtime
 
+open FSharp.AWS.DynamoDB
+
 [<AutoOpen>]
 module Utils =
 
@@ -22,39 +24,19 @@ module Utils =
     let shouldFailwith<'T, 'Exn when 'Exn :> exn>(f : unit -> 'T) =
         ignore <| Assert.Throws<'Exn>(f >> ignore)
 
-    let getEnvironmentVariable (envName:string) =
-        let aux found target =
-            if String.IsNullOrWhiteSpace found then Environment.GetEnvironmentVariable(envName, target)
-            else found
-
-        Array.fold aux null [|EnvironmentVariableTarget.Process; EnvironmentVariableTarget.User; EnvironmentVariableTarget.Machine|]
-        
-    let getEnvironmentVariableOrDefault envName defaultValue = 
-        match getEnvironmentVariable envName with
-        | null | "" -> defaultValue
-        | ev -> ev
-
     let getTestRegion () = 
-        match getEnvironmentVariable "fsddbtestsregion" with
+        match Environment.ResolveEnvironmentVariable "AWS_REGION" with
         | null | "" -> RegionEndpoint.EUCentral1
         | region -> RegionEndpoint.GetBySystemName region
 
-    let getAWSProfileName () = getEnvironmentVariableOrDefault "fsddbtestsprofile" "default"
-    let tryGetAWSCredentials () = 
-        match getEnvironmentVariable "fsddbtestscreds" with
-        | null | "" -> None
-        | creds -> 
-            let toks = creds.Split(',')
-            let creds = new BasicAWSCredentials(toks.[0], toks.[1]) :> Amazon.Runtime.AWSCredentials
-            Some creds
+    let getAWSProfileName () = 
+        match Environment.ResolveEnvironmentVariable "AWS_CREDENTIAL_STORE_PROFILE" with
+        | null | "" -> "default"
+        | pf -> pf
 
-    let getAWSCredentials () =
-        let region = getTestRegion()
-        match tryGetAWSCredentials() with
-        | Some creds -> creds
-        | None ->
-            let profile = getAWSProfileName()
-            AWSCredentialsProfile.LoadFrom(profile).Credentials :> AWSCredentials
+    let getAWSCredentials () = 
+        try AWSCredentials.FromEnvironmentVariables()
+        with _ -> AWSCredentials.FromCredentialsStore(getAWSProfileName())
 
     let getDynamoDBAccount () =
         let creds = getAWSCredentials()

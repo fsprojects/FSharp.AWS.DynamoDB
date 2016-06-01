@@ -126,6 +126,24 @@ module internal Utils =
         member e.Substitute(v : Var, sub : Expr) =
             e.Substitute(fun w -> if v = w then Some sub else None)
 
+    type Environment with
+        /// <summary>
+        ///     Resolves an environment variable from the local machine.
+        ///     Variables are resolved using the following target order:
+        ///     Process, User and finally, Machine.
+        /// </summary>
+        /// <param name="variableName">Environment variable name.</param>
+        static member ResolveEnvironmentVariable(variableName : string) =
+            let aux found target =
+                if String.IsNullOrWhiteSpace found then 
+                    Environment.GetEnvironmentVariable(variableName, target)
+                else found
+
+            Array.fold aux null [|
+                EnvironmentVariableTarget.Process
+                EnvironmentVariableTarget.User
+                EnvironmentVariableTarget.Machine |]
+
     /// Variations of DerivedPatterns.SpecificCall which correctly
     /// recognizes methods of generic types
     /// See also https://github.com/fsharp/fsharp/issues/546
@@ -247,3 +265,9 @@ module internal Utils =
                 for s in ss do
                     if pred t s then yield (t,s)
         }
+
+    /// Gets the home path for the current user
+    let getHomePath () =
+        match Environment.OSVersion.Platform with
+        | PlatformID.Unix | PlatformID.MacOSX -> Environment.GetEnvironmentVariable "HOME"
+        | _ -> Environment.ExpandEnvironmentVariables "%HOMEDRIVE%%HOMEPATH%"
