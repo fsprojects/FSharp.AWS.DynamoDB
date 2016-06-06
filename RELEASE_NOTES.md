@@ -1,3 +1,6 @@
+### 0.4.1-beta
+* Fix packaging issue.
+
 ### 0.4.0-beta
 * Implement credential helper methods.
 

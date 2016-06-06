@@ -38,12 +38,12 @@ module Extensions =
         template<'TRecord>.PrecomputeProjectionExpr<'TProjection> expr
 
 
-    type AWSCredentials private () =
+    // simple recognizer for aws credentials file syntax
+    // c.f. http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html
+    let private profileRegex =
+        Regex("\[(\S+)\]\s+aws_access_key_id\s*=\s*(\S+)\s+aws_secret_access_key\s*=\s*(\S+)", RegexOptions.Compiled)
 
-        // simple recognizer for aws credentials file syntax
-        // c.f. http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html
-        static let profileRegex =
-            Regex("\[(\S+)\]\s+aws_access_key_id\s*=\s*(\S+)\s+aws_secret_access_key\s*=\s*(\S+)", RegexOptions.Compiled)
+    type AWSCredentials with
 
         /// <summary>
         ///     Recovers a credentials instance from the local environment
