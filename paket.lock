@@ -1,226 +1,42 @@
+FRAMEWORK: >= NET40
 NUGET
   remote: https://www.nuget.org/api/v2
   specs:
-    AWSSDK.Core (3.1.5.3)
-      Microsoft.Net.Http (>= 2.2.29) - framework: portable-net45+win8+wp8+wpa81
-      PCLCrypto (>= 1.0.2.15130) - framework: portable-net45+win8+wp8+wpa81
-      PCLStorage (>= 1.0.2) - framework: portable-net45+win8+wp8+wpa81
-    AWSSDK.DynamoDBv2 (3.1.4)
-      AWSSDK.Core (>= 3.1.4.3 < 3.2)
-    FsCheck (2.4)
+    AWSSDK.Core (3.1.9.1)
+    AWSSDK.DynamoDBv2 (3.1.5.2)
+      AWSSDK.Core (>= 3.1.9 < 3.2)
+    FsCheck (2.5)
       FSharp.Core (>= 3.1.2.5)
     FSharp.Core (4.0.0.1) - redirects: force
     FsUnit.xUnit (1.4.1)
       FSharp.Core (>= 3.1.2.5)
       xunit (2.1)
-    Microsoft.Bcl (1.1.10) - framework: portable-net45+win8+wp8+wpa81
-      Microsoft.Bcl.Build (>= 1.0.14)
-    Microsoft.Bcl.Async (1.0.168) - framework: portable-net45+win8+wp8+wpa81
-      Microsoft.Bcl (>= 1.1.8)
-    Microsoft.Bcl.Build (1.0.21) - import_targets: false, framework: portable-net45+win8+wp8+wpa81
-    Microsoft.Net.Http (2.2.29) - framework: portable-net45+win8+wp8+wpa81
-      Microsoft.Bcl (>= 1.1.10)
-      Microsoft.Bcl.Build (>= 1.0.14)
-    PCLCrypto (2.0.147) - framework: portable-net45+win8+wp8+wpa81
-      PInvoke.NCrypt (>= 0.3.2) - framework: >= net45, dnxcore50, portable-dnxcore50+monoandroid10+monotouch10+net45+unsupported+win+wpa81+xamarinios10
-      Validation (>= 2.2.8)
-    PCLStorage (1.0.2) - framework: portable-net45+win8+wp8+wpa81
-      Microsoft.Bcl (>= 1.1.6) - framework: net10, net11, net20, net30, net35, net40, net40-full
-      Microsoft.Bcl.Async (>= 1.0.165) - framework: net10, net11, net20, net30, net35, net40, net40-full
-    PInvoke.BCrypt (0.3.2) - framework: portable-net45+win8+wp8+wpa81
-      PInvoke.Kernel32 (>= 0.3.2) - framework: >= net40, portable-net40+win8+wpa81, portable-net45+win8+wpa81
-      PInvoke.Windows.Core (>= 0.3.2) - framework: >= net40, portable-net40+win8+wpa81, portable-net45+win8+wpa81
-    PInvoke.Kernel32 (0.3.2) - framework: portable-net45+win8+wp8+wpa81
-      PInvoke.Windows.Core (>= 0.3.2) - framework: >= net40, portable-net40+win8+wpa81, portable-net45+win8+wpa81
-    PInvoke.NCrypt (0.3.2) - framework: portable-net45+win8+wp8+wpa81
-      PInvoke.BCrypt (>= 0.3.2) - framework: >= net40, portable-net40+win8+wpa81, portable-net45+win8+wpa81
-      PInvoke.Windows.Core (>= 0.3.2) - framework: >= net40, portable-net40+win8+wpa81, portable-net45+win8+wpa81
-    PInvoke.Windows.Core (0.3.2) - framework: portable-net45+win8+wp8+wpa81
-    System.Collections (4.0.10) - framework: dnxcore50
-      System.Diagnostics.Debug (>= 4.0) - framework: dnxcore50
-      System.Resources.ResourceManager (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0.20) - framework: dnxcore50
-      System.Runtime.Extensions (>= 4.0) - framework: dnxcore50
-      System.Threading (>= 4.0) - framework: dnxcore50
-    System.Diagnostics.Contracts (4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-    System.Diagnostics.Debug (4.0.10) - framework: dnxcore50, portable-net45+win8+wp8+wpa81
-      System.Runtime (>= 4.0) - framework: dnxcore50
-    System.Diagnostics.Tools (4.0) - framework: portable-net45+win8+wp8+wpa81
-      System.Runtime (>= 4.0) - framework: dnxcore50
-    System.Globalization (4.0.10) - framework: dnxcore50, portable-net45+win8+wp8+wpa81
-      System.Runtime (>= 4.0) - framework: dnxcore50
-    System.IO (4.0.10) - framework: dnxcore50
-      System.Globalization (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0.20) - framework: dnxcore50
-      System.Text.Encoding (>= 4.0) - framework: dnxcore50
-      System.Text.Encoding (>= 4.0.10) - framework: dnxcore50
-      System.Text.Encoding.Extensions (>= 4.0) - framework: dnxcore50
-      System.Threading (>= 4.0) - framework: dnxcore50
-      System.Threading.Tasks (>= 4.0) - framework: dnxcore50
-    System.Linq (4.0) - framework: dnxcore50, portable-net45+win8+wp8+wpa81
-      System.Collections (>= 4.0.10) - framework: dnxcore50
-      System.Diagnostics.Debug (>= 4.0.10) - framework: dnxcore50
-      System.Resources.ResourceManager (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0.20) - framework: dnxcore50
-      System.Runtime.Extensions (>= 4.0.10) - framework: dnxcore50
-    System.Linq.Expressions (4.0.10) - framework: dnxcore50
-      System.Collections (>= 4.0) - framework: dnxcore50
-      System.Diagnostics.Debug (>= 4.0) - framework: dnxcore50
-      System.Globalization (>= 4.0) - framework: dnxcore50
-      System.IO (>= 4.0) - framework: dnxcore50
-      System.Linq (>= 4.0) - framework: dnxcore50
-      System.ObjectModel (>= 4.0) - framework: dnxcore50
-      System.Reflection (>= 4.0) - framework: dnxcore50
-      System.Reflection.Emit (>= 4.0) - framework: dnxcore50
-      System.Reflection.Extensions (>= 4.0) - framework: dnxcore50
-      System.Reflection.Primitives (>= 4.0) - framework: dnxcore50
-      System.Reflection.TypeExtensions (>= 4.0) - framework: dnxcore50
-      System.Resources.ResourceManager (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0.20) - framework: dnxcore50
-      System.Runtime.Extensions (>= 4.0) - framework: dnxcore50
-      System.Threading (>= 4.0) - framework: dnxcore50
-    System.ObjectModel (4.0.10) - framework: dnxcore50
-      System.Collections (>= 4.0.10) - framework: dnxcore50
-      System.Diagnostics.Debug (>= 4.0.10) - framework: dnxcore50
-      System.Resources.ResourceManager (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0.20) - framework: dnxcore50
-      System.Threading (>= 4.0.10) - framework: dnxcore50
-    System.Private.Uri (4.0) - framework: dnxcore50
-    System.Reflection (4.0.10) - framework: dnxcore50, portable-net45+win8+wp8+wpa81
-      System.IO (>= 4.0) - framework: dnxcore50
-      System.Reflection.Primitives (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0.20) - framework: dnxcore50
-    System.Reflection.Emit (4.0) - framework: dnxcore50
-      System.IO (>= 4.0) - framework: dnxcore50
-      System.Reflection (>= 4.0) - framework: dnxcore50
-      System.Reflection.Emit.ILGeneration (>= 4.0) - framework: dnxcore50
-      System.Reflection.Primitives (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-    System.Reflection.Emit.ILGeneration (4.0) - framework: dnxcore50
-      System.Reflection (>= 4.0) - framework: dnxcore50
-      System.Reflection.Primitives (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-    System.Reflection.Extensions (4.0) - framework: dnxcore50
-      System.Diagnostics.Debug (>= 4.0.10) - framework: dnxcore50
-      System.Reflection (>= 4.0) - framework: dnxcore50
-      System.Reflection (>= 4.0.10) - framework: dnxcore50
-      System.Reflection.Primitives (>= 4.0) - framework: dnxcore50
-      System.Reflection.TypeExtensions (>= 4.0) - framework: dnxcore50
-      System.Resources.ResourceManager (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0.20) - framework: dnxcore50
-      System.Runtime.Extensions (>= 4.0.10) - framework: dnxcore50
-    System.Reflection.Primitives (4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-      System.Threading (>= 4.0) - framework: dnxcore50
-    System.Reflection.TypeExtensions (4.0) - framework: dnxcore50
-      System.Diagnostics.Contracts (>= 4.0) - framework: dnxcore50
-      System.Diagnostics.Debug (>= 4.0.10) - framework: dnxcore50
-      System.Linq (>= 4.0) - framework: dnxcore50
-      System.Reflection (>= 4.0) - framework: dnxcore50
-      System.Reflection (>= 4.0.10) - framework: dnxcore50
-      System.Reflection.Primitives (>= 4.0) - framework: dnxcore50
-      System.Resources.ResourceManager (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0.20) - framework: dnxcore50
-      System.Runtime.Extensions (>= 4.0.10) - framework: dnxcore50
-    System.Resources.ResourceManager (4.0) - framework: dnxcore50, portable-net45+win8+wp8+wpa81
-      System.Globalization (>= 4.0) - framework: dnxcore50
-      System.Reflection (>= 4.0) - framework: dnxcore50
-      System.Reflection (>= 4.0.10) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0.20) - framework: dnxcore50
-    System.Runtime (4.0.20) - framework: dnxcore50, portable-net45+win8+wp8+wpa81
-      System.Private.Uri (>= 4.0) - framework: dnxcore50
-    System.Runtime.Extensions (4.0.10) - framework: dnxcore50
-      System.Runtime (>= 4.0.20) - framework: dnxcore50
-    System.Text.Encoding (4.0.10) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-    System.Text.Encoding.Extensions (4.0.10) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-      System.Text.Encoding (>= 4.0.10) - framework: dnxcore50
-    System.Text.RegularExpressions (4.0.10) - framework: dnxcore50
-      System.Collections (>= 4.0.10) - framework: dnxcore50
-      System.Globalization (>= 4.0.10) - framework: dnxcore50
-      System.Resources.ResourceManager (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0.20) - framework: dnxcore50
-      System.Runtime.Extensions (>= 4.0.10) - framework: dnxcore50
-      System.Threading (>= 4.0.10) - framework: dnxcore50
-    System.Threading (4.0.10) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-      System.Threading.Tasks (>= 4.0) - framework: dnxcore50
-    System.Threading.Tasks (4.0.10) - framework: dnxcore50, portable-net45+win8+wp8+wpa81
-      System.Runtime (>= 4.0) - framework: dnxcore50
     Unquote (3.1.1)
-    Validation (2.2.8) - framework: portable-net45+win8+wp8+wpa81
-      System.Diagnostics.Debug (>= 4.0) - framework: dnxcore50
-      System.Diagnostics.Tools (>= 4.0) - framework: dnxcore50
-      System.Globalization (>= 4.0) - framework: dnxcore50
-      System.Linq (>= 4.0) - framework: dnxcore50
-      System.Reflection (>= 4.0) - framework: dnxcore50
-      System.Resources.ResourceManager (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-      System.Threading.Tasks (>= 4.0) - framework: dnxcore50
     xunit (2.1)
       xunit.assert (2.1)
       xunit.core (2.1)
-    xunit.abstractions (2.0) - framework: >= net45, dnx451, dnxcore50, monoandroid, monotouch, portable-net45+win80+wp80+wpa81, xamarinios, winv4.5, wpv8.0, wpav8.1
+    xunit.abstractions (2.0) - framework: >= net45
     xunit.assert (2.1)
-      System.Collections (>= 4.0) - framework: dnxcore50
-      System.Diagnostics.Debug (>= 4.0) - framework: dnxcore50
-      System.Globalization (>= 4.0) - framework: dnxcore50
-      System.Linq (>= 4.0) - framework: dnxcore50
-      System.ObjectModel (>= 4.0) - framework: dnxcore50
-      System.Reflection (>= 4.0) - framework: dnxcore50
-      System.Reflection.Extensions (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-      System.Runtime.Extensions (>= 4.0) - framework: dnxcore50
-      System.Text.RegularExpressions (>= 4.0) - framework: dnxcore50
-      System.Threading.Tasks (>= 4.0) - framework: dnxcore50
     xunit.core (2.1)
-      System.Collections (>= 4.0) - framework: dnxcore50
-      System.Diagnostics.Debug (>= 4.0) - framework: dnxcore50
-      System.Globalization (>= 4.0) - framework: dnxcore50
-      System.Linq (>= 4.0) - framework: dnxcore50
-      System.Reflection (>= 4.0) - framework: dnxcore50
-      System.Reflection.Extensions (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-      System.Runtime.Extensions (>= 4.0) - framework: dnxcore50
-      System.Threading.Tasks (>= 4.0) - framework: dnxcore50
-      xunit.abstractions (>= 2.0) - framework: dnxcore50
-      xunit.extensibility.core (2.1) - framework: >= net45, dnx451, dnxcore50, monoandroid, monotouch, portable-net45+win80+wp80+wpa81, xamarinios, winv4.5, wpv8.0, wpav8.1
-      xunit.extensibility.execution (2.1) - framework: >= net45, dnx451, dnxcore50, monoandroid, monotouch, portable-net45+win80+wp80+wpa81, xamarinios, winv4.5, wpv8.0, wpav8.1
-    xunit.extensibility.core (2.1) - framework: >= net45, dnx451, dnxcore50, monoandroid, monotouch, portable-net45+win80+wp80+wpa81, xamarinios, winv4.5, wpv8.0, wpav8.1
+      xunit.extensibility.core (2.1) - framework: >= net45
+      xunit.extensibility.execution (2.1) - framework: >= net45
+    xunit.extensibility.core (2.1) - framework: >= net45
       xunit.abstractions (2.0)
-    xunit.extensibility.execution (2.1) - framework: >= net45, dnx451, dnxcore50, monoandroid, monotouch, portable-net45+win80+wp80+wpa81, xamarinios, winv4.5, wpv8.0, wpav8.1
-      System.Collections (>= 4.0) - framework: dnxcore50
-      System.Diagnostics.Debug (>= 4.0) - framework: dnxcore50
-      System.Globalization (>= 4.0) - framework: dnxcore50
-      System.IO (>= 4.0) - framework: dnxcore50
-      System.Linq (>= 4.0) - framework: dnxcore50
-      System.Linq.Expressions (>= 4.0) - framework: dnxcore50
-      System.Reflection (>= 4.0) - framework: dnxcore50
-      System.Reflection.Extensions (>= 4.0) - framework: dnxcore50
-      System.Runtime (>= 4.0) - framework: dnxcore50
-      System.Runtime.Extensions (>= 4.0) - framework: dnxcore50
-      System.Text.Encoding (>= 4.0) - framework: dnxcore50
-      System.Threading (>= 4.0) - framework: dnxcore50
-      System.Threading.Tasks (>= 4.0) - framework: dnxcore50
-      xunit.abstractions (>= 2.0) - framework: dnxcore50
-      xunit.extensibility.core (2.1) - framework: >= net45, dnx451, dnxcore50, monoandroid, monotouch, xamarinios, winv4.5, wpv8.0, wpav8.1
+    xunit.extensibility.execution (2.1) - framework: >= net45
+      xunit.extensibility.core (2.1) - framework: >= net45
     xunit.extensions (1.9.0.1566)
       xunit (>= 1.9.0.1566)
     xunit.runner.console (2.1)
-    xunit.runner.visualstudio (2.1) - version_in_path: true
-
+    xunit.runner.visualstudio (2.1.0) - version_in_path: true
+GITHUB
+  remote: eiriktsarpalis/TypeShape
+  specs:
+    src/TypeShape/TypeShape.fs (33f2fd76fedbaf0d6eda9b226936c2afd5920745)
 GROUP Build
 NUGET
   remote: https://www.nuget.org/api/v2
   specs:
-    FAKE (4.27)
+    FAKE (4.35)
     Microsoft.Bcl (1.1.10) - framework: net10, net11, net20, net30, net35, net40, net40-full
       Microsoft.Bcl.Build (>= 1.0.14)
     Microsoft.Bcl.Build (1.0.21) - import_targets: false, framework: net10, net11, net20, net30, net35, net40, net40-full
@@ -228,10 +44,10 @@ NUGET
       Microsoft.Bcl (>= 1.1.10)
       Microsoft.Bcl.Build (>= 1.0.14)
     NuGet.CommandLine (3.4.3)
-    Octokit (0.19)
+    Octokit (0.20)
       Microsoft.Net.Http  - framework: net10, net11, net20, net30, net35, net40, net40-full
 GITHUB
   remote: fsharp/FAKE
   specs:
-    modules/Octokit/Octokit.fsx (8c077f35f8cd0350485109ddd1810dafe9885d1a)
-      Octokit
+    modules/Octokit/Octokit.fsx (6fd8b4d79012bde7c3210031b5017b6c9fc05fda)
+      Octokit (>= 0.20)

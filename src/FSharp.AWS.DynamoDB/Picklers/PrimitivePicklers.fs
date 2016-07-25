@@ -10,10 +10,10 @@ open System.Reflection
 
 open Microsoft.FSharp.Core.LanguagePrimitives
 
+open TypeShape
 open Amazon.DynamoDBv2.Model
 
 open FSharp.AWS.DynamoDB
-open FSharp.AWS.DynamoDB.TypeShape
 
 //
 //  Pickler implementations for primitive types
@@ -258,8 +258,8 @@ type StringRepresentationPickler<'T>(ep : StringRepresentablePickler<'T>) =
 
 let mkStringRepresentationPickler (resolver : IPicklerResolver) (prop : PropertyInfo) =
     getShape(prop.PropertyType).Accept {
-        new IFunc<Pickler> with
-            member __.Invoke<'T>() =
+        new ITypeShapeVisitor<Pickler> with
+            member __.Visit<'T>() =
                 match resolver.Resolve<'T>() with
                 | :? StringRepresentablePickler<'T> as tp ->
                     if tp.PickleType = PickleType.String then tp :> Pickler
@@ -288,6 +288,6 @@ type SerializerAttributePickler<'T>(serializer : IPropertySerializer, resolver :
 
 let mkSerializerAttributePickler (resolver : IPicklerResolver) (serializer : IPropertySerializer) (t : Type) =
     getShape(t).Accept { 
-        new IFunc<Pickler> with 
-            member __.Invoke<'T> () = 
+        new ITypeShapeVisitor<Pickler> with 
+            member __.Visit<'T> () = 
                 new SerializerAttributePickler<'T>(serializer, resolver) :> _ }

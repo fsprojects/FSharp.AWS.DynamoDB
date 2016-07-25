@@ -1,3 +1,4 @@
+framework: >= net40
 redirects: force
 source https://www.nuget.org/api/v2
 
@@ -10,6 +11,7 @@ nuget xunit.runner.console
 nuget xunit.runner.visualstudio version_in_path: true
 nuget FsUnit.xUnit
 nuget FsCheck
+github eiriktsarpalis/TypeShape src/TypeShape/TypeShape.fs
 
 
 group Build
