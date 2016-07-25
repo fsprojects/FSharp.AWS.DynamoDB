@@ -20,7 +20,7 @@ open FSharp.AWS.DynamoDB
 module private ResolverImpl =
 
     let resolvePickler (resolver : IPicklerResolver) (t : Type) : Pickler =
-        match getShape t with
+        match TypeShape.Resolve t with
         | Shape.Bool -> new BoolPickler() :> _
         | Shape.Byte -> mkNumericalPickler<byte> () :> _
         | Shape.SByte -> mkNumericalPickler<sbyte> () :> _
