@@ -96,20 +96,6 @@ module private ResolverImpl =
 
                         new MapPickler<'V>(resolver.Resolve()) :> _ }
 
-        | Shape.Collection s ->
-            s.Accept {
-                new ICollectionVisitor<Pickler> with
-                    member __.Visit<'T> () =
-                        let tp = resolver.Resolve<'T>()
-                        new ListPickler<ICollection<'T>, 'T>(Seq.toArray >> unbox, null, tp) :> _ }
-
-        | Shape.Enumerable s ->
-            s.Accept {
-                new IEnumerableVisitor<Pickler> with
-                    member __.Visit<'T> () =
-                        let tp = resolver.Resolve<'T>()
-                        new ListPickler<seq<'T>, 'T>(Seq.toArray >> unbox, null, tp) :> _ }
-
         | Shape.Tuple _ as s ->
             s.Accept {
                 new ITypeShapeVisitor<Pickler> with

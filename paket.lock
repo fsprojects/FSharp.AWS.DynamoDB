@@ -31,12 +31,12 @@ NUGET
 GITHUB
   remote: eiriktsarpalis/TypeShape
   specs:
-    src/TypeShape/TypeShape.fs (62ac9501b8b2b555525147380afb435dac625c81)
+    src/TypeShape/TypeShape.fs (818b0a5cd0beb83d5dfb91e87f7f24d445a77e69)
 GROUP Build
 NUGET
   remote: https://www.nuget.org/api/v2
   specs:
-    FAKE (4.35)
+    FAKE (4.36)
     Microsoft.Bcl (1.1.10) - framework: net10, net11, net20, net30, net35, net40, net40-full
       Microsoft.Bcl.Build (>= 1.0.14)
     Microsoft.Bcl.Build (1.0.21) - import_targets: false, framework: net10, net11, net20, net30, net35, net40, net40-full
@@ -44,10 +44,10 @@ NUGET
       Microsoft.Bcl (>= 1.1.10)
       Microsoft.Bcl.Build (>= 1.0.14)
     NuGet.CommandLine (3.4.3)
-    Octokit (0.20)
+    Octokit (0.21.1)
       Microsoft.Net.Http  - framework: net10, net11, net20, net30, net35, net40, net40-full
 GITHUB
   remote: fsharp/FAKE
   specs:
-    modules/Octokit/Octokit.fsx (6fd8b4d79012bde7c3210031b5017b6c9fc05fda)
+    modules/Octokit/Octokit.fsx (8fd20ae42c996060bc8bedb821edfb50517cdd8b)
       Octokit (>= 0.20)
