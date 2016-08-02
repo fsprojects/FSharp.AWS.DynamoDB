@@ -31,7 +31,7 @@ NUGET
 GITHUB
   remote: eiriktsarpalis/TypeShape
   specs:
-    src/TypeShape/TypeShape.fs (818b0a5cd0beb83d5dfb91e87f7f24d445a77e69)
+    src/TypeShape/TypeShape.fs (8864d59d2a3bb151305952897748ccc2c1cbfc62)
 GROUP Build
 NUGET
   remote: https://www.nuget.org/api/v2
