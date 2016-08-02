@@ -117,13 +117,16 @@ module private ResolverImpl =
         static let globalCache = new ConcurrentDictionary<Type, Lazy<Pickler>>()
         let stack = new Stack<Type>()
         let resolve t = 
-            if stack.Contains t then
-                UnSupportedType.Raise(t, "recursive types not supported.")
+            try
+                if stack.Contains t then
+                    UnSupportedType.Raise(t, "recursive types not supported.")
                 
-            stack.Push t
-            let pf = globalCache.GetOrAdd(t, fun t -> lazy(resolvePickler self t))
-            let _ = stack.Pop()
-            pf.Value
+                stack.Push t
+                let pf = globalCache.GetOrAdd(t, fun t -> lazy(resolvePickler self t))
+                let _ = stack.Pop()
+                pf.Value
+
+            with UnsupportedShape t -> UnSupportedType.Raise t
 
         interface IPicklerResolver with
             member __.Resolve(t : Type) = resolve t
