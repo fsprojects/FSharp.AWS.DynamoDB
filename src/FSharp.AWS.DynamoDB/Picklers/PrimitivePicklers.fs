@@ -257,7 +257,7 @@ type StringRepresentationPickler<'T>(ep : StringRepresentablePickler<'T>) =
         else invalidCast a
 
 let mkStringRepresentationPickler (resolver : IPicklerResolver) (prop : PropertyInfo) =
-    TypeShape.Resolve(prop.PropertyType).Accept {
+    TypeShape.Create(prop.PropertyType).Accept {
         new ITypeShapeVisitor<Pickler> with
             member __.Visit<'T>() =
                 match resolver.Resolve<'T>() with
@@ -287,7 +287,7 @@ type SerializerAttributePickler<'T>(serializer : IPropertySerializer, resolver :
         serializer.Deserialize pickle
 
 let mkSerializerAttributePickler (resolver : IPicklerResolver) (serializer : IPropertySerializer) (t : Type) =
-    TypeShape.Resolve(t).Accept { 
+    TypeShape.Create(t).Accept { 
         new ITypeShapeVisitor<Pickler> with 
             member __.Visit<'T> () = 
                 new SerializerAttributePickler<'T>(serializer, resolver) :> _ }

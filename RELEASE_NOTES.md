@@ -1,3 +1,7 @@
+### 0.5.0-beta
+* Move converter generation to TypeShape.
+* Target latest unquote release.
+
 ### 0.4.1-beta
 * Fix packaging issue.
 
