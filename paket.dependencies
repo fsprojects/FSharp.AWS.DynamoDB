@@ -2,7 +2,7 @@ framework: >= net40
 redirects: force
 source https://www.nuget.org/api/v2
 
-nuget Unquote ~> 3.0
+nuget Unquote ~> 3.1.2
 nuget AWSSDK.DynamoDBv2 ~> 3.0
 nuget FSharp.Core ~> 4.0 redirects:force
 nuget xunit ~> 2.0

@@ -5,13 +5,13 @@ NUGET
     AWSSDK.Core (3.1.9.1)
     AWSSDK.DynamoDBv2 (3.1.5.2)
       AWSSDK.Core (>= 3.1.9 < 3.2)
-    FsCheck (2.5)
+    FsCheck (2.6)
       FSharp.Core (>= 3.1.2.5)
     FSharp.Core (4.0.0.1) - redirects: force
     FsUnit.xUnit (1.4.1)
       FSharp.Core (>= 3.1.2.5)
       xunit (2.1)
-    Unquote (3.1.1)
+    Unquote (3.1.2)
     xunit (2.1)
       xunit.assert (2.1)
       xunit.core (2.1)
@@ -31,7 +31,7 @@ NUGET
 GITHUB
   remote: eiriktsarpalis/TypeShape
   specs:
-    src/TypeShape/TypeShape.fs (8864d59d2a3bb151305952897748ccc2c1cbfc62)
+    src/TypeShape/TypeShape.fs (5b533d1ab07d5d48c33bfc27323b8de2b9d481c9)
 GROUP Build
 NUGET
   remote: https://www.nuget.org/api/v2
