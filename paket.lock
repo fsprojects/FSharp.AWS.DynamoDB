@@ -1,10 +1,9 @@
 FRAMEWORK: >= NET40
 NUGET
   remote: https://www.nuget.org/api/v2
-  specs:
-    AWSSDK.Core (3.1.9.1)
-    AWSSDK.DynamoDBv2 (3.1.5.2)
-      AWSSDK.Core (>= 3.1.9 < 3.2)
+    AWSSDK.Core (3.1.10)
+    AWSSDK.DynamoDBv2 (3.1.5.3)
+      AWSSDK.Core (>= 3.1.9.2 < 3.2)
     FsCheck (2.6)
       FSharp.Core (>= 3.1.2.5)
     FSharp.Core (4.0.0.1) - redirects: force
@@ -30,13 +29,11 @@ NUGET
     xunit.runner.visualstudio (2.1.0) - version_in_path: true
 GITHUB
   remote: eiriktsarpalis/TypeShape
-  specs:
-    src/TypeShape/TypeShape.fs (5b533d1ab07d5d48c33bfc27323b8de2b9d481c9)
+    src/TypeShape/TypeShape.fs (e27b1e7cbff320103ce909b0d035bf509f6fb947)
 GROUP Build
 NUGET
   remote: https://www.nuget.org/api/v2
-  specs:
-    FAKE (4.36)
+    FAKE (4.39)
     Microsoft.Bcl (1.1.10) - framework: net10, net11, net20, net30, net35, net40, net40-full
       Microsoft.Bcl.Build (>= 1.0.14)
     Microsoft.Bcl.Build (1.0.21) - import_targets: false, framework: net10, net11, net20, net30, net35, net40, net40-full
@@ -48,6 +45,5 @@ NUGET
       Microsoft.Net.Http  - framework: net10, net11, net20, net30, net35, net40, net40-full
 GITHUB
   remote: fsharp/FAKE
-  specs:
-    modules/Octokit/Octokit.fsx (8fd20ae42c996060bc8bedb821edfb50517cdd8b)
+    modules/Octokit/Octokit.fsx (e5870cb85f9b500246e02c6daa94e5131dad7a6e)
       Octokit (>= 0.20)
