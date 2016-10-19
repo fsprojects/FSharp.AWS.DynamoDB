@@ -439,3 +439,13 @@ module ``Record Generation Tests`` =
         let pickler = new DateTimeOffsetPickler()
         let inline cmp x y = sign(compare x y)
         Check.One(config, fun (d1:DateTimeOffset,d2:DateTimeOffset) -> cmp d1 d2 = cmp (pickler.UnParse d1) (pickler.UnParse d2))
+
+    [<Fact>]
+    let ``DateTimeOffset pickler encoding should preserve offsets`` () =
+        let config = { Config.QuickThrowOnFailure with MaxTest = 1000 }
+        let pickler = new DateTimeOffsetPickler()
+        Check.One(config, 
+            fun (d:DateTimeOffset) -> 
+                let d' = pickler.UnParse d |> pickler.Parse 
+                d'.DateTime |> should equal d.DateTime
+                d'.Offset |> should equal d.Offset)

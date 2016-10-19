@@ -1,3 +1,6 @@
+### 0.6.0-beta
+* Preserve original offsets when persisting DateTimeOffset fields.
+
 ### 0.5.0-beta
 * Move converter generation to TypeShape.
 * Target latest unquote release.
