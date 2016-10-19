@@ -176,9 +176,9 @@ type GuidPickler() =
 
 type DateTimeOffsetPickler() =
     inherit StringRepresentablePickler<DateTimeOffset> ()
-    static let isoFormat = "yyyy-MM-dd\THH:mm:ss.fffffff\Z"
-    let parse s = DateTimeOffset.Parse(s).ToLocalTime()
-    let unparse (d:DateTimeOffset) = d.ToUniversalTime().ToString(isoFormat)
+    static let isoFormat = "yyyy-MM-dd\THH:mm:ss.fffffffzzz"
+    static let parse s = DateTimeOffset.Parse(s)
+    static let unparse (d:DateTimeOffset) = d.ToString(isoFormat)
 
     override __.PickleType = PickleType.String
     override __.PicklerType = PicklerType.Value

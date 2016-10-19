@@ -432,3 +432,10 @@ module ``Record Generation Tests`` =
     let ``LSI should fail if no RangeKey is specified`` () =
         fun () -> RecordTemplate.Define<LSI2>()
         |> shouldFailwith<_, ArgumentException>
+
+    [<Fact>]
+    let ``DateTimeOffset pickler encoding should preserve ordering`` () =
+        let config = { Config.QuickThrowOnFailure with MaxTest = 1000 }
+        let pickler = new DateTimeOffsetPickler()
+        let inline cmp x y = sign(compare x y)
+        Check.One(config, fun (d1:DateTimeOffset,d2:DateTimeOffset) -> cmp d1 d2 = cmp (pickler.UnParse d1) (pickler.UnParse d2))
