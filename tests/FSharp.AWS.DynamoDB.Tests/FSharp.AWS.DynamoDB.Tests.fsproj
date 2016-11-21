@@ -1,42 +1,64 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
+    <Name>FSharp.AWS.DynamoDB.Tests</Name>
+    <AssemblyName>FSharp.AWS.DynamoDB.Tests</AssemblyName>
+    <RootNamespace>FSharp.AWS.DynamoDB.Tests</RootNamespace>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>2c9367a6-2835-40d3-beae-00b66c7ef063</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>FSharp.AWS.DynamoDB.Tests</RootNamespace>
-    <AssemblyName>FSharp.AWS.DynamoDB.Tests</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
-    <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <Name>FSharp.AWS.DynamoDB.Tests</Name>
-    <TargetFrameworkProfile />
+    <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
+    <DebugType>Full</DebugType>
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
     <OutputPath>..\..\bin\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
-    <DocumentationFile>..\..\bin\FSharp.AWS.DynamoDB.Tests.XML</DocumentationFile>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
+    <DebugType>PdbOnly</DebugType>
     <Optimize>true</Optimize>
     <Tailcalls>true</Tailcalls>
     <OutputPath>..\..\bin\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
-    <DocumentationFile>..\..\bin\FSharp.AWS.DynamoDB.Tests.XML</DocumentationFile>
   </PropertyGroup>
-  <PropertyGroup>
-    <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
-  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="mscorlib" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FSharp.AWS.DynamoDB\FSharp.AWS.DynamoDB.fsproj">
+      <Name>FSharp.AWS.DynamoDB</Name>
+      <Project>{57485723-02fa-4baf-939f-570b8b3024ba}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Utils.fs" />
+    <Compile Include="RecordGenerationTests.fs" />
+    <Compile Include="SimpleTableOperationTests.fs" />
+    <Compile Include="ConditionalExpressionTests.fs" />
+    <Compile Include="UpdateExpressionTests.fs" />
+    <Compile Include="ProjectionExpressionTests.fs" />
+    <Compile Include="SparseGSITests.fs" />
+    <None Include="paket.references" />
+    <Content Include="App.config" />
+    <Content Include="packages.config" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <Choose>
     <When Condition="'$(VisualStudioVersion)' == '11.0'">
       <PropertyGroup Condition="Exists('$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets')">
@@ -58,38 +80,6 @@
     </When>
   </Choose>
   <Import Project="..\..\packages\xunit.runner.visualstudio.2.1.0\build\$(__paket__xunit_runner_visualstudio_props).props" Condition="Exists('..\..\packages\xunit.runner.visualstudio.2.1.0\build\$(__paket__xunit_runner_visualstudio_props).props')" Label="Paket" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
-  <ItemGroup>
-    <Compile Include="Utils.fs" />
-    <Compile Include="RecordGenerationTests.fs" />
-    <Compile Include="SimpleTableOperationTests.fs" />
-    <Compile Include="ConditionalExpressionTests.fs" />
-    <Compile Include="UpdateExpressionTests.fs" />
-    <Compile Include="ProjectionExpressionTests.fs" />
-    <None Include="paket.references" />
-    <Content Include="App.config" />
-    <Content Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="mscorlib" />
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Numerics" />
-    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <Private>False</Private>
-    </Reference>
-    <ProjectReference Include="..\..\src\FSharp.AWS.DynamoDB\FSharp.AWS.DynamoDB.fsproj">
-      <Name>FSharp.AWS.DynamoDB</Name>
-      <Project>{57485723-02fa-4baf-939f-570b8b3024ba}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-  </ItemGroup>
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.0'">
       <ItemGroup>

@@ -67,6 +67,10 @@ with
         List.isEmpty id.NestedAttributes &&
         id.KeySchemata |> Array.exists(function (_, KeyType.Range) -> true | _ -> false)
 
+    member id.IsPrimaryKey =
+        List.isEmpty id.NestedAttributes &&
+        id.KeySchemata |> Array.exists(function ({ Type = PrimaryKey }, _) -> true | _ -> false)
+
     member id.Append nf = { id with NestedAttributes = id.NestedAttributes @ [nf] }
     member id.Apply (inputs : obj[]) =
         let applyField nf =

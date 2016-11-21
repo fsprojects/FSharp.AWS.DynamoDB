@@ -105,9 +105,12 @@ type PrimaryKeyStructure with
             TableKey.Combined(hashKey, rangeKey)
 
 type KeyAttributeSchema with
-    static member Create (name : string, pickler : Pickler) =
-        if pickler.PicklerType <> PicklerType.Value then
-            invalidArg name <| "DynamoDB Key attributes do not support serialization attributes."
+    static member Create (name : string, pickler : Pickler, allowNull : bool) =
+        if pickler.PicklerType <> PicklerType.Value && pickler.PicklerType <> PicklerType.Wrapper then
+            invalidArg name <| sprintf "Unsupported type '%O' for DynamoDB Key attribute." pickler.Type
+
+        if pickler.PicklerType = PicklerType.Wrapper && not allowNull then
+            invalidArg name <| "DynamoDB Primary Key attributes can't be nullable or option"
 
         let keyType =
             match pickler.PickleType with
@@ -118,12 +121,12 @@ type KeyAttributeSchema with
 
         { AttributeName = name ; KeyType = keyType }
 
-    static member Create(prop : PropertyMetadata) = KeyAttributeSchema.Create(prop.Name, prop.Pickler)
+    static member Create(prop : PropertyMetadata, allowNull : bool) = KeyAttributeSchema.Create(prop.Name, prop.Pickler, allowNull)
 
 type TableKeySchema with
     static member OfKeyStructure(ks : PrimaryKeyStructure) : TableKeySchema =
-        let inline mkKeySchema (name : string) (pickler : Pickler) = KeyAttributeSchema.Create(name, pickler)
-        let inline mkPropSchema (rp : PropertyMetadata) = KeyAttributeSchema.Create(rp)
+        let inline mkKeySchema (name : string) (pickler : Pickler) = KeyAttributeSchema.Create(name, pickler, false)
+        let inline mkPropSchema (rp : PropertyMetadata) = KeyAttributeSchema.Create(rp, false)
         let inline mkTableKeySchema h r = { HashKey = h ; RangeKey = r ; Type = PrimaryKey }
 
         match ks with
@@ -138,7 +141,7 @@ type RecordTableInfo with
     static member FromRecordPickler<'T> (pickler : RecordPickler<'T>) =
         let hkcaOpt = typeof<'T>.TryGetAttribute<ConstantHashKeyAttribute> ()
         let rkcaOpt = typeof<'T>.TryGetAttribute<ConstantRangeKeyAttribute> ()
-        let mkKAS rp = KeyAttributeSchema.Create rp
+        let mkKAS rp = KeyAttributeSchema.Create(rp, true)
 
         let extractKeyType (rp : PropertyMetadata) (attr : Attribute) =
             match attr with
