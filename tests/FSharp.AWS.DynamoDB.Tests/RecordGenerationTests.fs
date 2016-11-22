@@ -372,6 +372,22 @@ module ``Record Generation Tests`` =
             SH : int * string
         }
 
+    type GSI5 =
+        {
+            [<HashKey>]
+            PH : string
+            [<GlobalSecondaryHashKey(indexName = "GSI")>]
+            SH : string option
+        }
+
+    type GSI6 =
+        {
+            [<HashKey>]
+            PH : string option
+            [<GlobalSecondaryHashKey(indexName = "GSI")>]
+            SH : string option
+        }
+
     [<Fact>]
     let ``GSI Simple HashKey`` () =
         let template = RecordTemplate.Define<GSI1>()
@@ -401,7 +417,20 @@ module ``Record Generation Tests`` =
         fun () -> RecordTemplate.Define<GSI4>()
         |> shouldFailwith<_, ArgumentException>        
 
+    [<Fact>]
+    let ``Sparse GSI`` () =
+        let template = RecordTemplate.Define<GSI5>()
+        template.GlobalSecondaryIndices.Length |> should equal 1
+        let gsi = template.GlobalSecondaryIndices.[0]
+        gsi.RangeKey |> should equal None
+        match gsi.Type with GlobalSecondaryIndex _ -> true | _ -> false
+        |> should equal true
 
+    [<Fact>]
+    let ``GSI should fail with option primary hash key`` () =
+        fun () -> RecordTemplate.Define<GSI6>()
+        |> shouldFailwith<_, ArgumentException>  
+        
     type LSI1 =
         {
             [<HashKey>]
@@ -420,6 +449,16 @@ module ``Record Generation Tests`` =
             LSI : string
         }
 
+    type LSI3 =
+        {
+            [<HashKey>]
+            HashKey : string
+            [<RangeKey>]
+            RangeKey : string
+            [<LocalSecondaryIndex>]
+            LSI : string option
+        }
+
     [<Fact>]
     let ``LSI Simple`` () =
         let template = RecordTemplate.Define<LSI1>()
@@ -432,6 +471,14 @@ module ``Record Generation Tests`` =
     let ``LSI should fail if no RangeKey is specified`` () =
         fun () -> RecordTemplate.Define<LSI2>()
         |> shouldFailwith<_, ArgumentException>
+
+    [<Fact>]
+    let ``Sparse LSI`` () =
+        let template = RecordTemplate.Define<LSI3>()
+        template.LocalSecondaryIndices.Length |> should equal 1
+        let lsi = template.LocalSecondaryIndices.[0]
+        lsi.HashKey |> should equal template.PrimaryKey.HashKey
+        lsi.RangeKey |> Option.isSome |> should equal true
 
     [<Fact>]
     let ``DateTimeOffset pickler encoding should preserve ordering`` () =

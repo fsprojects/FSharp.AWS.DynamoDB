@@ -340,8 +340,8 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
         |> Seq.append exprs.UpdateOps
         |> Seq.filter (function Skip _ -> false | _ -> true)
         |> Seq.map (fun uop -> 
-            if uop.Attribute.IsHashKey then invalidArg "expr" "update expression cannot update hash key."
-            if uop.Attribute.IsRangeKey then invalidArg "expr" "update expression cannot update range key."
+            if uop.Attribute.IsHashKey && uop.Attribute.IsPrimaryKey then invalidArg "expr" "update expression cannot update hash key."
+            if uop.Attribute.IsRangeKey && uop.Attribute.IsPrimaryKey then invalidArg "expr" "update expression cannot update range key."
             uop)
         |> Seq.sortBy (fun uop -> uop.Id, uop.Attribute.Id)
         |> Seq.toArray
