@@ -1,10 +1,10 @@
-FRAMEWORK: >= NET40
+FRAMEWORK: >= NET45
 NUGET
   remote: https://www.nuget.org/api/v2
-    AWSSDK.Core (3.1.10)
-    AWSSDK.DynamoDBv2 (3.1.5.3)
-      AWSSDK.Core (>= 3.1.9.2 < 3.2)
-    FsCheck (2.6)
+    AWSSDK.Core (3.3.5)
+    AWSSDK.DynamoDBv2 (3.3.1)
+      AWSSDK.Core (>= 3.3.5 < 3.4)
+    FsCheck (2.6.2)
       FSharp.Core (>= 3.1.2.5)
     FSharp.Core (4.0.0.1) - redirects: force
     FsUnit.xUnit (1.4.1)
@@ -14,26 +14,26 @@ NUGET
     xunit (2.1)
       xunit.assert (2.1)
       xunit.core (2.1)
-    xunit.abstractions (2.0) - framework: >= net45
+    xunit.abstractions (2.0)
     xunit.assert (2.1)
     xunit.core (2.1)
-      xunit.extensibility.core (2.1) - framework: >= net45
-      xunit.extensibility.execution (2.1) - framework: >= net45
-    xunit.extensibility.core (2.1) - framework: >= net45
+      xunit.extensibility.core (2.1)
+      xunit.extensibility.execution (2.1)
+    xunit.extensibility.core (2.1)
       xunit.abstractions (2.0)
-    xunit.extensibility.execution (2.1) - framework: >= net45
-      xunit.extensibility.core (2.1) - framework: >= net45
+    xunit.extensibility.execution (2.1)
+      xunit.extensibility.core (2.1)
     xunit.extensions (1.9.0.1566)
       xunit (>= 1.9.0.1566)
     xunit.runner.console (2.1)
     xunit.runner.visualstudio (2.1.0) - version_in_path: true
 GITHUB
   remote: eiriktsarpalis/TypeShape
-    src/TypeShape/TypeShape.fs (e27b1e7cbff320103ce909b0d035bf509f6fb947)
+    src/TypeShape/TypeShape.fs (59e0226d2ba30e013c1969c7a476485724b15718)
 GROUP Build
 NUGET
   remote: https://www.nuget.org/api/v2
-    FAKE (4.39)
+    FAKE (4.45.2)
     Microsoft.Bcl (1.1.10) - framework: net10, net11, net20, net30, net35, net40, net40-full
       Microsoft.Bcl.Build (>= 1.0.14)
     Microsoft.Bcl.Build (1.0.21) - import_targets: false, framework: net10, net11, net20, net30, net35, net40, net40-full
@@ -41,9 +41,10 @@ NUGET
       Microsoft.Bcl (>= 1.1.10)
       Microsoft.Bcl.Build (>= 1.0.14)
     NuGet.CommandLine (3.4.3)
-    Octokit (0.21.1)
+    Octokit (0.23)
       Microsoft.Net.Http  - framework: net10, net11, net20, net30, net35, net40, net40-full
+    SourceLink.Fake (1.1)
 GITHUB
   remote: fsharp/FAKE
-    modules/Octokit/Octokit.fsx (e5870cb85f9b500246e02c6daa94e5131dad7a6e)
+    modules/Octokit/Octokit.fsx (eaf899a7be2e2c0cb5c00a022f19f67c2d2c337e)
       Octokit (>= 0.20)

@@ -1,3 +1,6 @@
+### 0.7.0-beta
+* Add sparse GSI Support.
+
 ### 0.6.0-beta
 * Preserve original offsets when persisting DateTimeOffset fields.
 

@@ -1,8 +1,8 @@
-framework: >= net40
+framework: >= net45
 redirects: force
 source https://www.nuget.org/api/v2
 
-nuget Unquote ~> 3.1.2
+nuget Unquote ~> 3.1
 nuget AWSSDK.DynamoDBv2 ~> 3.0
 nuget FSharp.Core ~> 4.0 redirects:force
 nuget xunit ~> 2.0
@@ -11,12 +11,12 @@ nuget xunit.runner.console
 nuget xunit.runner.visualstudio version_in_path: true
 nuget FsUnit.xUnit
 nuget FsCheck
-github eiriktsarpalis/TypeShape:1.0 src/TypeShape/TypeShape.fs
-
+github eiriktsarpalis/TypeShape:1.2 src/TypeShape/TypeShape.fs
 
 group Build
   source https://www.nuget.org/api/v2
   
   nuget FAKE
-  nuget Nuget.CommandLine  
+  nuget SourceLink.Fake
+  nuget Nuget.CommandLine
   github fsharp/FAKE modules/Octokit/Octokit.fsx

@@ -4,6 +4,7 @@
 
 #I "packages/build/FAKE/tools"
 #r "packages/build/FAKE/tools/FakeLib.dll"
+#load "packages/build/SourceLink.Fake/tools/SourceLink.fsx"
 
 open System
 open System.IO
@@ -13,6 +14,7 @@ open Fake.Git
 open Fake.ReleaseNotesHelper
 open Fake.AssemblyInfoFile
 open Fake.Testing
+open SourceLink
 
 // --------------------------------------------------------------------------------------
 // Information about the project to be used at NuGet and in AssemblyInfo files
@@ -20,7 +22,7 @@ open Fake.Testing
 
 let project = "FSharp.AWS.DynamoDB"
 
-let gitOwner = "eiriktsarpalis"
+let gitOwner = "fsprojects"
 let gitHome = "https://github.com/" + gitOwner
 let gitName = "FSharp.AWS.DynamoDB"
 let gitRaw = environVarOrDefault "gitRaw" "https://raw.github.com/" + gitOwner
@@ -104,6 +106,19 @@ Target "RunTests" (fun _ ->
 FinalTarget "CloseTestRunner" (fun _ ->  
 //    ProcessHelper.killProcess "nunit-agent.exe"
     ()
+)
+
+//
+//// --------------------------------------------------------------------------------------
+//// SourceLink
+
+Target "SourceLink" (fun _ ->
+    let baseUrl = sprintf "%s/%s/{0}/%%var2%%" gitRaw project
+    [ yield! !! "src/**/*.??proj"]
+    |> Seq.iter (fun projFile ->
+        let proj = VsProj.LoadRelease projFile
+        SourceLink.Index proj.CompilesNotLinked proj.OutputFilePdb __SOURCE_DIRECTORY__ baseUrl
+    )
 )
 
 //
@@ -203,6 +218,7 @@ Target "Release" DoNothing
   ==> "PrepareRelease"
 //  ==> "GenerateDocs"
 //  ==> "ReleaseDocs"
+  ==> "SourceLink"
   ==> "NuGet"
   ==> "NuGetPush"
   ==> "ReleaseGithub"
