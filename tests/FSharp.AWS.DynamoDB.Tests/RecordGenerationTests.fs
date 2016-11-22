@@ -380,6 +380,14 @@ module ``Record Generation Tests`` =
             SH : string option
         }
 
+    type GSI6 =
+        {
+            [<HashKey>]
+            PH : string option
+            [<GlobalSecondaryHashKey(indexName = "GSI")>]
+            SH : string option
+        }
+
     [<Fact>]
     let ``GSI Simple HashKey`` () =
         let template = RecordTemplate.Define<GSI1>()
@@ -418,6 +426,11 @@ module ``Record Generation Tests`` =
         match gsi.Type with GlobalSecondaryIndex _ -> true | _ -> false
         |> should equal true
 
+    [<Fact>]
+    let ``GSI should fail with option primary hash key`` () =
+        fun () -> RecordTemplate.Define<GSI6>()
+        |> shouldFailwith<_, ArgumentException>  
+        
     type LSI1 =
         {
             [<HashKey>]
