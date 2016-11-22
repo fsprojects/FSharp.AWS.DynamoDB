@@ -61,3 +61,7 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+# SourceLink support
+*.cs eol=lf 
+*.fs eol=lf
