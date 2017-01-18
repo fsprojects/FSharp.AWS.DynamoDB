@@ -66,10 +66,7 @@ module CondExprTypes =
             Serialized : int64 * string
         }
 
-type ``Conditional Expression Tests`` () =
-
-    let client = getDynamoDBAccount()
-    let tableName = getRandomTableName()
+type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
     let rand = let r = Random() in fun () -> int64 <| r.Next()
     let mkItem() = 
@@ -89,7 +86,7 @@ type ``Conditional Expression Tests`` () =
             Serialized = rand(), guid()
         }
 
-    let table = TableContext.Create<CondExprRecord>(client, tableName, createIfNotExists = true)
+    let table = TableContext.Create<CondExprRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
     [<Fact>]
     let ``Item exists precondition`` () =
@@ -565,8 +562,5 @@ type ``Conditional Expression Tests`` () =
 
         let result = table.Query <@ fun r -> r.HashKey = hKey && BETWEEN r.LSI 101L 200L @>
         result.Length |> should equal 100
-        
 
-    interface IDisposable with
-        member __.Dispose() =
-            ignore <| client.DeleteTable(tableName)
+    interface IClassFixture<TableFixture>

@@ -22,10 +22,7 @@ module SparseGSITests =
             SecondaryHashKey : string option
         }
 
-type ``Sparse GSI Tests`` () =
-
-    let client = getDynamoDBAccount()
-    let tableName = getRandomTableName()
+type ``Sparse GSI Tests`` (fixture : TableFixture) =
 
     let rand = let r = Random() in fun () -> int64 <| r.Next()
     let mkItem() = 
@@ -34,7 +31,7 @@ type ``Sparse GSI Tests`` () =
             SecondaryHashKey = if rand() % 2L = 0L then Some (guid()) else None ;
         }
 
-    let table = TableContext.Create<GsiRecord>(client, tableName, createIfNotExists = true)
+    let table = TableContext.Create<GsiRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
     [<Fact>]
     let ``GSI Put Operation`` () =
@@ -58,6 +55,4 @@ type ``Sparse GSI Tests`` () =
         table.Query(keyCondition = <@ fun (r: GsiRecord) -> r.SecondaryHashKey = value.SecondaryHashKey @>) 
             |> Array.length |> should equal 0
 
-    interface IDisposable with
-        member __.Dispose() =
-            ignore <| client.DeleteTable(tableName)
+    interface IClassFixture<TableFixture>

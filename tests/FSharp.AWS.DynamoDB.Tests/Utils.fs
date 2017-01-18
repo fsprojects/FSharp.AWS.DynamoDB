@@ -49,3 +49,14 @@ module Utils =
             Arb.generate<byte[] option>
             |> Gen.map (function None -> null | Some bs -> new MemoryStream(bs))
             |> Arb.fromGen
+
+
+    type TableFixture() =
+        let client = getDynamoDBAccount()
+        let tableName = getRandomTableName()
+        member __.Client = client
+        member __.TableName = tableName
+
+        interface IDisposable with
+            member __.Dispose() =
+                ignore <| client.DeleteTable(tableName)

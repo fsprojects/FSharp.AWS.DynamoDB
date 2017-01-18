@@ -11,7 +11,7 @@ nuget xunit.runner.console
 nuget xunit.runner.visualstudio version_in_path: true
 nuget FsUnit.xUnit
 nuget FsCheck
-github eiriktsarpalis/TypeShape:1.2 src/TypeShape/TypeShape.fs
+github eiriktsarpalis/TypeShape:2.10 src/TypeShape/TypeShape.fs
 
 group Build
   source https://www.nuget.org/api/v2

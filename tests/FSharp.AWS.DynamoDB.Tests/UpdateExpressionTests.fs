@@ -72,10 +72,7 @@ module UpdateExprTypes =
 
     type R = UpdateExprRecord
 
-type ``Update Expression Tests`` () =
-
-    let client = getDynamoDBAccount()
-    let tableName = getRandomTableName()
+type ``Update Expression Tests`` (fixture : TableFixture) =
 
     let rand = let r = Random() in fun () -> int64 <| r.Next()
     let bytes() = Guid.NewGuid().ToByteArray()
@@ -97,7 +94,7 @@ type ``Update Expression Tests`` () =
             Serialized = rand(), guid() ; Serialized2 = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
         }
 
-    let table = TableContext.Create<UpdateExprRecord>(client, tableName, createIfNotExists = true)
+    let table = TableContext.Create<UpdateExprRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
     [<Fact>]
     let ``Attempt to update HashKey`` () =
@@ -487,6 +484,5 @@ type ``Update Expression Tests`` () =
         fun () -> template.PrecomputeUpdateExpr <@ fun v (r : R) -> ADD r.IntSet (1L :: v) @>
         |> shouldFailwith<_, ArgumentException>
 
-    interface IDisposable with
-        member __.Dispose() =
-            ignore <| client.DeleteTable(tableName)
+
+    interface IClassFixture<TableFixture>

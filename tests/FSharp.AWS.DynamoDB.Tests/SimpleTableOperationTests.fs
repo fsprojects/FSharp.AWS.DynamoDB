@@ -45,10 +45,7 @@ module SimpleTableTypes =
             Values : Set<int>
         }
 
-type ``Simple Table Operation Tests`` () =
-
-    let client = getDynamoDBAccount()
-    let tableName = getRandomTableName()
+type ``Simple Table Operation Tests`` (fixture : TableFixture) =
 
     let rand = let r = Random() in fun () -> int64 <| r.Next()
     let mkItem() = 
@@ -59,7 +56,7 @@ type ``Simple Table Operation Tests`` () =
             Unions = [Choice1Of3 (guid()) ; Choice2Of3(rand()) ; Choice3Of3(Guid.NewGuid().ToByteArray())]
         }
 
-    let table = TableContext.Create<SimpleRecord>(client, tableName, createIfNotExists = true)
+    let table = TableContext.Create<SimpleRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
     [<Fact>]
     let ``Convert to compatible table`` () =
@@ -102,7 +99,4 @@ type ``Simple Table Operation Tests`` () =
         item' |> should equal item
         table.ContainsKey key |> should equal false
 
-
-    interface IDisposable with
-        member __.Dispose() =
-            ignore <| client.DeleteTable(tableName)
+    interface IClassFixture<TableFixture>

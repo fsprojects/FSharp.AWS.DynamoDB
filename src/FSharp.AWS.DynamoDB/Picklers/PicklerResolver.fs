@@ -60,10 +60,10 @@ module private ResolverImpl =
                         let tp = resolver.Resolve<'T>()
                         new OptionPickler<'T>(tp) :> _ }
 
-        | Shape.Array s ->
+        | Shape.Array s when s.Rank = 1 ->
             s.Accept {
                 new IArrayVisitor<Pickler> with
-                    member __.Visit<'T> () =
+                    member __.Visit<'T> _rank =
                         let tp = resolver.Resolve<'T>()
                         new ListPickler<'T [], 'T>(Seq.toArray, null, tp) :> _ }
 

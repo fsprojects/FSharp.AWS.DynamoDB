@@ -74,12 +74,10 @@ module ProjectionExprTypes =
 
     type R = ProjectionExprRecord
 
-type ``Projection Expression Tests`` () =
+type ``Projection Expression Tests`` (fixture : TableFixture) =
 
-    let client = getDynamoDBAccount()
-    let tableName = getRandomTableName()
+    static let rand = let r = Random() in fun () -> int64 <| r.Next()
 
-    let rand = let r = Random() in fun () -> int64 <| r.Next()
     let bytes() = Guid.NewGuid().ToByteArray()
     let mkItem() = 
         { 
@@ -99,7 +97,7 @@ type ``Projection Expression Tests`` () =
             Serialized = rand(), guid() ; Serialized2 = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
         }
 
-    let table = TableContext.Create<ProjectionExprRecord>(client, tableName, createIfNotExists = true)
+    let table = TableContext.Create<ProjectionExprRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
     [<Fact>]
     let ``Should fail on invalid projections`` () =
@@ -207,6 +205,4 @@ type ``Projection Expression Tests`` () =
         results |> Seq.map int |> set |> should equal (set [1 .. 200])
         
 
-    interface IDisposable with
-        member __.Dispose() =
-            ignore <| client.DeleteTable(tableName)
+    interface IClassFixture<TableFixture>
