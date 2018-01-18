@@ -1,6 +1,7 @@
-AWSSDK.DynamoDBv2
-xunit
-xunit.extensions
-xunit.runner.visualstudio
-FsUnit.XUnit
-FsCheck
+group Test
+  AWSSDK.DynamoDBv2
+  xunit
+  xunit.extensions
+  xunit.runner.visualstudio
+  FsUnit.XUnit
+  FsCheck
