@@ -7,18 +7,13 @@ nuget Unquote ~> 4.0
 nuget AWSSDK.DynamoDBv2 ~> 3.0
 nuget FSharp.Core ~> 4.0 redirects:force
 github eiriktsarpalis/TypeShape:2.10 src/TypeShape/TypeShape.fs
-
-group Test
-  framework: net45
-  source https://www.nuget.org/api/v2
-
-  nuget AWSSDK.DynamoDBv2 ~> 3.0
-  nuget xunit 2.1
-  nuget xunit.extensions
-  nuget xunit.runner.console
-  nuget xunit.runner.visualstudio version_in_path: true
-  nuget FsUnit.xUnit 1.4.1
-  nuget FsCheck 2.7
+nuget Microsoft.NET.Test.Sdk
+nuget xunit 2.1
+nuget xunit.extensions
+nuget xunit.runner.console
+nuget xunit.runner.visualstudio version_in_path: true
+nuget FsUnit.xUnit 1.4.1
+nuget FsCheck 2.7
 
 group Build
   source https://www.nuget.org/api/v2

@@ -1,4 +1,4 @@
-type project
+type file
 id FSharp.AWS.DynamoDB
 description
     A library that provides an idiomatic F# API for AWS DynamoDB.
@@ -20,3 +20,8 @@ tags
 dependencies
     AWSSDK.DynamoDBv2 >= LOCKEDVERSION
 	Unquote >= LOCKEDVERSION
+files
+    ../../bin/net45/FSharp.AWS.DynamoDB.dll ==> lib/net45
+    ../../bin/net45/FSharp.AWS.DynamoDB.xml ==> lib/net45
+    ../../bin/netstandard2.0/FSharp.AWS.DynamoDB.dll ==> lib/netstandard2.0
+    ../../bin/netstandard2.0/FSharp.AWS.DynamoDB.xml ==> lib/netstandard2.0

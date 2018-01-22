@@ -59,4 +59,4 @@ module Utils =
 
         interface IDisposable with
             member __.Dispose() =
-                ignore <| client.DeleteTable(tableName)
+                client.DeleteTableAsync(tableName).RunSynchronously()
