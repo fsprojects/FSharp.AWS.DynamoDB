@@ -1,3 +1,4 @@
+Microsoft.NET.Test.Sdk
 AWSSDK.DynamoDBv2
 xunit
 xunit.extensions

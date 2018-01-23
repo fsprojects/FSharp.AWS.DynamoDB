@@ -210,7 +210,6 @@ _Pvt_Extensions/
 ModelManifest.xml
 
 .fake/*
-.paket/paket.exe
 temp/*
 paket-files/*
 xunit.html
