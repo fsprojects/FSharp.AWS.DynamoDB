@@ -108,8 +108,8 @@ Target "RunTests" (fun _ ->
 
             HtmlOutputPath = Some "xunit.html"})
 
-    killAllCreatedProcesses ()
-    DeleteDir "db"
+//    killAllCreatedProcesses ()
+//    DeleteDir "db"
 )
 
 FinalTarget "CloseTestRunner" (fun _ ->  
