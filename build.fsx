@@ -90,6 +90,12 @@ Target "Build" (fun () ->
 // Run the unit tests using test runner & kill test runner when complete
 
 Target "RunTests" (fun _ ->
+    Unzip "db" "dynamodb_local_latest.zip"
+    StartProcess (fun psi ->
+        psi.FileName <- "java"
+        psi.Arguments <- "-Djava.library.path=./db/DynamoDBLocal_lib -jar ./db/DynamoDBLocal.jar -inMemory"
+        ())
+
     testAssemblies
     |> Seq.collect (!!)
     |> xUnit2 (fun (p : XUnit2Params) -> 
@@ -101,6 +107,9 @@ Target "RunTests" (fun _ ->
 //                  if not remoteTests then yield ("Category", "Remote") ]
 
             HtmlOutputPath = Some "xunit.html"})
+
+    killAllCreatedProcesses ()
+    DeleteDir "db"
 )
 
 FinalTarget "CloseTestRunner" (fun _ ->  

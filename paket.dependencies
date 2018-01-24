@@ -2,14 +2,14 @@ framework: >= net45
 redirects: force
 source https://www.nuget.org/api/v2
 
-nuget Unquote ~> 3.1
-nuget AWSSDK.DynamoDBv2 ~> 3.0
-nuget FSharp.Core ~> 4.0 redirects:force
-nuget xunit ~> 2.0
+nuget Unquote ~> 4.0.0
+nuget AWSSDK.DynamoDBv2 ~> 3.3.5
+nuget FSharp.Core ~> 4.2.3 redirects:force
+nuget xunit ~> 2.3.1
 nuget xunit.extensions
 nuget xunit.runner.console
 nuget xunit.runner.visualstudio version_in_path: true
-nuget FsUnit.xUnit
+nuget FsUnit.xUnit ~> 3.1.0-beta2
 nuget FsCheck
 github eiriktsarpalis/TypeShape:2.10 src/TypeShape/TypeShape.fs
 

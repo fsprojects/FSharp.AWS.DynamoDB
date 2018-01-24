@@ -24,24 +24,11 @@ module Utils =
     let shouldFailwith<'T, 'Exn when 'Exn :> exn>(f : unit -> 'T) =
         ignore <| Assert.Throws<'Exn>(f >> ignore)
 
-    let getTestRegion () = 
-        match Environment.ResolveEnvironmentVariable "AWS_REGION" with
-        | null | "" -> RegionEndpoint.EUCentral1
-        | region -> RegionEndpoint.GetBySystemName region
-
-    let getAWSProfileName () = 
-        match Environment.ResolveEnvironmentVariable "AWS_CREDENTIAL_STORE_PROFILE" with
-        | null | "" -> "default"
-        | pf -> pf
-
-    let getAWSCredentials () = 
-        try AWSCredentials.FromEnvironmentVariables()
-        with _ -> AWSCredentials.FromCredentialsStore(getAWSProfileName())
-
     let getDynamoDBAccount () =
-        let creds = getAWSCredentials()
-        let region = getTestRegion()
-        new AmazonDynamoDBClient(creds, region) :> IAmazonDynamoDB
+        let credentials = new BasicAWSCredentials("Fake", "Fake");
+        let config = AmazonDynamoDBConfig()
+        config.ServiceURL <- "http://localhost:8000"
+        new AmazonDynamoDBClient(credentials, config) :> IAmazonDynamoDB
 
 
     type FsCheckGenerators =
