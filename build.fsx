@@ -15,6 +15,7 @@ open Fake.ReleaseNotesHelper
 open Fake.AssemblyInfoFile
 open Fake.Testing
 open SourceLink
+open Fake.Testing.Expecto
 
 // --------------------------------------------------------------------------------------
 // Information about the project to be used at NuGet and in AssemblyInfo files
@@ -40,7 +41,7 @@ Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 let release = parseReleaseNotes (File.ReadAllLines "RELEASE_NOTES.md")
 let nugetVersion = release.NugetVersion
 
-let testAssemblies = [ "bin/FSharp.AWS.DynamoDB.Tests.dll" ]
+let testAssemblies = [ "bin/FSharp.AWS.DynamoDB.Tests.exe" ]
 
 Target "BuildVersion" (fun _ ->
     Shell.Exec("appveyor", sprintf "UpdateBuild -Version \"%s\"" nugetVersion) |> ignore
@@ -98,15 +99,7 @@ Target "RunTests" (fun _ ->
 
     testAssemblies
     |> Seq.collect (!!)
-    |> xUnit2 (fun (p : XUnit2Params) -> 
-        { p with
-            TimeOut = TimeSpan.FromMinutes 20.
-            Parallel = ParallelMode.Collections
-//            ExcludeTraits = 
-//                [ if not emulatorTests then yield ("Category", "Emulator")
-//                  if not remoteTests then yield ("Category", "Remote") ]
-
-            HtmlOutputPath = Some "xunit.html"})
+    |> Expecto (fun (p : ExpectoParams) -> p)
 
 //    killAllCreatedProcesses ()
 //    DeleteDir "db"

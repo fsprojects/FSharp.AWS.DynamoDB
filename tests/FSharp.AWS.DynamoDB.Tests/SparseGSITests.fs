@@ -3,8 +3,7 @@
 open System
 open System.Threading
 
-open Xunit
-open FsUnit.Xunit
+open Expecto
 
 open FSharp.AWS.DynamoDB
 
@@ -33,26 +32,27 @@ type ``Sparse GSI Tests`` (fixture : TableFixture) =
 
     let table = TableContext.Create<GsiRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
-    [<Fact>]
-    let ``GSI Put Operation`` () =
+    member this.``GSI Put Operation`` () =
         let value = mkItem()
         let key = table.PutItem value
         let value' = table.GetItem key
-        value' |> should equal value
+        Expect.equal value' value ""
 
-    [<Fact>]
-    let ``GSI Query Operation (match)`` () =
+    member this.``GSI Query Operation (match)`` () =
         let value = { mkItem() with SecondaryHashKey = Some(guid()) }
         let key = table.PutItem value
-        table.Query(keyCondition = <@ fun (r: GsiRecord) -> r.SecondaryHashKey = value.SecondaryHashKey @>) 
-            |> Array.length |> should equal 1
+        Expect.equal
+            (table.Query(keyCondition = <@ fun (r: GsiRecord) -> r.SecondaryHashKey = value.SecondaryHashKey @>) 
+             |> Array.length)
+            1
+            ""
 
-    [<Fact>]
-    let ``GSI Query Operation (missing)`` () =
+    member this.``GSI Query Operation (missing)`` () =
         let value = { mkItem() with SecondaryHashKey = Some(guid()) }
         let key = table.PutItem value
         table.UpdateItem(key, <@ fun r -> { r with SecondaryHashKey = None } @>) |> ignore
-        table.Query(keyCondition = <@ fun (r: GsiRecord) -> r.SecondaryHashKey = value.SecondaryHashKey @>) 
-            |> Array.length |> should equal 0
-
-    interface IClassFixture<TableFixture>
+        Expect.equal
+            (table.Query(keyCondition = <@ fun (r: GsiRecord) -> r.SecondaryHashKey = value.SecondaryHashKey @>) 
+             |> Array.length)
+            0
+            ""

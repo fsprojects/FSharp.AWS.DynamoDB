@@ -3,7 +3,7 @@
 open System
 open System.IO
 
-open Xunit
+open Expecto
 open FsCheck
 
 open Amazon
@@ -22,10 +22,10 @@ module Utils =
     let guid() = Guid.NewGuid().ToString("N")
 
     let shouldFailwith<'T, 'Exn when 'Exn :> exn>(f : unit -> 'T) =
-        ignore <| Assert.Throws<'Exn>(f >> ignore)
+        ignore <| Expect.throws (f >> ignore) typeof<'Exn>.Name
 
     let getDynamoDBAccount () =
-        let credentials = new BasicAWSCredentials("Fake", "Fake");
+        let credentials = new BasicAWSCredentials("Fake", "Fake")
         let config = AmazonDynamoDBConfig()
         config.ServiceURL <- "http://localhost:8000"
         new AmazonDynamoDBClient(credentials, config) :> IAmazonDynamoDB

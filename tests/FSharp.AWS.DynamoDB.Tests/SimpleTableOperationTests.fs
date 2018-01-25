@@ -3,8 +3,7 @@
 open System
 open System.Threading
 
-open Xunit
-open FsUnit.Xunit
+open Expecto
 
 open FSharp.AWS.DynamoDB
 
@@ -58,45 +57,37 @@ type ``Simple Table Operation Tests`` (fixture : TableFixture) =
 
     let table = TableContext.Create<SimpleRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
-    [<Fact>]
-    let ``Convert to compatible table`` () =
+    member this.``Convert to compatible table`` () =
         let table' = table.WithRecordType<CompatibleRecord> ()
-        table'.PrimaryKey |> should equal table.PrimaryKey
+        Expect.equal table'.PrimaryKey table.PrimaryKey "PrimaryKey should be equal" 
 
-    [<Fact>]
-    let ``Convert to compatible table 2`` () =
+    member this.``Convert to compatible table 2`` () =
         let table' = table.WithRecordType<CompatibleRecord2> ()
-        table'.PrimaryKey |> should equal table.PrimaryKey
+        Expect.equal table'.PrimaryKey table.PrimaryKey "PrimaryKey should be equal" 
 
-    [<Fact>]
-    let ``Simple Put Operation`` () =
+    member this.``Simple Put Operation`` () =
         let value = mkItem()
         let key = table.PutItem value
         let value' = table.GetItem key
-        value' |> should equal value
+        Expect.equal value' value "value should be equal"
 
-    [<Fact>]
-    let ``ContainsKey Operation`` () =
+    member this.``ContainsKey Operation`` () =
         let value = mkItem()
         let key = table.PutItem value
-        table.ContainsKey key |> should equal true
+        Expect.equal (table.ContainsKey key) true "ContainsKey should be true"
         let _ = table.DeleteItem key
-        table.ContainsKey key |> should equal false
+        Expect.equal (table.ContainsKey key) false "ContainsKey should be false"
 
-    [<Fact>]
-    let ``Batch Put Operation`` () =
+    member this.``Batch Put Operation`` () =
         let values = set [ for i in 1L .. 20L -> mkItem() ]
         let keys = table.BatchPutItems values
         let values' = table.BatchGetItems keys |> Set.ofArray
-        values' |> should equal values
+        Expect.equal values' values "values should be equal"
 
-    [<Fact>]
-    let ``Simple Delete Operation`` () =
+    member this.``Simple Delete Operation`` () =
         let item = mkItem()
         let key = table.PutItem item
-        table.ContainsKey key |> should equal true
+        Expect.equal (table.ContainsKey key) true "ContainsKey should be true"
         let item' = table.DeleteItem key
-        item' |> should equal item
-        table.ContainsKey key |> should equal false
-
-    interface IClassFixture<TableFixture>
+        Expect.equal item' item "item should be equal"
+        Expect.equal (table.ContainsKey key) false "ContainsKey should be false"
