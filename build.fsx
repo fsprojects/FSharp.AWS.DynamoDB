@@ -99,7 +99,7 @@ Target "RunTests" (fun _ ->
 
     testAssemblies
     |> Seq.collect (!!)
-    |> Expecto (fun (p : ExpectoParams) -> p)
+    |> Expecto (fun (p : ExpectoParams) -> { p with Summary = true; Parallel = false })
 
 //    killAllCreatedProcesses ()
 //    DeleteDir "db"
