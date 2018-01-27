@@ -4,13 +4,11 @@ open System
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.DataModel
 
-open Xunit
-open FsUnit.Xunit
+open Expecto
 open FsCheck
 
 open FSharp.AWS.DynamoDB
 
-[<Trait("Category", "CI")>]
 module ``Record Generation Tests`` =
 
     type Test private () =
@@ -32,7 +30,7 @@ module ``Record Generation Tests`` =
                                 typeof<'Record> r r'
                             |> Console.WriteLine
                     else
-                        r' |> should equal r
+                        Expect.equal r' r "Record should be equal"
                 with 
                 // account for random inputs not supported by the library
                 | :? System.InvalidOperationException as e 
@@ -68,101 +66,71 @@ module ``Record Generation Tests`` =
 
     type ``Custom HashKey Name Record`` = { [<HashKey; CustomName("CustomHashKeyName")>] B1 : string }
 
-    [<Fact>]
+    let checkRecord (actualrt:RecordTemplate<_>) expectedAttributeName expectedKeyType expectedRangeKey =
+        Expect.equal actualrt.PrimaryKey.HashKey.AttributeName expectedAttributeName "Attribute name should be equal"
+        Expect.equal actualrt.PrimaryKey.HashKey.KeyType expectedKeyType "Key type should be equal"
+        Expect.equal actualrt.PrimaryKey.RangeKey expectedRangeKey "Range key should be equal"
+
     let ``Generate correct schema for S Record`` () =
         let rt = RecordTemplate.Define<``S Record``>()
-        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.S
-        rt.PrimaryKey.RangeKey |> should equal None
+        checkRecord rt "A1" ScalarAttributeType.S None
 
-    [<Fact>]
     let ``Generate correct schema for N Record`` () =
         let rt = RecordTemplate.Define<``N Record``>()
-        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.N
-        rt.PrimaryKey.RangeKey |> should equal None
+        checkRecord rt "A1" ScalarAttributeType.N None
 
-    [<Fact>]
     let ``Generate correct schema for B Record`` () =
         let rt = RecordTemplate.Define<``B Record``>()
-        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.B
-        rt.PrimaryKey.RangeKey |> should equal None
+        checkRecord rt "A1" ScalarAttributeType.B None
 
-    [<Fact>]
     let ``Generate correct schema for SN Record`` () =
         let rt = RecordTemplate.Define<``SN Record``>()
-        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.S
-        rt.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.N })
+        checkRecord rt "A1" ScalarAttributeType.S (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.N })
 
-    [<Fact>]
     let ``Generate correct schema for NB Record`` () =
         let rt = RecordTemplate.Define<``NB Record``>()
-        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.N
-        rt.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.B })
+        checkRecord rt "A1" ScalarAttributeType.N (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.B })
 
-    [<Fact>]
     let ``Generate correct schema for BS Record`` () =
         let rt = RecordTemplate.Define<``BS Record``>()
-        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.B
-        rt.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.S })
+        checkRecord rt "A1" ScalarAttributeType.B (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.S })
 
-    [<Fact>]
     let ``Generate correct schema for NS Constant HashKey Record`` () =
         let rt = RecordTemplate.Define<``NS Constant HashKey Record``> ()
-        rt.PrimaryKey.HashKey.AttributeName |> should equal "HashKey"
-        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.N
-        rt.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.S })
+        checkRecord rt "HashKey" ScalarAttributeType.N (Some { AttributeName = "B1" ; KeyType = ScalarAttributeType.S })
 
-    [<Fact>]
     let ``Generate correct schema for BS Constant RangeKey Record`` () =
         let rt = RecordTemplate.Define<``BS Constant RangeKey Record``> ()
-        rt.PrimaryKey.HashKey.AttributeName |> should equal "A1"
-        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.B
-        rt.PrimaryKey.RangeKey |> should equal (Some { AttributeName = "RangeKey" ; KeyType = ScalarAttributeType.S })
+        checkRecord rt "A1" ScalarAttributeType.B (Some { AttributeName = "RangeKey" ; KeyType = ScalarAttributeType.S })
 
-    [<Fact>]
     let ``Generate correct schema for SS String representation Record`` () =
         let rt = RecordTemplate.Define<``SS Record``> ()
         let rt' = RecordTemplate.Define<``SS String Representation Record``> ()
-        rt'.PrimaryKey |> should equal rt.PrimaryKey
+        Expect.equal rt'.PrimaryKey rt.PrimaryKey "PrimaryKey should be equal"
 
-    [<Fact>]
     let ``Generate correct schema for Custom HashKey Name Record`` () =
         let rt = RecordTemplate.Define<``Custom HashKey Name Record``> ()
-        rt.PrimaryKey.HashKey.AttributeName |> should equal "CustomHashKeyName"
-        rt.PrimaryKey.HashKey.KeyType |> should equal ScalarAttributeType.S
-        rt.PrimaryKey.RangeKey |> should equal None
+        checkRecord rt "CustomHashKeyName" ScalarAttributeType.S None
 
 
-    [<Fact>]
     let ``Attribute value roundtrip for S Record``() =
         Test.RoundTrip<``S Record``> ()
 
-    [<Fact>]
     let ``Attribute value roundtrip for N Record``() =
         Test.RoundTrip<``N Record``> ()
 
-    [<Fact>]
     let ``Attribute value roundtrip for B Record``() =
         Test.RoundTrip<``B Record``> ()
 
-    [<Fact>]
     let ``Attribute value roundtrip for SN Record``() =
         Test.RoundTrip<``SN Record``> ()
 
-    [<Fact>]
     let ``Attribute value roundtrip for NB Record``() =
         Test.RoundTrip<``NB Record``> ()
 
-    [<Fact>]
     let ``Attribute value roundtrip for BS Record``() =
         Test.RoundTrip<``BS Record``> ()
 
-    [<Fact>]
     let ``Attribute value roundtrip for NS constant HashKey Record`` () =
         Test.RoundTrip<``NS Constant HashKey Record``> ()
 
@@ -251,19 +219,15 @@ module ``Record Generation Tests`` =
 
 
 
-    [<Fact>]
     let ``Roundtrip complex record A`` () =
         Test.RoundTrip<``Complex Record A``> ()
 
-    [<Fact>]
     let ``Roundtrip complex record B`` () =
         Test.RoundTrip<``Complex Record B``> ()
 
-    [<Fact>]
     let ``Roundtrip complex record C`` () =
         Test.RoundTrip<``Complex Record C``> (tolerateInequality = true)
 
-    [<Fact>]
     let ``Roundtrip complex record D`` () =
         Test.RoundTrip<``Complex Record D``> (tolerateInequality = true)
 
@@ -272,7 +236,6 @@ module ``Record Generation Tests`` =
 
     type ``Record lacking key attributes`` = { A1 : string ; B1 : string }
 
-    [<Fact>]
     let ``Record lacking key attributes should fail``() =
         fun () -> RecordTemplate.Define<``Record lacking key attributes``>()
         |> shouldFailwith<_, ArgumentException>
@@ -280,7 +243,6 @@ module ``Record Generation Tests`` =
 
     type ``Record lacking hashkey attribute`` = { A1 : string ; [<RangeKey>] B1 : string }
 
-    [<Fact>]
     let ``Record lacking hashkey attribute should fail`` () =
         fun () -> RecordTemplate.Define<``Record lacking hashkey attribute``>()
         |> shouldFailwith<_, ArgumentException>
@@ -288,14 +250,12 @@ module ``Record Generation Tests`` =
 
     type ``Record containing unsupported attribute type`` = { [<HashKey>]A1 : string ; [<RangeKey>] B1 : string ; C1 : string list }
 
-    [<Fact>]
     let ``Record containing unsupported attribute type should fail`` () =
         fun () -> RecordTemplate.Define<``Record lacking hashkey attribute``>()
         |> shouldFailwith<_, ArgumentException>
 
     type ``Record containing key field of unsupported type`` = { [<HashKey>]A1 : bool }
 
-    [<Fact>]
     let ``Record containing key field of unsupported type should fail`` () =
         fun () -> RecordTemplate.Define<``Record containing key field of unsupported type``>()
         |> shouldFailwith<_, ArgumentException>
@@ -303,7 +263,6 @@ module ``Record Generation Tests`` =
 
     type ``Record containing multiple HashKey attributes`` = { [<HashKey>]A1 : bool ; [<HashKey>]A2 : string }
 
-    [<Fact>]
     let ``Record containing multiple HashKey attributes should fail`` () =
         fun () -> RecordTemplate.Define<``Record containing multiple HashKey attributes``>()
         |> shouldFailwith<_, ArgumentException>
@@ -311,7 +270,6 @@ module ``Record Generation Tests`` =
     [<ConstantHashKeyAttribute("HashKey", "HashKeyValue")>]
     type ``Record containing costant HashKey attribute lacking RangeKey attribute`` = { Value : int }
 
-    [<Fact>]
     let ``Record containing costant HashKey attribute lacking RangeKey attribute should fail`` () =
         fun () -> RecordTemplate.Define<``Record containing costant HashKey attribute lacking RangeKey attribute``>()
         |> shouldFailwith<_, ArgumentException>
@@ -320,7 +278,6 @@ module ``Record Generation Tests`` =
     type ``Record containing costant HashKey attribute with HashKey attribute`` = 
         { [<HashKey>]HashKey : string ; [<RangeKey>]RangeKey : string }
 
-    [<Fact>]
     let ``Record containing costant HashKey attribute with HashKey attribute should fail`` () =
         fun () -> RecordTemplate.Define<``Record containing costant HashKey attribute with HashKey attribute``>()
         |> shouldFailwith<_, ArgumentException>
@@ -328,12 +285,13 @@ module ``Record Generation Tests`` =
 
     type FooRecord = { A : int ; B : string ; C : DateTimeOffset * string }
 
-    [<Fact>]
     let ``Generated picklers should be singletons`` () =
-        Array.Parallel.init 100 (fun _ -> Pickler.resolve<FooRecord>())
-        |> Seq.distinct
-        |> Seq.length
-        |> should equal 1
+        Expect.equal 
+            (Array.Parallel.init 100 (fun _ -> Pickler.resolve<FooRecord>())
+             |> Seq.distinct
+             |> Seq.length)
+            1
+            "Generated picklers should be singletons"
 
 
     // Section D. Secondary index generation
@@ -388,45 +346,36 @@ module ``Record Generation Tests`` =
             SH : string option
         }
 
-    [<Fact>]
     let ``GSI Simple HashKey`` () =
         let template = RecordTemplate.Define<GSI1>()
-        template.GlobalSecondaryIndices.Length |> should equal 1
+        Expect.equal template.GlobalSecondaryIndices.Length 1 "Global secondary indices length should be 1"
         let gsi = template.GlobalSecondaryIndices.[0]
-        gsi.RangeKey |> should equal None
-        match gsi.Type with GlobalSecondaryIndex _ -> true | _ -> false
-        |> should equal true
+        Expect.equal gsi.RangeKey None "Range key should be None"
+        Expect.equal (match gsi.Type with GlobalSecondaryIndex _ -> true | _ -> false) true "Type should be GlobalSecondaryIndex"
 
 
-    [<Fact>]
     let ``GSI Simple Combined key`` () =
         let template = RecordTemplate.Define<GSI2>()
-        template.GlobalSecondaryIndices.Length |> should equal 1
+        Expect.equal template.GlobalSecondaryIndices.Length 1 "Global secondary indices length should be 1"
         let gsi = template.GlobalSecondaryIndices.[0]
-        gsi.RangeKey |> Option.isSome |> should equal true
-        match gsi.Type with GlobalSecondaryIndex _ -> true | _ -> false
-        |> should equal true
+        Expect.equal (gsi.RangeKey |> Option.isSome) true "Range key should be Some"
+        Expect.equal  (match gsi.Type with GlobalSecondaryIndex _ -> true | _ -> false) true "Type should be GlobalSecondaryIndex"
 
-    [<Fact>]
     let ``GSI should fail if supplying RangeKey only`` () =
         fun () -> RecordTemplate.Define<GSI3>()
         |> shouldFailwith<_, ArgumentException>
 
-    [<Fact>]
     let ``GSI should fail if invalid key type`` () =
         fun () -> RecordTemplate.Define<GSI4>()
         |> shouldFailwith<_, ArgumentException>        
 
-    [<Fact>]
     let ``Sparse GSI`` () =
         let template = RecordTemplate.Define<GSI5>()
-        template.GlobalSecondaryIndices.Length |> should equal 1
+        Expect.equal template.GlobalSecondaryIndices.Length 1 "Global secondary indices length should be 1"
         let gsi = template.GlobalSecondaryIndices.[0]
-        gsi.RangeKey |> should equal None
-        match gsi.Type with GlobalSecondaryIndex _ -> true | _ -> false
-        |> should equal true
+        Expect.equal gsi.RangeKey None "Range key should be None"
+        Expect.equal (match gsi.Type with GlobalSecondaryIndex _ -> true | _ -> false) true "Type should be GlobalSecondaryIndex"
 
-    [<Fact>]
     let ``GSI should fail with option primary hash key`` () =
         fun () -> RecordTemplate.Define<GSI6>()
         |> shouldFailwith<_, ArgumentException>  
@@ -459,40 +408,35 @@ module ``Record Generation Tests`` =
             LSI : string option
         }
 
-    [<Fact>]
     let ``LSI Simple`` () =
         let template = RecordTemplate.Define<LSI1>()
-        template.LocalSecondaryIndices.Length |> should equal 1
+        Expect.equal template.LocalSecondaryIndices.Length 1 "Local secondary indices length should be 1"
         let lsi = template.LocalSecondaryIndices.[0]
-        lsi.HashKey |> should equal template.PrimaryKey.HashKey
-        lsi.RangeKey |> Option.isSome |> should equal true
+        Expect.equal lsi.HashKey template.PrimaryKey.HashKey "Hash key should be equal"
+        Expect.equal (lsi.RangeKey |> Option.isSome) true "RangeKey  should be equal to Some"
 
-    [<Fact>]
     let ``LSI should fail if no RangeKey is specified`` () =
         fun () -> RecordTemplate.Define<LSI2>()
         |> shouldFailwith<_, ArgumentException>
 
-    [<Fact>]
     let ``Sparse LSI`` () =
         let template = RecordTemplate.Define<LSI3>()
-        template.LocalSecondaryIndices.Length |> should equal 1
+        Expect.equal template.LocalSecondaryIndices.Length 1 "Local secondary indices length should be 1"
         let lsi = template.LocalSecondaryIndices.[0]
-        lsi.HashKey |> should equal template.PrimaryKey.HashKey
-        lsi.RangeKey |> Option.isSome |> should equal true
+        Expect.equal lsi.HashKey template.PrimaryKey.HashKey "Hash key should be equal"
+        Expect.equal (lsi.RangeKey |> Option.isSome) true "RangeKey  should be equal to Some"
 
-    [<Fact>]
     let ``DateTimeOffset pickler encoding should preserve ordering`` () =
         let config = { Config.QuickThrowOnFailure with MaxTest = 1000 }
         let pickler = new DateTimeOffsetPickler()
         let inline cmp x y = sign(compare x y)
         Check.One(config, fun (d1:DateTimeOffset,d2:DateTimeOffset) -> cmp d1 d2 = cmp (pickler.UnParse d1) (pickler.UnParse d2))
 
-    [<Fact>]
     let ``DateTimeOffset pickler encoding should preserve offsets`` () =
         let config = { Config.QuickThrowOnFailure with MaxTest = 1000 }
         let pickler = new DateTimeOffsetPickler()
         Check.One(config, 
             fun (d:DateTimeOffset) -> 
                 let d' = pickler.UnParse d |> pickler.Parse 
-                d'.DateTime |> should equal d.DateTime
-                d'.Offset |> should equal d.Offset)
+                Expect.equal d'.DateTime d.DateTime "Date should be equal"
+                d'.Offset |> Expect.equal d.Offset)

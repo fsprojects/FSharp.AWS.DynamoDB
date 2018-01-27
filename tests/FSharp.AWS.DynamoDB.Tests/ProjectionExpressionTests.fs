@@ -5,8 +5,7 @@ open System.Threading
 
 open Microsoft.FSharp.Quotations
 
-open Xunit
-open FsUnit.Xunit
+open Expecto
 
 open FSharp.AWS.DynamoDB
 
@@ -99,8 +98,7 @@ type ``Projection Expression Tests`` (fixture : TableFixture) =
 
     let table = TableContext.Create<ProjectionExprRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
-    [<Fact>]
-    let ``Should fail on invalid projections`` () =
+    member this.``Should fail on invalid projections`` () =
         let testProj (p : Expr<R -> 'T>) = 
             fun () -> proj p
             |> shouldFailwith<_, ArgumentException>
@@ -110,8 +108,7 @@ type ``Projection Expression Tests`` (fixture : TableFixture) =
         testProj <@ fun r -> not r.Bool @>
         testProj <@ fun r -> r.List.[0] + 1L @>
 
-    [<Fact>]
-    let ``Should fail on conflicting projections`` () =
+    member this.``Should fail on conflicting projections`` () =
         let testProj (p : Expr<R -> 'T>) = 
             fun () -> proj p
             |> shouldFailwith<_, ArgumentException>
@@ -119,65 +116,56 @@ type ``Projection Expression Tests`` (fixture : TableFixture) =
         testProj <@ fun r -> r.Bool, r.Bool @>
         testProj <@ fun r -> r.NestedList.[0].NE, r.NestedList.[0] @>
 
-    [<Fact>]
-    let ``Null value projection`` () =
+    member this.``Null value projection`` () =
         let item = mkItem()
         let key = table.PutItem(item)
         table.GetItemProjected(key, <@ fun r -> () @>)
         table.GetItemProjected(key, <@ ignore @>)
 
-    [<Fact>]
-    let ``Single value projection`` () =
+    member this.``Single value projection`` () =
         let item = mkItem()
         let key = table.PutItem(item)
         let guid = table.GetItemProjected(key, <@ fun r -> r.Guid @>)
-        guid |> should equal item.Guid
+        Expect.equal guid item.Guid ""
 
-    [<Fact>]
-    let ``Map projection`` () =
+    member this.``Map projection`` () =
         let item = mkItem()
         let key = table.PutItem(item)
         let map = table.GetItemProjected(key, <@ fun r -> r.Map @>)
-        map |> should equal item.Map
+        Expect.equal map item.Map ""
 
-    [<Fact>]
-    let ``Option-None projection`` () =
+    member this.``Option-None projection`` () =
         let item = { mkItem() with Optional = None }
         let key = table.PutItem(item)
         let opt = table.GetItemProjected(key, <@ fun r -> r.Optional @>)
-        opt |> should equal None
+        Expect.equal opt None ""
 
-    [<Fact>]
-    let ``Option-Some projection`` () =
+    member this.``Option-Some projection`` () =
         let item = { mkItem() with Optional = Some "test" }
         let key = table.PutItem(item)
         let opt = table.GetItemProjected(key, <@ fun r -> r.Optional @>)
-        opt |> should equal item.Optional
+        Expect.equal opt item.Optional ""
 
-    [<Fact>]
-    let ``Multi-value projection`` () =
+    member this.``Multi-value projection`` () =
         let item = mkItem()
         let key = table.PutItem(item)
         let result = table.GetItemProjected(key, <@ fun r -> r.Bool, r.ByteSet, r.Bytes, r.Serialized2 @>)
-        result |> should equal (item.Bool, item.ByteSet, item.Bytes, item.Serialized2)
+        Expect.equal result (item.Bool, item.ByteSet, item.Bytes, item.Serialized2) ""
 
 
-    [<Fact>]
-    let ``Nested value projection 1`` () =
+    member this.``Nested value projection 1`` () =
         let item = { mkItem() with Map = Map.ofList ["Nested", 42L ] }
         let key = table.PutItem(item)
         let result = table.GetItemProjected(key, <@ fun r -> r.Nested.NV, r.NestedList.[0].NV, r.Map.["Nested"] @>)
-        result |> should equal (item.Nested.NV, item.NestedList.[0].NV, item.Map.["Nested"])
+        Expect.equal result (item.Nested.NV, item.NestedList.[0].NV, item.Map.["Nested"]) ""
 
-    [<Fact>]
-    let ``Nested value projection 2`` () =
+    member this.``Nested value projection 2`` () =
         let item = { mkItem() with List = [1L;2L;3L] }
         let key = table.PutItem(item)
         let result = table.GetItemProjected(key, <@ fun r -> r.List.[0], r.List.[1] @>)
-        result |> should equal (item.List.[0], item.List.[1])
+        Expect.equal result (item.List.[0], item.List.[1]) ""
 
-    [<Fact>]
-    let ``Projected query`` () =
+    member this.``Projected query`` () =
         let hKey = guid()
 
         seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; RangeKey = string i }}
@@ -188,10 +176,9 @@ type ``Projection Expression Tests`` (fixture : TableFixture) =
         |> Async.RunSynchronously
 
         let results = table.QueryProjected(<@ fun r -> r.HashKey = hKey @>, <@ fun r -> r.RangeKey @>)
-        results |> Seq.map int |> set |> should equal (set [1 .. 200])
+        Expect.equal (results |> Seq.map int |> set) (set [1 .. 200]) ""
 
-    [<Fact>]
-    let ``Projected scan`` () =
+    member this.``Projected scan`` () =
         let hKey = guid()
 
         seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; RangeKey = string i }}
@@ -202,7 +189,4 @@ type ``Projection Expression Tests`` (fixture : TableFixture) =
         |> Async.RunSynchronously
 
         let results = table.ScanProjected(<@ fun r -> r.RangeKey @>, filterCondition = <@ fun r -> r.HashKey = hKey @>)
-        results |> Seq.map int |> set |> should equal (set [1 .. 200])
-        
-
-    interface IClassFixture<TableFixture>
+        Expect.equal (results |> Seq.map int |> set) (set [1 .. 200]) ""
