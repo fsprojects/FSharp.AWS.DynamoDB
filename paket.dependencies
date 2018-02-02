@@ -1,4 +1,4 @@
-framework: >= net45
+framework: netstandard2.0, netcoreapp2.0
 redirects: force
 source https://www.nuget.org/api/v2
 
@@ -8,7 +8,7 @@ nuget FSharp.Core ~> 4.2.3 redirects:force
 nuget Expecto ~> 5.1.2
 nuget Expecto.FsCheck ~> 5.1.2
 nuget Expecto.VisualStudio.TestAdapter version_in_path: true
-nuget FsCheck
+nuget FsChec
 github eiriktsarpalis/TypeShape:2.10 src/TypeShape/TypeShape.fs
 
 group Build

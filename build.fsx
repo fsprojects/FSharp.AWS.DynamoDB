@@ -41,7 +41,12 @@ Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 let release = parseReleaseNotes (File.ReadAllLines "RELEASE_NOTES.md")
 let nugetVersion = release.NugetVersion
 
-let testAssemblies = [ "bin/FSharp.AWS.DynamoDB.Tests.exe" ]
+let mutable dotnet = "dotnet"
+
+Target "InstallDotNetCore" (fun _ ->
+    dotnet <- DotNetCli.InstallDotNetSDK "2.1.4"
+    Environment.SetEnvironmentVariable("DOTNET_EXE_PATH", dotnet)
+)
 
 Target "BuildVersion" (fun _ ->
     Shell.Exec("appveyor", sprintf "UpdateBuild -Version \"%s\"" nugetVersion) |> ignore
@@ -81,11 +86,12 @@ let configuration = environVarOrDefault "Configuration" "Release"
 
 Target "Build" (fun () ->
     // Build the rest of the project
-    { BaseDirectory = __SOURCE_DIRECTORY__
-      Includes = [ project + ".sln" ]
-      Excludes = [] } 
-    |> MSBuild "" "Build" ["Configuration", "Release"]
-    |> Log "AppBuild-Output: ")
+    DotNetCli.Build (fun p ->
+        { p with
+            Project = project + ".sln"
+            Configuration = configuration
+        })
+)
 
 // --------------------------------------------------------------------------------------
 // Run the unit tests using test runner & kill test runner when complete
@@ -97,9 +103,7 @@ Target "RunTests" (fun _ ->
         psi.Arguments <- "-Djava.library.path=./db/DynamoDBLocal_lib -jar ./db/DynamoDBLocal.jar -inMemory"
         ())
 
-    testAssemblies
-    |> Seq.collect (!!)
-    |> Expecto (fun (p : ExpectoParams) -> { p with Summary = true; Parallel = false })
+    DotNetCli.RunCommand (fun cp -> cp) "run -p tests/FSharp.AWS.DynamoDB.Tests/FSharp.AWS.DynamoDB.Tests.fsproj"
 
 //    killAllCreatedProcesses ()
 //    DeleteDir "db"
@@ -210,6 +214,7 @@ Target "Default" DoNothing
 Target "Release" DoNothing
 
 "Clean"
+  ==> "InstallDotNetCore"
   ==> "AssemblyInfo"
   ==> "Prepare"
   ==> "Build"
