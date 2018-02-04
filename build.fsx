@@ -96,7 +96,7 @@ Target "Build" (fun () ->
 // --------------------------------------------------------------------------------------
 // Run the unit tests using test runner & kill test runner when complete
 
-Target "RunTests" (fun _ ->
+Target "RunTests" (fun _ -> 
     Unzip "db" "dynamodb_local_latest.zip"
     StartProcess (fun psi ->
         psi.FileName <- "java"
