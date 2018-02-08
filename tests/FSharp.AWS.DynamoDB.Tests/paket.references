@@ -1,6 +1,5 @@
 AWSSDK.DynamoDBv2
-xunit
-xunit.extensions
-xunit.runner.visualstudio
-FsUnit.XUnit
+Expecto
+Expecto.FsCheck
 FsCheck
+Expecto.VisualStudio.TestAdapter

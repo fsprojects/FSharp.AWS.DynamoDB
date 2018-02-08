@@ -3,8 +3,7 @@
 open System
 open System.Threading
 
-open Xunit
-open FsUnit.Xunit
+open Expecto
 
 open FSharp.AWS.DynamoDB
 
@@ -88,24 +87,21 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
     let table = TableContext.Create<CondExprRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
-    [<Fact>]
-    let ``Item exists precondition`` () =
+    member this.``Item exists precondition`` () =
         let item = mkItem()
         fun () -> table.PutItem(item, precondition = itemExists)
         |> shouldFailwith<_, ConditionalCheckFailedException>
 
         let key = table.PutItem item
-        table.PutItem(item, precondition = itemExists)
+        table.PutItem(item, precondition = itemExists) |> ignore
 
-    [<Fact>]
-    let ``Item not exists precondition`` () =
+    member this.``Item not exists precondition`` () =
         let item = mkItem()
         let key = table.PutItem(item, precondition = itemDoesNotExist)
         fun () -> table.PutItem(item, precondition = itemDoesNotExist)
         |> shouldFailwith<_, ConditionalCheckFailedException>
 
-    [<Fact>]
-    let ``String precondition`` () =
+    member this.``String precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> r.HashKey = guid() @>)
@@ -114,8 +110,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let hkey = item.HashKey
         table.PutItem(item, <@ fun r -> r.HashKey = hkey @>) |> ignore
 
-    [<Fact>]
-    let ``Number precondition`` () =
+    member this.``Number precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> r.Value = rand() @>)
@@ -124,8 +119,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let value = item.Value
         table.PutItem(item, <@ fun r -> r.Value = value @>) |> ignore
 
-    [<Fact>]
-    let ``Bool precondition`` () =
+    member this.``Bool precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         let value = item.Bool
@@ -134,8 +128,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         table.PutItem(item, <@ fun r -> r.Bool = value @>) |> ignore
 
-    [<Fact>]
-    let ``Bytes precondition`` () =
+    member this.``Bytes precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         let value = item.Bool
@@ -145,8 +138,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let value = item.Bytes
         table.PutItem(item, <@ fun r -> r.Bytes = value @>) |> ignore
 
-    [<Fact>]
-    let ``DateTimeOffset precondition`` () =
+    member this.``DateTimeOffset precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> r.DateTimeOffset > DateTimeOffset.Now + TimeSpan.FromDays(3.) @>)
@@ -155,8 +147,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let value = item.DateTimeOffset
         table.PutItem(item, <@ fun r -> r.DateTimeOffset <= DateTimeOffset.Now + TimeSpan.FromDays(3.) @>) |> ignore
 
-    [<Fact>]
-    let ``TimeSpan precondition`` () =
+    member this.``TimeSpan precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         let UB = item.TimeSpan + item.TimeSpan
@@ -166,8 +157,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let value = item.DateTimeOffset
         table.PutItem(item, <@ fun r -> r.TimeSpan < UB @>) |> ignore
 
-    [<Fact>]
-    let ``Guid precondition`` () =
+    member this.``Guid precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> r.Guid = Guid.NewGuid() @>)
@@ -176,8 +166,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let value = item.Guid
         table.PutItem(item, <@ fun r -> r.Guid = value @>) |> ignore
 
-    [<Fact>]
-    let ``Optional precondition`` () =
+    member this.``Optional precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> r.Optional = None @>)
@@ -189,8 +178,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         fun () -> table.PutItem(item, <@ fun r -> r.Optional = (guid() |> Some) @>)
         |> shouldFailwith<_, ConditionalCheckFailedException>
 
-    [<Fact>]
-    let ``Optional-Value precondition`` () =
+    member this.``Optional-Value precondition`` () =
         let item = { mkItem() with Optional = Some "foo" }
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> r.Optional.Value = "bar" @>)
@@ -202,8 +190,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         fun () -> table.PutItem(item, <@ fun r -> r.Optional.Value = "foo" @>)
         |> shouldFailwith<_, ConditionalCheckFailedException>
 
-    [<Fact>]
-    let ``Ref precondition`` () =
+    member this.``Ref precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> r.Ref = (guid() |> ref) @>)
@@ -212,8 +199,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let value = item.Ref.Value
         table.PutItem(item, <@ fun r -> r.Ref = ref value @>) |> ignore
 
-    [<Fact>]
-    let ``Tuple precondition`` () =
+    member this.``Tuple precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> fst r.Tuple = rand() @>)
@@ -222,8 +208,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let value = fst item.Tuple
         table.PutItem(item, <@ fun r -> fst r.Tuple = value @>) |> ignore
 
-    [<Fact>]
-    let ``Record precondition`` () =
+    member this.``Record precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> r.Nested = { NV = guid() ; NE = Enum.C } @>)
@@ -233,8 +218,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let enum = item.Nested.NE
         table.PutItem(item, <@ fun r -> r.Nested = { NV = value ; NE = enum } @>) |> ignore
 
-    [<Fact>]
-    let ``Nested attribute precondition`` () =
+    member this.``Nested attribute precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> r.Nested.NV = guid() @>)
@@ -243,8 +227,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let value = item.Nested.NE
         table.PutItem(item, <@ fun r -> r.Nested.NE = value @>) |> ignore
 
-    [<Fact>]
-    let ``Nested union precondition`` () =
+    member this.``Nested union precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> r.Union = UA (rand()) @>)
@@ -252,8 +235,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         table.PutItem(item, <@ fun r -> r.Union = item.Union @>) |> ignore
 
-    [<Fact>]
-    let ``String-Contains precondition`` () =
+    member this.``String-Contains precondition`` () =
         let item = { mkItem() with Ref = ref "12-42-12" }
         let key = table.PutItem item
         let elem = item.HashKey
@@ -262,8 +244,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         table.PutItem(item, <@ fun r -> r.Ref.Value.Contains "42" @>) |> ignore
 
-    [<Fact>]
-    let ``String-StartsWith precondition`` () =
+    member this.``String-StartsWith precondition`` () =
         let item = { mkItem() with Ref = ref "12-42-12" }
         let key = table.PutItem item
         let elem = item.HashKey
@@ -272,8 +253,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         table.PutItem(item, <@ fun r -> r.Ref.Value.StartsWith "12" @>) |> ignore
 
-    [<Fact>]
-    let ``String-length precondition`` () =
+    member this.``String-length precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         let elem = item.HashKey
@@ -283,8 +263,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         table.PutItem(item, <@ fun r -> r.HashKey.Length >= elem.Length @>) |> ignore
 
 
-    [<Fact>]
-    let ``Array-length precondition`` () =
+    member this.``Array-length precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         let bytes = item.Bytes
@@ -294,8 +273,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         table.PutItem(item, <@ fun r -> r.Bytes.Length >= bytes.Length @>) |> ignore
         table.PutItem(item, <@ fun r -> r.Bytes |> Array.length >= bytes.Length @>) |> ignore
 
-    [<Fact>]
-    let ``Array index precondition`` () =
+    member this.``Array index precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         let nested = item.NestedList.[0]
@@ -304,8 +282,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         table.PutItem(item, <@ fun r -> r.NestedList.[0] = nested @>) |> ignore
 
-    [<Fact>]
-    let ``List-length precondition`` () =
+    member this.``List-length precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         let list = item.List
@@ -315,8 +292,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         table.PutItem(item, <@ fun r -> r.List.Length >= list.Length @>) |> ignore
         table.PutItem(item, <@ fun r -> List.length r.List >= list.Length @>) |> ignore
 
-    [<Fact>]
-    let ``List-isEmpty precondition`` () =
+    member this.``List-isEmpty precondition`` () =
         let item = { mkItem() with List = [] }
         let key = table.PutItem item
         table.PutItem({item with List = [42L]}, <@ fun r -> List.isEmpty r.List @>) |> ignore
@@ -325,8 +301,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         |> shouldFailwith<_, ConditionalCheckFailedException>
 
 
-    [<Fact>]
-    let ``Set-count precondition`` () =
+    member this.``Set-count precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         let set = item.Set
@@ -336,8 +311,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         table.PutItem(item, <@ fun r -> r.Set.Count <= set.Count @>) |> ignore
         table.PutItem(item, <@ fun r -> r.Set |> Set.count >= Set.count set @>) |> ignore
 
-    [<Fact>]
-    let ``Set-contains precondition`` () =
+    member this.``Set-contains precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         let elem = item.Set |> Seq.max
@@ -347,8 +321,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         table.PutItem(item, <@ fun r -> r.Set.Contains elem @>) |> ignore
         table.PutItem(item, <@ fun r -> r.Set |> Set.contains elem @>) |> ignore
 
-    [<Fact>]
-    let ``Map-count precondition`` () =
+    member this.``Map-count precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         let map = item.Map
@@ -357,8 +330,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         table.PutItem(item, <@ fun r -> r.Map.Count >= map.Count @>) |> ignore
 
-    [<Fact>]
-    let ``Map-contains precondition`` () =
+    member this.``Map-contains precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         let elem = item.Map |> Map.toSeq |> Seq.head |> fst
@@ -368,8 +340,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         table.PutItem(item, <@ fun r -> r.Map.ContainsKey elem @>) |> ignore
         table.PutItem(item, <@ fun r -> r.Map |> Map.containsKey elem @>) |> ignore
 
-    [<Fact>]
-    let ``Map Item precondition`` () =
+    member this.``Map Item precondition`` () =
         let item = { mkItem() with Map = Map.ofList [("A", 42L)] }
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> r.Map.["A"] = 41L @>)
@@ -377,8 +348,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         table.PutItem(item, <@ fun r -> r.Map.["A"] = 42L @>) |> ignore
 
-    [<Fact>]
-    let ``Map Item parametric precondition`` () =
+    member this.``Map Item parametric precondition`` () =
         let item = { mkItem() with Map = Map.ofList [("A", 42L)] }
         let key = table.PutItem item
         let cond = table.Template.PrecomputeConditionalExpr <@ fun k v r -> r.Map.[k] = v @>
@@ -388,8 +358,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         table.PutItem(item, cond "A" 42L) |> ignore
 
 
-    [<Fact>]
-    let ``Fail on identical comparands`` () =
+    member this.``Fail on identical comparands`` () =
         fun () -> table.Template.PrecomputeConditionalExpr <@ fun r -> r.Guid < r.Guid @>
         |> shouldFailwith<_, ArgumentException>
 
@@ -397,38 +366,33 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         |> shouldFailwith<_, ArgumentException>
 
 
-    [<Fact>]
-    let ``Serializable precondition`` () =
+    member this.``Serializable precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.PutItem(item, <@ fun r -> r.Serialized = (0L,"")  @>)
         |> shouldFailwith<_, ArgumentException>
 
-    [<Fact>]
-    let ``EXISTS precondition`` () =
+    member this.``EXISTS precondition`` () =
         let item = { mkItem() with List = [1L] }
         let key = table.PutItem item
         let _ = table.PutItem(item, precondition = <@ fun r -> EXISTS r.List.[0] @>)
         fun () -> table.PutItem(item, precondition = <@ fun r -> EXISTS r.List.[1] @>)
         |> shouldFailwith<_, ConditionalCheckFailedException>
 
-    [<Fact>]
-    let ``NOT_EXISTS precondition`` () =
+    member this.``NOT_EXISTS precondition`` () =
         let item = { mkItem() with List = [1L] }
         let key = table.PutItem item
         let _ = table.PutItem(item, precondition = <@ fun r -> NOT_EXISTS r.List.[1] @>)
         fun () -> table.PutItem(item, precondition = <@ fun r -> NOT_EXISTS r.List.[0] @>)
         |> shouldFailwith<_, ConditionalCheckFailedException>
 
-    [<Fact>]
-    let ``Boolean precondition`` () =
+    member this.``Boolean precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         table.PutItem(item, <@ fun r -> false || r.HashKey = item.HashKey && not(not(r.RangeKey = item.RangeKey || r.Bool = item.Bool)) @>) |> ignore
         table.PutItem(item, <@ fun r -> r.HashKey = item.HashKey || (true && r.RangeKey = item.RangeKey) @>) |> ignore
 
-    [<Fact>]
-    let ``Simple Query Expression`` () =
+    member this.``Simple Query Expression`` () =
         let hKey = guid()
 
         seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; RangeKey = int64 i }}
@@ -440,10 +404,9 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
        
 
         let results = table.Query(<@ fun r -> r.HashKey = hKey && BETWEEN r.RangeKey 50L 149L @>)
-        results.Length |> should equal 100
+        Expect.equal results.Length 100 "Length shoulb be 100"
 
-    [<Fact>]
-    let ``Simple Query/Filter Expression`` () =
+    member this.``Simple Query/Filter Expression`` () =
         let hKey = guid()
 
         seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; RangeKey = int64 i ; Bool = i % 2 = 0}}
@@ -456,11 +419,10 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let results = table.Query(<@ fun r -> r.HashKey = hKey && BETWEEN r.RangeKey 50L 149L @>,
                                         filterCondition = <@ fun r -> r.Bool = true @>)
 
-        results.Length |> should equal 50
+        Expect.equal results.Length 50 "Length should be 50"
 
-    [<Fact>]
-    let ``Detect incompatible key conditions`` () =
-        let test outcome q = table.Template.PrecomputeConditionalExpr(q).IsKeyConditionCompatible |> should equal outcome
+    member this.``Detect incompatible key conditions`` () =
+        let test outcome q = Expect.equal (table.Template.PrecomputeConditionalExpr(q).IsKeyConditionCompatible) outcome "Outcome should be equal"
 
         test true <@ fun r -> r.HashKey = "2" @>
         test true <@ fun r -> r.HashKey = "2" && r.RangeKey < 2L @>
@@ -480,8 +442,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         test false <@ fun r -> r.HashKey = "2" && r.GSIR = 2 @>
         test false <@ fun r -> r.GSIH = "1" && r.LSI > 1L @>
 
-    [<Fact>]
-    let ``Detect incompatible comparisons`` () =
+    member this.``Detect incompatible comparisons`` () =
         let test outcome q = 
             let f () = table.Template.PrecomputeConditionalExpr(q)
             if outcome then f () |> ignore
@@ -497,8 +458,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         test false <@ fun r -> r.Tuple <= (1L, 2L) @>
         test false <@ fun r -> r.Nested <= r.Nested @>
 
-    [<Fact>]
-    let ``Simple Scan Expression`` () =
+    member this.``Simple Scan Expression`` () =
         let hKey = guid()
 
         seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; RangeKey = int64 i ; Bool = i % 2 = 0}}
@@ -509,24 +469,21 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         |> Async.RunSynchronously
 
         let results = table.Scan(<@ fun r -> r.HashKey = hKey && r.RangeKey <= 100L && r.Bool = true @>)
-        results.Length |> should equal 50
+        Expect.equal results.Length 50 "Length should be 50"
 
-    [<Fact>]
-    let ``Simple Parametric Conditional`` () =
+    member this.``Simple Parametric Conditional`` () =
         let item = mkItem()
         let key = table.PutItem item
         let cond = table.Template.PrecomputeConditionalExpr <@ fun hk rk r -> r.HashKey = hk && r.RangeKey = rk @>
-        table.PutItem(item, cond item.HashKey item.RangeKey)
+        table.PutItem(item, cond item.HashKey item.RangeKey) |> ignore
 
-    [<Fact>]
-    let ``Parametric Conditional with optional argument`` () =
+    member this.``Parametric Conditional with optional argument`` () =
         let item = { mkItem() with Optional = None }
         let key = table.PutItem item
         let cond = table.Template.PrecomputeConditionalExpr <@ fun opt r -> r.Optional = opt @>
-        table.PutItem(item, cond None)
+        table.PutItem(item, cond None) |> ignore
 
-    [<Fact>]
-    let ``Parametric Conditional with invalid param usage`` () =
+    member this.``Parametric Conditional with invalid param usage`` () =
         let template = table.Template
         fun () -> template.PrecomputeConditionalExpr <@ fun v r -> r.Value = v + 1L @>
         |> shouldFailwith<_, ArgumentException>
@@ -534,8 +491,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         fun () -> template.PrecomputeConditionalExpr <@ fun v r -> r.Value = Option.get v @>
         |> shouldFailwith<_, ArgumentException>
 
-    [<Fact>]
-    let ``Global Secondary index query`` () =
+    member this.``Global Secondary index query`` () =
         let hKey = guid()
 
         seq { for i in 1 .. 200 -> { mkItem() with GSIH = hKey ; GSIR = i }}
@@ -546,11 +502,10 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         |> Async.RunSynchronously
 
         let result = table.Query <@ fun r -> r.GSIH = hKey && BETWEEN r.GSIR 101 200 @>
-        result.Length |> should equal 100
+        Expect.equal result.Length 100 "Length should be 100"
 
 
-    [<Fact>]
-    let ``Local Secondary index query`` () =
+    member this.``Local Secondary index query`` () =
         let hKey = guid()
 
         seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; LSI = int64 i }}
@@ -561,6 +516,4 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         |> Async.RunSynchronously
 
         let result = table.Query <@ fun r -> r.HashKey = hKey && BETWEEN r.LSI 101L 200L @>
-        result.Length |> should equal 100
-
-    interface IClassFixture<TableFixture>
+        Expect.equal result.Length 100 ""

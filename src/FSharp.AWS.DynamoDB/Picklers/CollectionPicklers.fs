@@ -118,7 +118,7 @@ type StringSetPickler<'T when 'T : comparison> (tp : StringRepresentablePickler<
         | :? 'T as t -> AttributeValue(SS = rlist[|tp.UnParse t|]) |> Some
         | _ ->
             let rl = obj |> unbox<seq<'T>> |> Seq.map tp.UnParse |> rlist
-            if rl.Count = 0 then AttributeValue(NULL = true) |> Some
+            if rl.Count = 0 then None
             else AttributeValue(SS = rl) |> Some
 
     override __.Pickle set = __.PickleCoerced set

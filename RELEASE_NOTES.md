@@ -1,3 +1,6 @@
+### 0.8.0-beta
+* Move to netstandard2.0.
+
 ### 0.7.0-beta
 * Add sparse GSI Support.
 

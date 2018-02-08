@@ -15,6 +15,7 @@ open Fake.ReleaseNotesHelper
 open Fake.AssemblyInfoFile
 open Fake.Testing
 open SourceLink
+open Fake.Testing.Expecto
 
 // --------------------------------------------------------------------------------------
 // Information about the project to be used at NuGet and in AssemblyInfo files
@@ -40,7 +41,12 @@ Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 let release = parseReleaseNotes (File.ReadAllLines "RELEASE_NOTES.md")
 let nugetVersion = release.NugetVersion
 
-let testAssemblies = [ "bin/FSharp.AWS.DynamoDB.Tests.dll" ]
+let mutable dotnet = "dotnet"
+
+Target "InstallDotNetCore" (fun _ ->
+    dotnet <- DotNetCli.InstallDotNetSDK "2.1.4"
+    Environment.SetEnvironmentVariable("DOTNET_EXE_PATH", dotnet)
+)
 
 Target "BuildVersion" (fun _ ->
     Shell.Exec("appveyor", sprintf "UpdateBuild -Version \"%s\"" nugetVersion) |> ignore
@@ -80,27 +86,27 @@ let configuration = environVarOrDefault "Configuration" "Release"
 
 Target "Build" (fun () ->
     // Build the rest of the project
-    { BaseDirectory = __SOURCE_DIRECTORY__
-      Includes = [ project + ".sln" ]
-      Excludes = [] } 
-    |> MSBuild "" "Build" ["Configuration", "Release"]
-    |> Log "AppBuild-Output: ")
+    DotNetCli.Build (fun p ->
+        { p with
+            Project = project + ".sln"
+            Configuration = configuration
+        })
+)
 
 // --------------------------------------------------------------------------------------
 // Run the unit tests using test runner & kill test runner when complete
 
-Target "RunTests" (fun _ ->
-    testAssemblies
-    |> Seq.collect (!!)
-    |> xUnit2 (fun (p : XUnit2Params) -> 
-        { p with
-            TimeOut = TimeSpan.FromMinutes 20.
-            Parallel = ParallelMode.Collections
-//            ExcludeTraits = 
-//                [ if not emulatorTests then yield ("Category", "Emulator")
-//                  if not remoteTests then yield ("Category", "Remote") ]
+Target "RunTests" (fun _ -> 
+    Unzip "db" "dynamodb_local_latest.zip"
+    StartProcess (fun psi ->
+        psi.FileName <- "java"
+        psi.Arguments <- "-Djava.library.path=./db/DynamoDBLocal_lib -jar ./db/DynamoDBLocal.jar -inMemory"
+        ())
 
-            HtmlOutputPath = Some "xunit.html"})
+    DotNetCli.RunCommand (fun cp -> cp) "run -p tests/FSharp.AWS.DynamoDB.Tests/FSharp.AWS.DynamoDB.Tests.fsproj"
+
+//    killAllCreatedProcesses ()
+//    DeleteDir "db"
 )
 
 FinalTarget "CloseTestRunner" (fun _ ->  
@@ -126,12 +132,11 @@ Target "SourceLink" (fun _ ->
 //// Build a NuGet package
 
 Target "NuGet" (fun _ ->    
-    Paket.Pack (fun p -> 
+    DotNetCli.Pack (fun p ->
         { p with 
-            ToolPath = ".paket/paket.exe" 
-            OutputPath = "bin/"
-            Version = release.NugetVersion
-            ReleaseNotes = toLines release.Notes })
+            ToolPath = "dotnet" 
+            OutputPath = "bin/" 
+            AdditionalArgs = [(sprintf "/property:Version=%s" release.NugetVersion)]})
 )
 
 Target "NuGetPush" (fun _ -> Paket.Push (fun p -> { p with WorkingDir = "bin/" }))
@@ -208,6 +213,7 @@ Target "Default" DoNothing
 Target "Release" DoNothing
 
 "Clean"
+  //==> "InstallDotNetCore"
   ==> "AssemblyInfo"
   ==> "Prepare"
   ==> "Build"
@@ -218,7 +224,7 @@ Target "Release" DoNothing
   ==> "PrepareRelease"
 //  ==> "GenerateDocs"
 //  ==> "ReleaseDocs"
-  ==> "SourceLink"
+//  ==> "SourceLink"
   ==> "NuGet"
   ==> "NuGetPush"
   ==> "ReleaseGithub"
