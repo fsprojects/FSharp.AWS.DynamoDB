@@ -7,8 +7,8 @@ open System.Runtime.CompilerServices
 [<assembly: AssemblyProductAttribute("FSharp.AWS.DynamoDB")>]
 [<assembly: AssemblyCompanyAttribute("Eirik Tsarpalis")>]
 [<assembly: AssemblyCopyrightAttribute("Copyright © Eirik Tsarpalis 2016")>]
-[<assembly: AssemblyVersionAttribute("0.7.0")>]
-[<assembly: AssemblyFileVersionAttribute("0.7.0")>]
+[<assembly: AssemblyVersionAttribute("0.8.0")>]
+[<assembly: AssemblyFileVersionAttribute("0.8.0")>]
 [<assembly: InternalsVisibleToAttribute("FSharp.AWS.DynamoDB.Tests")>]
 do ()
 
@@ -17,6 +17,6 @@ module internal AssemblyVersionInformation =
     let [<Literal>] AssemblyProduct = "FSharp.AWS.DynamoDB"
     let [<Literal>] AssemblyCompany = "Eirik Tsarpalis"
     let [<Literal>] AssemblyCopyright = "Copyright © Eirik Tsarpalis 2016"
-    let [<Literal>] AssemblyVersion = "0.7.0"
-    let [<Literal>] AssemblyFileVersion = "0.7.0"
+    let [<Literal>] AssemblyVersion = "0.8.0"
+    let [<Literal>] AssemblyFileVersion = "0.8.0"
     let [<Literal>] InternalsVisibleTo = "FSharp.AWS.DynamoDB.Tests"

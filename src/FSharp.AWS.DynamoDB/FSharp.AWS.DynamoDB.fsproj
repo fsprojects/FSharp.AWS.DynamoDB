@@ -4,6 +4,15 @@
     <TargetFrameworks>netstandard2.0</TargetFrameworks>
     <OutputPath>..\..\bin\</OutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>A library that provides an idiomatic F# API for AWS DynamoDB.</Description>
+    <Authors>Eirik Tsarpalis</Authors>
+    <Company />
+    <Copyright>Copyright 2016</Copyright>
+    <Product />
+    <PackageLicenseUrl>https://github.com/eiriktsarpalis/FSharp.AWS.DynamoDB/blob/master/License.md</PackageLicenseUrl>
+    <PackageProjectUrl>https://github.com/eiriktsarpalis/FSharp.AWS.DynamoDB</PackageProjectUrl>
+    <PackageIconUrl>https://avatars0.githubusercontent.com/u/6001315</PackageIconUrl>
+    <PackageTags>fsharp, f#, aws, amazon, dynamodb</PackageTags>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\paket-files\eiriktsarpalis\TypeShape\src\TypeShape\TypeShape.fs">

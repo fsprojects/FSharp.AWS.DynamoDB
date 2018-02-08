@@ -132,12 +132,11 @@ Target "SourceLink" (fun _ ->
 //// Build a NuGet package
 
 Target "NuGet" (fun _ ->    
-    Paket.Pack (fun p -> 
+    DotNetCli.Pack (fun p ->
         { p with 
-            ToolPath = ".paket/paket.exe" 
-            OutputPath = "bin/"
-            Version = release.NugetVersion
-            ReleaseNotes = toLines release.Notes })
+            ToolPath = "dotnet" 
+            OutputPath = "bin/" 
+            AdditionalArgs = [(sprintf "/property:Version=%s" release.NugetVersion)]})
 )
 
 Target "NuGetPush" (fun _ -> Paket.Push (fun p -> { p with WorkingDir = "bin/" }))
@@ -214,7 +213,7 @@ Target "Default" DoNothing
 Target "Release" DoNothing
 
 "Clean"
-  ==> "InstallDotNetCore"
+  //==> "InstallDotNetCore"
   ==> "AssemblyInfo"
   ==> "Prepare"
   ==> "Build"
@@ -225,7 +224,7 @@ Target "Release" DoNothing
   ==> "PrepareRelease"
 //  ==> "GenerateDocs"
 //  ==> "ReleaseDocs"
-  ==> "SourceLink"
+//  ==> "SourceLink"
   ==> "NuGet"
   ==> "NuGetPush"
   ==> "ReleaseGithub"
