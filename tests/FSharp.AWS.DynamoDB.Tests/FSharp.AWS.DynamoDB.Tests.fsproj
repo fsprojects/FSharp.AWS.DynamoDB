@@ -5,6 +5,7 @@
     <OutputType>Exe</OutputType>
     <OutputPath>..\..\bin\</OutputPath>
     <IsPackable>false</IsPackable>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Utils.fs" />

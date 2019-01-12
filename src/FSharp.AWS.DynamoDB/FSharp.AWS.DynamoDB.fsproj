@@ -38,6 +38,7 @@
     <Compile Include="Expression\ExpressionContainers.fs" />
     <Compile Include="RecordTemplate.fs" />
     <Compile Include="TableContext.fs" />
+    <Compile Include="TableContextAsyncSeq.fs" />
     <Compile Include="Extensions.fs" />
     <None Include="Script.fsx" />
     <None Include="paket.references" />

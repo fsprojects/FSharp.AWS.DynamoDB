@@ -1,19 +1,22 @@
 framework: netstandard2.0, netcoreapp2.0
 redirects: force
+lowest_matching: true
 source https://www.nuget.org/api/v2
+
 
 nuget Unquote ~> 4.0.0
 nuget AWSSDK.DynamoDBv2 ~> 3.3.5
-nuget FSharp.Core ~> 4.2.3 redirects:force
+nuget FSharp.Core ~> 4.3 >= 4.3.2 redirects:force 
+nuget FSharp.Control.AsyncSeq ~> 2.0 >= 2.0.21
 nuget Expecto ~> 5.1.2
 nuget Expecto.FsCheck ~> 5.1.2
 nuget Expecto.VisualStudio.TestAdapter version_in_path: true
-nuget FsChec
+nuget FsCheck
 github eiriktsarpalis/TypeShape:2.10 src/TypeShape/TypeShape.fs
 
 group Build
   source https://www.nuget.org/api/v2
-  
+
   nuget FAKE
   nuget SourceLink.Fake
   nuget Nuget.CommandLine
