@@ -215,7 +215,6 @@ export AWS_SECRET_ACCESS_KEY=<your secret key>     # your account's secret key
 
 ## Maintainer(s)
 
-- [@eiriktsarpalis](https://github.com/eiriktsarpalis)
 - [@AviAvni](https://github.com/AviAvni)
 
 The default maintainer account for projects under "fsprojects" is [@fsprojectsgit](https://github.com/fsprojectsgit) - F# Community Project Incubation Space (repo management)
