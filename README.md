@@ -1,4 +1,4 @@
-# FSharp.AWS.DynamoDB
+# FSharp.AWS.DynamoDB [![No Maintenance Intended](http://unmaintained.tech/badge.svg)](http://unmaintained.tech/)
 
 FSharp.AWS.DynamoDB an F# wrapper over the standard Amazon.DynamoDB library which
 allows you to represent table items using F# records and perform updates, queries and scans
