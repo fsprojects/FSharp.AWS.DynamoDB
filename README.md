@@ -1,5 +1,7 @@
 # FSharp.AWS.DynamoDB
 
+![](https://github.com/fsprojects/FSharp.AWS.DynamoDB/workflows/Build/badge.svg)
+
 FSharp.AWS.DynamoDB an F# wrapper over the standard Amazon.DynamoDB library which
 allows you to represent table items using F# records and perform updates, queries and scans
 using F# quotation expressions.
