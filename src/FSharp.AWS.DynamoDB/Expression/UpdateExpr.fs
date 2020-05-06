@@ -74,8 +74,8 @@ and Operand =
     | Undefined
 
 /// Intermediate representation of update expressions
-type IntermediateUpdateExprs = 
-    { 
+type IntermediateUpdateExprs =
+    {
         /// Record variable identifier used by predicate
         RVar : Var
         /// Number of parameters in update expression
@@ -85,7 +85,7 @@ type IntermediateUpdateExprs =
         /// Record conversion info
         RecordInfo : RecordTableInfo
         /// Collection of SET assignments that require further conversions
-        Assignments : (QuotedAttribute * Expr) [] 
+        Assignments : (QuotedAttribute * Expr) []
         /// Already extracted update operations
         UpdateOps : UpdateOperation []
     }
@@ -166,13 +166,13 @@ let extractRecordExprUpdaters (recordInfo : RecordTableInfo) (expr : Expr) : Int
             | Var v when bindings.ContainsKey v -> Some(Root (rp, recordInfo.GetPropertySchemata rp.Name), bindings.[v])
             | e -> Some (Root (rp, recordInfo.GetPropertySchemata rp.Name), e)
 
-        let assignmentExprs = 
-            assignments 
-            |> Seq.mapi tryExtractValueExpr 
-            |> Seq.choose id 
+        let assignmentExprs =
+            assignments
+            |> Seq.mapi tryExtractValueExpr
+            |> Seq.choose id
             |> Seq.toArray
 
-        { RVar = r ; NParams = nParams ; ParamRecognizer = pRecognizer ; 
+        { RVar = r ; NParams = nParams ; ParamRecognizer = pRecognizer ;
           Assignments = assignmentExprs ; RecordInfo = recordInfo ; UpdateOps = [||] }
 
     | _ -> invalidExpr()
@@ -230,7 +230,7 @@ let extractOpExprUpdaters (recordInfo : RecordTableInfo) (expr : Expr) : Interme
         do extract body
 
         match attrs |> Seq.map (fun attr -> attr.Id) |> tryFindConflictingPaths with
-        | Some (p1,p2) -> 
+        | Some (p1,p2) ->
             let msg = sprintf "found conflicting paths '%s' and '%s' being accessed in update expression." p1 p2
             invalidArg "expr" msg
 
@@ -331,15 +331,15 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
             let attr = attr.Id.Append(nf)
             Remove attr
 
-        | e -> 
+        | e ->
             UpdateOperation.ESet parent.Id (extractUpdateValue parent.Pickler e)
 
-    let updateOps = 
-        exprs.Assignments 
+    let updateOps =
+        exprs.Assignments
         |> Seq.map (fun (rp,e) -> extractUpdateOp rp e)
         |> Seq.append exprs.UpdateOps
         |> Seq.filter (function Skip _ -> false | _ -> true)
-        |> Seq.map (fun uop -> 
+        |> Seq.map (fun uop ->
             if uop.Attribute.IsHashKey && uop.Attribute.IsPrimaryKey then invalidArg "expr" "update expression cannot update hash key."
             if uop.Attribute.IsRangeKey && uop.Attribute.IsPrimaryKey then invalidArg "expr" "update expression cannot update range key."
             uop)
@@ -373,7 +373,8 @@ let applyParams (uops : UpdateOperations) (inputValues : obj[]) =
 
     let applyUpdateOp uop =
         match uop with
-        | Remove _ | Skip _ -> uop
+        | Skip _ -> uop
+        | Remove(attr) -> Remove (applyAttr attr)
         | Set(attr, uv) -> UpdateOperation.ESet (applyAttr attr) (applyUpdateValue uv)
         | Add(attr, op) -> UpdateOperation.EAdd (applyAttr attr) (applyOperand op)
         | Delete(attr, op) -> UpdateOperation.EDelete (applyAttr attr) (applyOperand op)
@@ -396,20 +397,20 @@ let writeUpdateExpression (writer : AttributeWriter) (uops : UpdateOperations) =
     let inline writeAttr attr = !(writer.WriteAttibute attr)
     let inline writeVal v = !(writer.WriteValue (unwrap v))
 
-    let writeOp op = 
-        match op with 
+    let writeOp op =
+        match op with
         | Attribute attr -> writeAttr attr
         | Value v -> writeVal v
         | Undefined -> invalidOp "internal error: attempting to reference undefined value in update expression."
         | Param _ -> invalidOp "internal error: attempting to reference parametric value in update expression."
 
-    let writeUV value = 
-        match value with 
-        | Operand op -> writeOp op 
+    let writeUV value =
+        match value with
+        | Operand op -> writeOp op
         | Op_Addition(l, r) -> writeOp l; ! " + " ; writeOp r
         | Op_Subtraction(l, r) -> writeOp l ; ! " - " ; writeOp r
         | List_Append(l,r) -> ! "(list_append(" ; writeOp l ; ! ", " ; writeOp r ; ! "))"
-        | If_Not_Exists(attr, Undefined) -> 
+        | If_Not_Exists(attr, Undefined) ->
             sprintf "attempting to populate If_Not_Exists(%s) clause with value of undefined representation." attr.Id
             |> invalidOp
 
@@ -428,7 +429,7 @@ let writeUpdateExpression (writer : AttributeWriter) (uops : UpdateOperations) =
     for uop in uops.UpdateOps do
         match uop with
         | Skip -> ()
-        | Set(attr, uv) -> 
+        | Set(attr, uv) ->
             if isFirstGp uop then ! "SET " else ! ", "
             writeAttr attr ; !" = " ; writeUV uv
 

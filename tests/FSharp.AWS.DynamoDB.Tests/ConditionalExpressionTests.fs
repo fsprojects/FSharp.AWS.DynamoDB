@@ -4,6 +4,7 @@ open System
 open System.Threading
 
 open Expecto
+open FsCheck
 
 open FSharp.AWS.DynamoDB
 
@@ -68,9 +69,9 @@ module CondExprTypes =
 type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
     let rand = let r = Random() in fun () -> int64 <| r.Next()
-    let mkItem() = 
-        { 
-            HashKey = guid() ; RangeKey = rand() ; 
+    let mkItem() =
+        {
+            HashKey = guid() ; RangeKey = rand() ;
             Value = rand() ; Tuple = rand(), rand() ;
             TimeSpan = TimeSpan.FromTicks(rand()) ; DateTimeOffset = DateTimeOffset.Now ; Guid = Guid.NewGuid()
             Bool = false ; Optional = Some (guid()) ; Ref = ref (guid()) ; Bytes = Guid.NewGuid().ToByteArray()
@@ -78,7 +79,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
             NestedList = [{ NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ]
             LSI = rand()
             GSIH = guid() ; GSIR = int (rand())
-            Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq 
+            Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq
             Set = seq { for i in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
             List = [for i in 0L .. rand() % 5L -> rand() ]
             Union = if rand() % 2L = 0L then UA (rand()) else UB(guid())
@@ -165,6 +166,16 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         let value = item.Guid
         table.PutItem(item, <@ fun r -> r.Guid = value @>) |> ignore
+
+    member this.``Guid not equal precondition`` () =
+        let item = mkItem()
+        let key = table.PutItem item
+        let value = item.Guid
+        fun () -> table.PutItem(item, <@ fun r -> r.Guid <> value @>)
+        |> shouldFailwith<_, ConditionalCheckFailedException>
+
+
+        table.PutItem(item, <@ fun r -> r.Guid <> Guid.NewGuid() @>) |> ignore
 
     member this.``Optional precondition`` () =
         let item = mkItem()
@@ -296,7 +307,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let item = { mkItem() with List = [] }
         let key = table.PutItem item
         table.PutItem({item with List = [42L]}, <@ fun r -> List.isEmpty r.List @>) |> ignore
-        
+
         fun () -> table.PutItem(item, <@ fun r -> List.isEmpty r.List  @>)
         |> shouldFailwith<_, ConditionalCheckFailedException>
 
@@ -401,7 +412,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         |> Async.Parallel
         |> Async.Ignore
         |> Async.RunSynchronously
-       
+
 
         let results = table.Query(<@ fun r -> r.HashKey = hKey && BETWEEN r.RangeKey 50L 149L @>)
         Expect.equal results.Length 100 "Length shoulb be 100"
@@ -443,7 +454,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         test false <@ fun r -> r.GSIH = "1" && r.LSI > 1L @>
 
     member this.``Detect incompatible comparisons`` () =
-        let test outcome q = 
+        let test outcome q =
             let f () = table.Template.PrecomputeConditionalExpr(q)
             if outcome then f () |> ignore
             else shouldFailwith<_, ArgumentException> f |> ignore

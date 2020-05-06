@@ -75,15 +75,15 @@ type ``Update Expression Tests`` (fixture : TableFixture) =
 
     let rand = let r = Random() in fun () -> int64 <| r.Next()
     let bytes() = Guid.NewGuid().ToByteArray()
-    let mkItem() = 
-        { 
+    let mkItem() =
+        {
             HashKey = guid() ; RangeKey = guid() ; String = guid()
             Value = rand() ; Tuple = rand(), rand() ;
             TimeSpan = TimeSpan.FromTicks(rand()) ; DateTimeOffset = DateTimeOffset.Now ; Guid = Guid.NewGuid()
             Bool = false ; Optional = Some (guid()) ; Ref = ref (guid()) ; Bytes = Guid.NewGuid().ToByteArray()
             Nested = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
             NestedList = [{ NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ]
-            Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq 
+            Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq
             IntSet = seq { for i in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
             StringSet = seq { for i in 0L .. rand() % 5L -> guid() } |> Set.ofSeq
             ByteSet = seq { for i in 0L .. rand() % 5L -> bytes() } |> Set.ofSeq
@@ -382,7 +382,7 @@ type ``Update Expression Tests`` (fixture : TableFixture) =
     member this.``Detect overlapping paths`` () =
         let item = mkItem()
         let key = table.PutItem item
-        fun () -> table.UpdateItem(key, <@ fun r -> SET r.NestedList.[0].NV "foo" &&& 
+        fun () -> table.UpdateItem(key, <@ fun r -> SET r.NestedList.[0].NV "foo" &&&
                                                                REMOVE r.NestedList @>)
 
         |> shouldFailwith<_, ArgumentException>
@@ -433,3 +433,24 @@ type ``Update Expression Tests`` (fixture : TableFixture) =
 
         fun () -> template.PrecomputeUpdateExpr <@ fun v (r : R) -> ADD r.IntSet (1L :: v) @>
         |> shouldFailwith<_, ArgumentException>
+
+    member this.``Parametric Updater with map add element with constant key`` () =
+        let item = { mkItem() with Map = Map.ofList [("A", 1L) ; ("B", 2L)] }
+        let key = table.PutItem item
+        let cond = table.Template.PrecomputeUpdateExpr <@ fun v (r : UpdateExprRecord) -> { r with Map = r.Map |> Map.add "C" v } @>
+        let result = table.UpdateItem(key, cond 3L)
+        Expect.equal result.Map.Count 3 ""
+
+    member this.``Parametric Updater with map add element with parametric key`` () =
+        let item = { mkItem() with Map = Map.ofList [("A", 1L) ; ("B", 2L)] }
+        let key = table.PutItem item
+        let cond = table.Template.PrecomputeUpdateExpr <@ fun k v (r : UpdateExprRecord) -> { r with Map = r.Map |> Map.add k v } @>
+        let result = table.UpdateItem(key, cond "C" 3L)
+        Expect.equal result.Map.Count 3 ""
+
+    member this.``Parametric Updater with map remove element with parametric key`` () =
+        let item = { mkItem() with Map = Map.ofList [("A", 1L) ; ("B", 2L)] }
+        let key = table.PutItem item
+        let cond = table.Template.PrecomputeUpdateExpr <@ fun k (r : UpdateExprRecord) -> { r with Map = r.Map |> Map.remove k } @>
+        let result = table.UpdateItem(key, cond "A")
+        Expect.equal result.Map.Count 1 ""
