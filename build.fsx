@@ -115,7 +115,7 @@ Target.create "BuildRelease" (fun _ ->
             OutputPath = Some buildDir
             MSBuildParams = { p.MSBuildParams with Properties = [("Version", release.NugetVersion); ("PackageReleaseNotes", String.concat "\n" release.Notes)]}
         }
-    ) "DynamoWaypoint.sln"
+    ) "FSharp.AWS.DynamoDB.sln"
 )
 
 
@@ -126,7 +126,7 @@ Target.create "Pack" (fun _ ->
             OutputPath = Some nugetDir
             MSBuildParams = { p.MSBuildParams with Properties = [("Version", release.NugetVersion); ("PackageReleaseNotes", String.concat "\n" release.Notes)]}
         }
-    ) "DynamoWaypoint.sln"
+    ) "FSharp.AWS.DynamoDB.sln"
 )
 
 Target.create "ReleaseGitHub" (fun _ ->
