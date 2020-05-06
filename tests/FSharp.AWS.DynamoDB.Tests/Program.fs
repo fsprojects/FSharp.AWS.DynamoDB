@@ -3,7 +3,7 @@ open FSharp.AWS.DynamoDB.Tests
 open ``Record Generation Tests``
 
 let RecordGenerationTests =
-    testList "RecordGenerationTests" 
+    testList "RecordGenerationTests"
         [
             testCase "Generate correct schema for S Record" ``Generate correct schema for S Record``
             testCase "Generate correct schema for N Record" ``Generate correct schema for N Record``
@@ -74,6 +74,7 @@ let ConditionalExpressionTests =
             testCase "DateTimeOffset precondition" conditionalExpressionTests.``DateTimeOffset precondition``
             testCase "TimeSpan precondition" conditionalExpressionTests.``TimeSpan precondition``
             testCase "Guid precondition" conditionalExpressionTests.``Guid precondition``
+            testCase "Guid not equal precondition" conditionalExpressionTests.``Guid not equal precondition``
             testCase "Optional precondition" conditionalExpressionTests.``Optional precondition``
             testCase "Optional-Value precondition" conditionalExpressionTests.``Optional-Value precondition``
             testCase "Ref precondition" conditionalExpressionTests.``Ref precondition``
@@ -135,7 +136,7 @@ let UpdateExpressionTests =
             testCase "Update list with concatenation" updateExpressionTests.``Update list with concatenation``
             testCase "Update list with consing" updateExpressionTests.``Update list with consing``
             testCase "Update using defaultArg combinator (Some)" updateExpressionTests.``Update using defaultArg combinator (Some)``
-            testCase "Update using defaultArg combinator (None)" updateExpressionTests.``Update using defaultArg combinator (None)``                 
+            testCase "Update using defaultArg combinator (None)" updateExpressionTests.``Update using defaultArg combinator (None)``
             testCase "Update int set with add element" updateExpressionTests.``Update int set with add element``
             testCase "Update int set with remove element" updateExpressionTests.``Update int set with remove element``
             testCase "Update int set with append set" updateExpressionTests.``Update int set with append set``
@@ -164,7 +165,9 @@ let UpdateExpressionTests =
             testCase "Parametric Updater with optional argument" updateExpressionTests.``Parametric Updater with optional argument``
             testCase "Parametric Updater with heterogeneous argument consumption" updateExpressionTests.``Parametric Updater with heterogeneous argument consumption``
             testCase "Parametric Updater with invalid param usage" updateExpressionTests.``Parametric Updater with invalid param usage``
-
+            testCase "Parametric Updater with map add element with constant key" updateExpressionTests.``Parametric Updater with map add element with constant key``
+            testCase "Parametric Updater with map add element with parametric key" updateExpressionTests.``Parametric Updater with map add element with parametric key``
+            testCase "Parametric Updater with map remove element with parametric key" updateExpressionTests.``Parametric Updater with map remove element with parametric key``
         ]
 
 let projectionExpressionTestsTableFixture = new TableFixture()
