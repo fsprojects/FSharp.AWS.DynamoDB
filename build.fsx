@@ -1,21 +1,17 @@
 // --------------------------------------------------------------------------------------
-// FAKE build script 
+// FAKE build script
 // --------------------------------------------------------------------------------------
+#r "paket: groupref build //"
+#load ".fake/build.fsx/intellisense.fsx"
 
-#I "packages/build/FAKE/tools"
-#r "packages/build/FAKE/tools/FakeLib.dll"
-#load "packages/build/SourceLink.Fake/tools/SourceLink.fsx"
-
-open System
-open System.IO
-
-open Fake 
-open Fake.Git
-open Fake.ReleaseNotesHelper
-open Fake.AssemblyInfoFile
-open Fake.Testing
-open SourceLink
-open Fake.Testing.Expecto
+open Fake.Core
+open Fake.DotNet
+open Fake.Tools
+open Fake.IO
+open Fake.IO.FileSystemOperators
+open Fake.IO.Globbing.Operators
+open Fake.Core.TargetOperators
+open Fake.Api
 
 // --------------------------------------------------------------------------------------
 // Information about the project to be used at NuGet and in AssemblyInfo files
@@ -23,211 +19,185 @@ open Fake.Testing.Expecto
 
 let project = "FSharp.AWS.DynamoDB"
 
+let summary = "An F# wrapper over the standard Amazon.DynamoDB library"
+
 let gitOwner = "fsprojects"
-let gitHome = "https://github.com/" + gitOwner
 let gitName = "FSharp.AWS.DynamoDB"
-let gitRaw = environVarOrDefault "gitRaw" "https://raw.github.com/" + gitOwner
-
-let remoteTests = environVarOrDefault "RunRemoteTests" "false" |> Boolean.Parse
-let emulatorTests = environVarOrDefault "RunEmulatorTests" "false" |> Boolean.Parse
-
-//
-//// --------------------------------------------------------------------------------------
-//// The rest of the code is standard F# build script 
-//// --------------------------------------------------------------------------------------
-
-//// Read release notes & version info from RELEASE_NOTES.md
-Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
-let release = parseReleaseNotes (File.ReadAllLines "RELEASE_NOTES.md")
-let nugetVersion = release.NugetVersion
-
-let mutable dotnet = "dotnet"
-
-Target "InstallDotNetCore" (fun _ ->
-    dotnet <- DotNetCli.InstallDotNetSDK "2.1.4"
-    Environment.SetEnvironmentVariable("DOTNET_EXE_PATH", dotnet)
-)
-
-Target "BuildVersion" (fun _ ->
-    Shell.Exec("appveyor", sprintf "UpdateBuild -Version \"%s\"" nugetVersion) |> ignore
-)
-
-// Generate assembly info files with the right version & up-to-date information
-Target "AssemblyInfo" (fun _ ->
-    let attrs =
-        [ 
-            Attribute.Title project
-            Attribute.Product project
-            Attribute.Company "Eirik Tsarpalis"
-            Attribute.Copyright "Copyright \169 Eirik Tsarpalis 2016"
-            Attribute.Version release.AssemblyVersion
-            Attribute.FileVersion release.AssemblyVersion
-            Attribute.InternalsVisibleTo "FSharp.AWS.DynamoDB.Tests"
-        ] 
-
-    !! "**/AssemblyInfo.fs" |> Seq.iter (fun f -> CreateFSharpAssemblyInfo f attrs)
-)
-
+let gitHome = "https://github.com/" + gitOwner
 
 // --------------------------------------------------------------------------------------
-// Clean build results & restore NuGet packages
+// Build variables
+// --------------------------------------------------------------------------------------
 
-Target "Clean" (fun _ ->
-    CleanDirs <| !! "./**/bin/"
-    CleanDir "./tools/output"
-    CleanDir "./temp"
+let buildDir  = "./build/"
+let nugetDir  = "./out/"
+
+
+System.Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
+let release = ReleaseNotes.parse (System.IO.File.ReadAllLines "RELEASE_NOTES.md")
+
+// --------------------------------------------------------------------------------------
+// Helpers
+// --------------------------------------------------------------------------------------
+let isNullOrWhiteSpace = System.String.IsNullOrWhiteSpace
+
+let exec cmd args dir =
+    let proc = 
+        CreateProcess.fromRawCommandLine cmd args
+        |> CreateProcess.ensureExitCodeWithMessage (sprintf "Error while running '%s' with args: %s" cmd args)
+    (if isNullOrWhiteSpace dir then proc 
+    else proc |> CreateProcess.withWorkingDirectory dir)
+    |> Proc.run
+    |> ignore
+
+let getBuildParam = Environment.environVar
+let DoNothing = ignore
+// --------------------------------------------------------------------------------------
+// Build Targets
+// --------------------------------------------------------------------------------------
+
+Target.create "Clean" (fun _ ->
+    Shell.cleanDirs [buildDir; nugetDir]
 )
 
-//
-//// --------------------------------------------------------------------------------------
-//// Build library & test project
+Target.create "AssemblyInfo" (fun _ ->
+    let getAssemblyInfoAttributes projectName =
+        [ AssemblyInfo.Title projectName
+          AssemblyInfo.Product project
+          AssemblyInfo.Description summary
+          AssemblyInfo.Version release.AssemblyVersion
+          AssemblyInfo.FileVersion release.AssemblyVersion 
+          AssemblyInfo.InternalsVisibleTo (projectName + ".Tests")
+        ]
 
-let configuration = environVarOrDefault "Configuration" "Release"
+    let getProjectDetails projectPath =
+        let projectName = System.IO.Path.GetFileNameWithoutExtension(projectPath)
+        ( projectPath,
+          projectName,
+          System.IO.Path.GetDirectoryName(projectPath),
+          (getAssemblyInfoAttributes projectName)
+        )
 
-Target "Build" (fun () ->
-    // Build the rest of the project
-    DotNetCli.Build (fun p ->
+    !! "src/**/*.??proj"
+    |> Seq.map getProjectDetails
+    |> Seq.iter (fun (projFileName, _, folderName, attributes) ->
+        match projFileName with
+        | proj when proj.EndsWith("fsproj") -> AssemblyInfoFile.createFSharp (folderName </> "AssemblyInfo.fs") attributes
+        | proj when proj.EndsWith("csproj") -> AssemblyInfoFile.createCSharp ((folderName </> "Properties") </> "AssemblyInfo.cs") attributes
+        | proj when proj.EndsWith("vbproj") -> AssemblyInfoFile.createVisualBasic ((folderName </> "My Project") </> "AssemblyInfo.vb") attributes
+        | _ -> ()
+        )
+)
+
+
+Target.create "Restore" (fun _ ->
+    DotNet.restore id ""
+)
+
+Target.create "Build" (fun _ ->
+    DotNet.build id ""
+)
+
+Target.create "Test" (fun _ ->
+    exec "dotnet"  @"run --project .\tests\FSharp.AWS.DynamoDB.Tests\FSharp.AWS.DynamoDB.Tests.fsproj" "."
+)
+
+// TODO: FSharp.Formatting docs
+Target.create "Docs" DoNothing
+
+// --------------------------------------------------------------------------------------
+// Release Targets
+// --------------------------------------------------------------------------------------
+Target.create "BuildRelease" (fun _ ->
+    DotNet.build (fun p ->
         { p with
-            Project = project + ".sln"
-            Configuration = configuration
-        })
+            Configuration = DotNet.BuildConfiguration.Release
+            OutputPath = Some buildDir
+            MSBuildParams = { p.MSBuildParams with Properties = [("Version", release.NugetVersion); ("PackageReleaseNotes", String.concat "\n" release.Notes)]}
+        }
+    ) "DynamoWaypoint.sln"
 )
 
-// --------------------------------------------------------------------------------------
-// Run the unit tests using test runner & kill test runner when complete
 
-Target "RunTests" (fun _ -> 
-    Unzip "db" "dynamodb_local_latest.zip"
-    StartProcess (fun psi ->
-        psi.FileName <- "java"
-        psi.Arguments <- "-Djava.library.path=./db/DynamoDBLocal_lib -jar ./db/DynamoDBLocal.jar -inMemory"
-        ())
-
-    DotNetCli.RunCommand (fun cp -> cp) "run -p tests/FSharp.AWS.DynamoDB.Tests/FSharp.AWS.DynamoDB.Tests.fsproj"
-
-//    killAllCreatedProcesses ()
-//    DeleteDir "db"
+Target.create "Pack" (fun _ ->
+    DotNet.pack (fun p ->
+        { p with
+            Configuration = DotNet.BuildConfiguration.Release
+            OutputPath = Some nugetDir
+            MSBuildParams = { p.MSBuildParams with Properties = [("Version", release.NugetVersion); ("PackageReleaseNotes", String.concat "\n" release.Notes)]}
+        }
+    ) "DynamoWaypoint.sln"
 )
 
-FinalTarget "CloseTestRunner" (fun _ ->  
-//    ProcessHelper.killProcess "nunit-agent.exe"
-    ()
-)
-
-//
-//// --------------------------------------------------------------------------------------
-//// SourceLink
-
-Target "SourceLink" (fun _ ->
-    let baseUrl = sprintf "%s/%s/{0}/%%var2%%" gitRaw project
-    [ yield! !! "src/**/*.??proj"]
-    |> Seq.iter (fun projFile ->
-        let proj = VsProj.LoadRelease projFile
-        SourceLink.Index proj.CompilesNotLinked proj.OutputFilePdb __SOURCE_DIRECTORY__ baseUrl
-    )
-)
-
-//
-//// --------------------------------------------------------------------------------------
-//// Build a NuGet package
-
-Target "NuGet" (fun _ ->    
-    DotNetCli.Pack (fun p ->
-        { p with 
-            ToolPath = "dotnet" 
-            OutputPath = "bin/" 
-            AdditionalArgs = [(sprintf "/property:Version=%s" release.NugetVersion)]})
-)
-
-Target "NuGetPush" (fun _ -> Paket.Push (fun p -> { p with WorkingDir = "bin/" }))
-
-
-// Doc generation
-
-Target "GenerateDocs" (fun _ ->
-    executeFSIWithArgs "docs/tools" "generate.fsx" ["--define:RELEASE"] [] |> ignore
-)
-
-Target "ReleaseDocs" (fun _ ->
-    let tempDocsDir = "temp/gh-pages"
-    let outputDir = "docs/output"
-
-    CleanDir tempDocsDir
-    Repository.cloneSingleBranch "" (gitHome + "/" + gitName + ".git") "gh-pages" tempDocsDir
-    
-    fullclean tempDocsDir
-    ensureDirectory outputDir
-    CopyRecursive outputDir tempDocsDir true |> tracefn "%A"
-    StageAll tempDocsDir
-    Commit tempDocsDir (sprintf "Update generated documentation for version %s" release.NugetVersion)
-    Branches.push tempDocsDir
-)
-
-// Github Releases
-
-#load "paket-files/build/fsharp/FAKE/modules/Octokit/Octokit.fsx"
-open Octokit
-
-Target "ReleaseGitHub" (fun _ ->
+Target.create "ReleaseGitHub" (fun _ ->
     let remote =
         Git.CommandHelper.getGitResult "" "remote -v"
         |> Seq.filter (fun (s: string) -> s.EndsWith("(push)"))
         |> Seq.tryFind (fun (s: string) -> s.Contains(gitOwner + "/" + gitName))
         |> function None -> gitHome + "/" + gitName | Some (s: string) -> s.Split().[0]
 
-    //StageAll ""
-    Git.Commit.Commit "" (sprintf "Bump version to %s" release.NugetVersion)
-    Branches.pushBranch "" remote (Information.getBranchName "")
+    Git.Staging.stageAll ""
+    Git.Commit.exec "" (sprintf "Bump version to %s" release.NugetVersion)
+    Git.Branches.pushBranch "" remote (Git.Information.getBranchName "")
 
-    Branches.tag "" release.NugetVersion
-    Branches.pushTag "" remote release.NugetVersion
+
+    Git.Branches.tag "" release.NugetVersion
+    Git.Branches.pushTag "" remote release.NugetVersion
 
     let client =
-        match Environment.GetEnvironmentVariable "OctokitToken" with
-        | null -> 
-            let user =
-                match getBuildParam "github-user" with
-                | s when not (String.IsNullOrWhiteSpace s) -> s
-                | _ -> getUserInput "Username: "
-            let pw =
-                match getBuildParam "github-pw" with
-                | s when not (String.IsNullOrWhiteSpace s) -> s
-                | _ -> getUserPassword "Password: "
+        let user =
+            match getBuildParam "github-user" with
+            | s when not (isNullOrWhiteSpace s) -> s
+            | _ -> UserInput.getUserInput "Username: "
+        let pw =
+            match getBuildParam "github-pw" with
+            | s when not (isNullOrWhiteSpace s) -> s
+            | _ -> UserInput.getUserPassword "Password: "
 
-            createClient user pw
-        | token -> createClientWithToken token
+        // Git.createClient user pw
+        GitHub.createClient user pw
+    let files = !! (nugetDir </> "*.nupkg")
 
     // release on github
-    client
-    |> createDraft gitOwner gitName release.NugetVersion (release.SemVer.PreRelease <> None) release.Notes
-    |> releaseDraft
+    let cl =
+        client
+        |> GitHub.draftNewRelease gitOwner gitName release.NugetVersion (release.SemVer.PreRelease <> None) release.Notes
+    (cl,files)
+    ||> Seq.fold (fun acc e -> acc |> GitHub.uploadFile e)
+    |> GitHub.publishDraft//releaseDraft
     |> Async.RunSynchronously
 )
 
-// --------------------------------------------------------------------------------------
-// Run all targets by default. Invoke 'build <Target>' to override
+Target.create "Push" (fun _ ->
+    let key =
+        match getBuildParam "nuget-key" with
+        | s when not (isNullOrWhiteSpace s) -> s
+        | _ -> UserInput.getUserPassword "NuGet Key: "
+    Paket.push (fun p -> { p with WorkingDir = nugetDir; ApiKey = key }))
 
-Target "Prepare" DoNothing
-Target "PrepareRelease" DoNothing
-Target "Default" DoNothing
-Target "Release" DoNothing
+// --------------------------------------------------------------------------------------
+// Build order
+// --------------------------------------------------------------------------------------
+Target.create "Default" DoNothing
+Target.create "Release" DoNothing
 
 "Clean"
-  //==> "InstallDotNetCore"
   ==> "AssemblyInfo"
-  ==> "Prepare"
+  ==> "Restore"
   ==> "Build"
-  ==> "RunTests"
+  ==> "Test"
   ==> "Default"
 
-"Build"
-  ==> "PrepareRelease"
-//  ==> "GenerateDocs"
-//  ==> "ReleaseDocs"
-//  ==> "SourceLink"
-  ==> "NuGet"
-  ==> "NuGetPush"
-  ==> "ReleaseGithub"
+"Clean"
+ ==> "AssemblyInfo"
+ ==> "Restore"
+ ==> "BuildRelease"
+ ==> "Docs"
+
+"Default"
+  ==> "Pack"
+  ==> "ReleaseGitHub"
+  ==> "Push"
   ==> "Release"
 
-RunTargetOrDefault "Default"
+Target.runOrDefault "Default"
