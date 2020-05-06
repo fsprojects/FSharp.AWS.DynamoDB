@@ -23,7 +23,7 @@ type RecordTemplate<'TRecord> internal () =
 
     let pickler = Pickler.resolve<'TRecord>() :?> RecordPickler<'TRecord>
     let recordInfo = RecordTableInfo.FromRecordPickler pickler
-    let hkeyCond = 
+    let hkeyCond =
         ConditionalExpression.TryExtractHashKeyCondition recordInfo
         |> Option.map (fun cond -> new ConditionExpression<'TRecord>(cond))
 
@@ -57,7 +57,7 @@ type RecordTemplate<'TRecord> internal () =
     ///     Extracts the key that corresponds to supplied record instance.
     /// </summary>
     /// <param name="item">Input record instance.</param>
-    member __.ExtractKey(record : 'TRecord) = 
+    member __.ExtractKey(record : 'TRecord) =
         PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, record)
 
     /// Generates a conditional which verifies whether an item already exists.
@@ -242,7 +242,7 @@ type RecordTemplate<'TRecord> internal () =
         new ProjectionExpression<'TRecord, 'TProjection>(pexpr)
 
     /// Convert table key to attribute values
-    member internal __.ToAttributeValues(key : TableKey) = 
+    member internal __.ToAttributeValues(key : TableKey) =
         PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, key)
 
     /// Converts a record instance to attribute values

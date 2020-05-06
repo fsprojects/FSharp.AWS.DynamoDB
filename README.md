@@ -1,4 +1,6 @@
-# FSharp.AWS.DynamoDB [![No Maintenance Intended](http://unmaintained.tech/badge.svg)](http://unmaintained.tech/)
+# FSharp.AWS.DynamoDB
+
+![](https://github.com/fsprojects/FSharp.AWS.DynamoDB/workflows/Build/badge.svg) [![NuGet Badge](https://buildstats.info/nuget/FSharp.AWS.DynamoDB?includePreReleases=true)](https://www.nuget.org/packages/FSharp.AWS.DynamoDB)
 
 FSharp.AWS.DynamoDB an F# wrapper over the standard Amazon.DynamoDB library which
 allows you to represent table items using F# records and perform updates, queries and scans
@@ -6,9 +8,6 @@ using F# quotation expressions.
 
 The API draws heavily on the corresponding [FSharp.Azure.Storage](https://github.com/fsprojects/FSharp.Azure.Storage)
 wrapper for Azure table storage.
-
-## NuGet [![NuGet Badge](https://buildstats.info/nuget/FSharp.AWS.DynamoDB?includePreReleases=true)](https://www.nuget.org/packages/FSharp.AWS.DynamoDB)
-`Install-Package FSharp.AWS.DynamoDB`
 
 ## Introduction
 
@@ -198,23 +197,21 @@ table.Scan(startedBefore (DateTimeOffset.Now - TimeSpan.FromDays 1.))
 
 ### Building & Running Tests
 
-Depending on your platform, you can build and run tests running `build.bat` or `build.cmd`. 
-To successfully run unit tests, you need to have credentials set to your `default` profile in 
-your local credentials store. Alternative, you could set the following environment variables:
-```bash
-export AWS_REGION="eu-central-1"                   # defaults to eu-central-1
-export AWS_CREDENTIAL_STORE_PROFILE=<profile name> # uses "default" if unset
-export AWS_ACCESS_KEY_ID=<your access key>         # your account's access key
-export AWS_SECRET_ACCESS_KEY=<your secret key>     # your account's secret key
-```
+To build using the dotnet SDK:
 
-### Build Status
+`dotnet tool restore`
+`dotnet build`
 
-* Windows/.NET [![Build status](https://ci.appveyor.com/api/projects/status/n72o2uj09lr9o3sa/branch/master?svg=true)](https://ci.appveyor.com/project/nessos/fsharp-aws-dynamodb/branch/master)
-* Linux/Mono 4.2 [![Build Status](https://travis-ci.org/fsprojects/FSharp.AWS.DynamoDB.png?branch=master)](https://travis-ci.org/fsprojects/FSharp.AWS.DynamoDB/branches)
+Tests are run using dynamodb-local on port 8000. Using the docker image is recommended:
+
+`docker run -p 8000:8000 amazon/dynamodb-local`
+
+then
+
+`dotnet run -p tests/FSharp.AWS.DynamoDB.Tests/FSharp.AWS.DynamoDB.Tests.fsproj`
 
 ## Maintainer(s)
 
-- [@AviAvni](https://github.com/AviAvni)
+- [@samritchie](https://github.com/samritchie)
 
 The default maintainer account for projects under "fsprojects" is [@fsprojectsgit](https://github.com/fsprojectsgit) - F# Community Project Incubation Space (repo management)

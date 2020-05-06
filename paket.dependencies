@@ -1,20 +1,33 @@
-framework: netstandard2.0, netcoreapp2.0
-redirects: force
-source https://www.nuget.org/api/v2
+source https://api.nuget.org/v3/index.json
 
-nuget Unquote ~> 4.0.0
-nuget AWSSDK.DynamoDBv2 ~> 3.3.5
-nuget FSharp.Core ~> 4.2.3 redirects:force
-nuget Expecto ~> 5.1.2
-nuget Expecto.FsCheck ~> 5.1.2
+storage: none
+framework: netcoreapp3.1, netstandard2.0, netstandard2.1
+
+nuget Unquote ~> 5.0.0
+nuget FSharp.Core
+nuget Expecto
+nuget FsCheck 2.14.2
+nuget Expecto.FsCheck
 nuget Expecto.VisualStudio.TestAdapter version_in_path: true
-nuget FsChec
+
+nuget AWSSDK.DynamoDBv2 ~> 3.3.5
 github eiriktsarpalis/TypeShape:2.10 src/TypeShape/TypeShape.fs
 
 group Build
-  source https://www.nuget.org/api/v2
+  source https://api.nuget.org/v3/index.json
+
+  framework: netstandard2.0
+  storage: none
   
-  nuget FAKE
-  nuget SourceLink.Fake
-  nuget Nuget.CommandLine
-  github fsharp/FAKE modules/Octokit/Octokit.fsx
+  nuget Fake.Core.Target
+  nuget Fake.Core.Process
+  nuget Fake.DotNet.Cli
+  nuget Fake.Core.ReleaseNotes
+  nuget Fake.DotNet.AssemblyInfoFile
+  nuget Fake.DotNet.Paket
+  nuget Fake.Tools.Git
+  nuget Fake.Core.Environment
+  nuget Fake.Core.UserInput
+  nuget Fake.IO.FileSystem
+  nuget Fake.DotNet.MsBuild
+  nuget Fake.Api.GitHub
