@@ -1,6 +1,6 @@
 # FSharp.AWS.DynamoDB
 
-![](https://github.com/fsprojects/FSharp.AWS.DynamoDB/workflows/Build/badge.svg)
+![](https://github.com/fsprojects/FSharp.AWS.DynamoDB/workflows/Build/badge.svg) [![NuGet Badge](https://buildstats.info/nuget/FSharp.AWS.DynamoDB?includePreReleases=true)](https://www.nuget.org/packages/FSharp.AWS.DynamoDB)
 
 FSharp.AWS.DynamoDB an F# wrapper over the standard Amazon.DynamoDB library which
 allows you to represent table items using F# records and perform updates, queries and scans
@@ -8,9 +8,6 @@ using F# quotation expressions.
 
 The API draws heavily on the corresponding [FSharp.Azure.Storage](https://github.com/fsprojects/FSharp.Azure.Storage)
 wrapper for Azure table storage.
-
-## NuGet [![NuGet Badge](https://buildstats.info/nuget/FSharp.AWS.DynamoDB?includePreReleases=true)](https://www.nuget.org/packages/FSharp.AWS.DynamoDB)
-`Install-Package FSharp.AWS.DynamoDB`
 
 ## Introduction
 
@@ -212,11 +209,6 @@ Tests are run using dynamodb-local on port 8000. Using the docker image is recom
 then
 
 `dotnet run -p tests/FSharp.AWS.DynamoDB.Tests/FSharp.AWS.DynamoDB.Tests.fsproj`
-
-### Build Status
-
-* Windows/.NET [![Build status](https://ci.appveyor.com/api/projects/status/n72o2uj09lr9o3sa/branch/master?svg=true)](https://ci.appveyor.com/project/nessos/fsharp-aws-dynamodb/branch/master)
-* Linux/Mono 4.2 [![Build Status](https://travis-ci.org/fsprojects/FSharp.AWS.DynamoDB.png?branch=master)](https://travis-ci.org/fsprojects/FSharp.AWS.DynamoDB/branches)
 
 ## Maintainer(s)
 
