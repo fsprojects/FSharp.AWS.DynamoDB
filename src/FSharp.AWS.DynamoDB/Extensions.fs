@@ -4,10 +4,10 @@ open System
 open System.IO
 open System.Text.RegularExpressions
 
-open Amazon.Util
 open Amazon.Runtime
 
 open Microsoft.FSharp.Quotations
+open Amazon.Runtime.CredentialManagement
 
 /// Collection of extensions for the public API
 [<AutoOpen>]
@@ -20,17 +20,17 @@ module Extensions =
     let inline itemExists<'TRecord> = template<'TRecord>.ItemExists
     /// A conditional which verifies that given item does not exist
     let inline itemDoesNotExist<'TRecord> = template<'TRecord>.ItemDoesNotExist
-    
+
     /// Precomputes a conditional expression
-    let inline cond (expr : Expr<'TRecord -> bool>) : ConditionExpression<'TRecord> = 
+    let inline cond (expr : Expr<'TRecord -> bool>) : ConditionExpression<'TRecord> =
         template<'TRecord>.PrecomputeConditionalExpr expr
 
     /// Precomputes an update expression
-    let inline update (expr : Expr<'TRecord -> 'TRecord>) : UpdateExpression<'TRecord> = 
+    let inline update (expr : Expr<'TRecord -> 'TRecord>) : UpdateExpression<'TRecord> =
         template<'TRecord>.PrecomputeUpdateExpr expr
 
     /// Precomputes an update operation expression
-    let inline updateOp (expr : Expr<'TRecord -> UpdateOp>) : UpdateExpression<'TRecord> = 
+    let inline updateOp (expr : Expr<'TRecord -> UpdateOp>) : UpdateExpression<'TRecord> =
         template<'TRecord>.PrecomputeUpdateExpr expr
 
     /// Precomputes a projection expression
@@ -65,8 +65,9 @@ module Extensions =
         /// </summary>
         /// <param name="profileName">Credential store profile name. Defaults to 'default' profile.</param>
         static member FromCredentialsStore(?profileName : string) : Amazon.Runtime.AWSCredentials =
+            let credentialProfileStoreChain = new CredentialProfileStoreChain()
             let profileName = defaultArg profileName "default"
-            let ok, creds = ProfileManager.TryGetAWSCredentials(profileName)
+            let ok, creds = credentialProfileStoreChain.TryGetAWSCredentials(profileName)
             if ok then creds
             else
                 let credsFile = Path.Combine(getHomePath(), ".aws", "credentials")
