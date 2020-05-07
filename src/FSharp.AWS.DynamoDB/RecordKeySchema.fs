@@ -104,6 +104,26 @@ type PrimaryKeyStructure with
             let rangeKey = getValue rkp
             TableKey.Combined(hashKey, rangeKey)
 
+    /// Extracts key from attribute values
+    static member ExtractKey(keyStructure : PrimaryKeyStructure, attributeValues : Dictionary<string, AttributeValue>) =
+        let inline getValue (rp : PropertyMetadata) =
+            let notFound() = raise <| new KeyNotFoundException(sprintf "attribute %A not found." rp.Name)
+            let ok, av = attributeValues.TryGetValue rp.Name
+            if ok then rp.Pickler.UnPickleUntyped av
+            else notFound()
+        match keyStructure with
+        | HashKeyOnly hkp -> let hashKey = getValue hkp in TableKey.Hash hashKey
+        | DefaultHashKey(_, hashKey, _, rkp) ->
+            let rangeKey = getValue rkp
+            TableKey.Combined(hashKey, rangeKey)
+        | DefaultRangeKey(_, rangeKey, _, hkp) ->
+            let hashKey = getValue hkp
+            TableKey.Combined(hashKey, rangeKey)
+        | Combined(hkp,rkp) ->
+            let hashKey = getValue hkp
+            let rangeKey = getValue rkp
+            TableKey.Combined(hashKey, rangeKey)
+
 type KeyAttributeSchema with
     static member Create (name : string, pickler : Pickler, allowNull : bool) =
         if pickler.PicklerType <> PicklerType.Value && pickler.PicklerType <> PicklerType.Wrapper then
@@ -157,7 +177,7 @@ type RecordTableInfo with
 
         let primaryKey = ref None
         let extractKeySchema (kst : KeySchemaType) (attributes : seq<PropertyMetadata * KeyType * KeySchemaType>) =
-            let groupedAttrs = 
+            let groupedAttrs =
                 attributes
                 |> Seq.distinctBy (fun (rp,_,_) -> rp)
                 |> Seq.map (fun (rp,kt,_) -> kt, rp)
@@ -166,7 +186,7 @@ type RecordTableInfo with
 
             match kst, groupedAttrs with
             | PrimaryKey, _ ->
-                let setResult (pks : PrimaryKeyStructure) = 
+                let setResult (pks : PrimaryKeyStructure) =
                     let ks = TableKeySchema.OfKeyStructure pks
                     primaryKey := Some (pks, ks)
                     ks
@@ -176,7 +196,7 @@ type RecordTableInfo with
                     "Cannot specify both HashKey and RangeKey constant attributes in record definition."
                     |> invalidArg (string typeof<'T>)
 
-                | Some hkca, None, [|(KeyType.Range, rk)|] -> 
+                | Some hkca, None, [|(KeyType.Range, rk)|] ->
                     if not <| isValidFieldName hkca.Name then
                         invalidArg hkca.Name "invalid hashkey name; must be alphanumeric and should not begin with a number."
 
@@ -203,7 +223,7 @@ type RecordTableInfo with
             | LocalSecondaryIndex _, [|(KeyType.Range, rk)|] ->
                 match !primaryKey with
                 | None -> "Does not specify a HashKey attribute." |> invalidArg (string typeof<'T>)
-                | Some(_,ks) when Option.isNone ks.RangeKey -> 
+                | Some(_,ks) when Option.isNone ks.RangeKey ->
                     "LocalSecondaryIndex tables must specify a primary RangeKey" |> invalidArg (string typeof<'T>)
 
                 | Some(_,ks) -> { ks with RangeKey = Some (mkKAS rk) ; Type = kst }
@@ -214,7 +234,7 @@ type RecordTableInfo with
                 |> invalidArg (string typeof<'T>)
 
             | GlobalSecondaryIndex _, [|(KeyType.Hash, hk)|] -> { HashKey = mkKAS hk ; RangeKey = None ; Type = kst }
-            | GlobalSecondaryIndex _, [|(KeyType.Hash, hk) ; (KeyType.Range, rk)|] -> 
+            | GlobalSecondaryIndex _, [|(KeyType.Hash, hk) ; (KeyType.Range, rk)|] ->
                 { HashKey = mkKAS hk ; RangeKey = Some (mkKAS rk); Type = kst }
             | GlobalSecondaryIndex id, [|(KeyType.Range, _)|] ->
                 sprintf "Global secondary index '%s' is missing a HashKey declaration." id
@@ -238,12 +258,12 @@ type RecordTableInfo with
 
         let propSchema =
             schemata
-            |> Seq.collect (fun attr -> 
-                seq { 
+            |> Seq.collect (fun attr ->
+                seq {
                     yield (attr.HashKey, KeyType.Hash, attr)
                     match attr.RangeKey with Some rk -> yield (rk, KeyType.Range, attr) | None -> () })
             |> Seq.groupBy (fun (a, _, _) -> a.AttributeName)
-            |> Seq.map (fun (name, kss) -> 
+            |> Seq.map (fun (name, kss) ->
                 let schemata = kss |> Seq.map (fun (_,isHashKey,ks) -> ks,isHashKey) |> Seq.toArray
                 name, schemata)
             |> Map.ofSeq
@@ -271,7 +291,7 @@ type TableKeySchemata with
             { AttributeName = kse.AttributeName ; KeyType = ad.AttributeType }
 
         let primaryKey =
-            { 
+            {
                 HashKey = td.KeySchema |> Seq.find (fun ks -> ks.KeyType = KeyType.HASH) |> mkKeySchema
                 RangeKey = td.KeySchema |> Seq.tryPick (fun ks -> if ks.KeyType = KeyType.RANGE then Some(mkKeySchema ks) else None)
                 Type = PrimaryKey
@@ -300,7 +320,7 @@ type TableKeySchemata with
                 RangeKey = lsid.KeySchema |> Seq.find (fun ks -> ks.KeyType = KeyType.RANGE) |> mkKeySchema |> Some
                 Type = LocalSecondaryIndex lsid.IndexName
             }
-           
+
         new TableKeySchemata(
             [|  yield primaryKey
                 yield! td.GlobalSecondaryIndexes |> Seq.map mkGlobalSecondaryIndex

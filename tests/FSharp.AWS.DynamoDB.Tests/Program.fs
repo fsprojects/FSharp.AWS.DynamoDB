@@ -57,7 +57,9 @@ let SimpleTableOperationTests =
             testCase "Simple Put Operation" simpleTableOperationTests.``Simple Put Operation``
             testCase "ContainsKey Operation" simpleTableOperationTests.``ContainsKey Operation``
             testCase "Batch Put Operation" simpleTableOperationTests.``Batch Put Operation``
+            testCase "Batch Delete Operation" simpleTableOperationTests.``Batch Delete Operation``
             testCase "Simple Delete Operation" simpleTableOperationTests.``Simple Delete Operation``
+            testCase "Idempotent Delete Operation" simpleTableOperationTests.``Idempotent Delete Operation``
         ]
 
 let conditionalExpressionTestsTableFixture = new TableFixture()

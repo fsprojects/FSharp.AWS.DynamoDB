@@ -32,10 +32,10 @@ type AttributeValueComparer() =
         elif av.NS.Count > 0 then av'.NS.Count > 0 && areEqualResizeArrays av.NS av'.NS
         elif av.BS.Count > 0 then av'.BS.Count > 0 && av.BS.Count = av'.BS.Count && Seq.forall2 areEqualMemoryStreams av.BS av'.BS
         elif av.IsLSet then av'.IsLSet && av.L.Count = av'.L.Count && Seq.forall2 areEqualAttributeValues av.L av'.L
-        elif av.IsMSet then 
-            av'.IsMSet && 
+        elif av.IsMSet then
+            av'.IsMSet &&
             av.M.Count = av'.M.Count &&
-                av.M |> Seq.forall (fun kv -> 
+                av.M |> Seq.forall (fun kv ->
                     let ok,found = av'.M.TryGetValue kv.Key
                     if ok then areEqualAttributeValues kv.Value found
                     else false)
@@ -95,18 +95,18 @@ type AttributeValue with
         elif av.B <> null then sprintf "{ N = %A }" (av.B.ToArray())
         elif av.SS.Count > 0 then sprintf "{ SS = %A }" (Seq.toArray av.SS)
         elif av.NS.Count > 0 then sprintf "{ SN = %A }" (Seq.toArray av.NS)
-        elif av.BS.Count > 0 then 
-            av.BS 
-            |> Seq.map (fun bs -> bs.ToArray()) 
+        elif av.BS.Count > 0 then
+            av.BS
+            |> Seq.map (fun bs -> bs.ToArray())
             |> Seq.toArray
             |> sprintf "{ BS = %A }"
 
-        elif av.IsLSet then 
+        elif av.IsLSet then
             av.L |> Seq.map (fun av -> av.Print()) |> Seq.toArray |> sprintf "{ L = %A }"
 
-        elif av.IsMSet then 
-            av.M 
-            |> Seq.map (fun kv -> (kv.Key, kv.Value.Print())) 
+        elif av.IsMSet then
+            av.M
+            |> Seq.map (fun kv -> (kv.Key, kv.Value.Print()))
             |> Seq.toArray
             |> sprintf "{ M = %A }"
 
@@ -124,3 +124,21 @@ let isValidTableName (tableName : string) =
 let private fieldNameRegex = new Regex("^[a-zA-Z][a-zA-Z0-9]*", RegexOptions.Compiled)
 let isValidFieldName (name : string) =
     name <> null && fieldNameRegex.IsMatch name
+
+let unprocessedDeleteAttributeValues tableName (response : BatchWriteItemResponse) =
+    let (ok, reqs) = response.UnprocessedItems.TryGetValue tableName
+    if ok then
+        reqs |> Seq.choose (fun r -> r.DeleteRequest |> Option.ofObj)
+             |> Seq.map (fun d -> d.Key)
+             |> Seq.toArray
+    else
+        [||]
+
+let unprocessedPutAttributeValues tableName (response : BatchWriteItemResponse) =
+    let (ok, reqs) = response.UnprocessedItems.TryGetValue tableName
+    if ok then
+        reqs |> Seq.choose (fun r -> r.PutRequest |> Option.ofObj)
+             |> Seq.map (fun w -> w.Item)
+             |> Seq.toArray
+    else
+        [||]
