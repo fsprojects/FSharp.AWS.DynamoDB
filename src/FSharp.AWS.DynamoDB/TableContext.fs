@@ -507,7 +507,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Asynchronously deletes item of given key from table.
     /// </summary>
-    /// <returns>The deleted item, or None if nothing was deleted</returns>
+    /// <returns>The deleted item, or None if the item didn’t exist.</returns>
     /// <param name="key">Key of item to be deleted.</param>
     /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
     member __.DeleteItemAsync(key : TableKey, ?precondition : ConditionExpression<'TRecord>) : Async<'TRecord option> = async {
@@ -534,7 +534,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <summary>
     ///     Asynchronously deletes item of given key from table.
     /// </summary>
-    /// <returns>The deleted item, or None if nothing was deleted</returns>
+    /// <returns>The deleted item, or None if the item didn’t exist.</returns>
     /// <param name="key">Key of item to be deleted.</param>
     /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
     member __.DeleteItemAsync(key : TableKey, precondition : Expr<'TRecord -> bool>) : Async<'TRecord option> = async {
