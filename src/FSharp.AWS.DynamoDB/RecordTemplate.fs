@@ -56,9 +56,16 @@ type RecordTemplate<'TRecord> internal () =
     /// <summary>
     ///     Extracts the key that corresponds to supplied record instance.
     /// </summary>
-    /// <param name="item">Input record instance.</param>
+    /// <param name="record">Input record instance.</param>
     member __.ExtractKey(record : 'TRecord) =
         PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, record)
+
+    /// <summary>
+    ///     Extracts the key that corresponds to supplied record instance.
+    /// </summary>
+    /// <param name="attributeValues">Key attribute values</param>
+    member __.ExtractKey(attributeValues : Dictionary<string, AttributeValue>) =
+        PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, attributeValues)
 
     /// Generates a conditional which verifies whether an item already exists.
     member __.ItemExists =
