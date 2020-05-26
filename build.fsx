@@ -31,7 +31,7 @@ let gitHome = "https://github.com/" + gitOwner
 
 let buildDir  = "./build/"
 let nugetDir  = "./out/"
-
+ 
 
 System.Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 let release = ReleaseNotes.parse (System.IO.File.ReadAllLines "RELEASE_NOTES.md")
@@ -70,7 +70,7 @@ Target.create "AssemblyInfo" (fun _ ->
           AssemblyInfo.InternalsVisibleTo (projectName + ".Tests")
         ]
 
-    let getProjectDetails projectPath =
+    let getProjectDetails (projectPath : string) =
         let projectName = System.IO.Path.GetFileNameWithoutExtension(projectPath)
         ( projectPath,
           projectName,
@@ -124,7 +124,15 @@ Target.create "Pack" (fun _ ->
         { p with
             Configuration = DotNet.BuildConfiguration.Release
             OutputPath = Some nugetDir
-            MSBuildParams = { p.MSBuildParams with Properties = [("Version", release.NugetVersion); ("PackageReleaseNotes", String.concat "\n" release.Notes)]}
+            MSBuildParams = { p.MSBuildParams with 
+                                Properties = 
+                                    [
+                                        ("Version", release.NugetVersion)
+                                        ("PackageReleaseNotes", String.concat "\n" release.Notes)
+                                        // ("IncludeSymbols", "true")
+                                        // ("SymbolPackageFormat", "snupkg") // https://github.com/fsprojects/Paket/issues/3685
+                                    ]
+                            }
         }
     ) "FSharp.AWS.DynamoDB.sln"
 )
@@ -145,17 +153,12 @@ Target.create "ReleaseGitHub" (fun _ ->
     Git.Branches.pushTag "" remote release.NugetVersion
 
     let client =
-        let user =
-            match getBuildParam "github-user" with
-            | s when not (isNullOrWhiteSpace s) -> s
-            | _ -> UserInput.getUserInput "Username: "
-        let pw =
-            match getBuildParam "github-pw" with
-            | s when not (isNullOrWhiteSpace s) -> s
-            | _ -> UserInput.getUserPassword "Password: "
+        let token =
+           match getBuildParam "GITHUB_TOKEN" with
+           | s when not (isNullOrWhiteSpace s) -> s
+           | _ -> failwith "please set the GITHUB_TOKEN environment variable to a github personal access token with repo access."
 
-        // Git.createClient user pw
-        GitHub.createClient user pw
+        GitHub.createClientWithToken token
     let files = !! (nugetDir </> "*.nupkg")
 
     // release on github
@@ -164,13 +167,13 @@ Target.create "ReleaseGitHub" (fun _ ->
         |> GitHub.draftNewRelease gitOwner gitName release.NugetVersion (release.SemVer.PreRelease <> None) release.Notes
     (cl,files)
     ||> Seq.fold (fun acc e -> acc |> GitHub.uploadFile e)
-    |> GitHub.publishDraft//releaseDraft
+    |> GitHub.publishDraft
     |> Async.RunSynchronously
 )
 
 Target.create "Push" (fun _ ->
     let key =
-        match getBuildParam "nuget-key" with
+        match getBuildParam "NUGET_KEY" with
         | s when not (isNullOrWhiteSpace s) -> s
         | _ -> UserInput.getUserPassword "NuGet Key: "
     Paket.push (fun p -> { p with WorkingDir = nugetDir; ApiKey = key }))

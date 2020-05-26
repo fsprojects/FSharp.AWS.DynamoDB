@@ -1,3 +1,8 @@
+### 0.8.1-beta
+* Replace deprecated AWS ProfileManager usage
+* Bumped test project netcoreapp version to 3.1
+* Fixed 'Invalid UpdateExpression' exception for precomputed Map.remove operations (#20)
+
 ### 0.8.0-beta
 * Move to netstandard2.0.
 
