@@ -176,7 +176,9 @@ Target.create "Push" (fun _ ->
         match getBuildParam "NUGET_KEY" with
         | s when not (isNullOrWhiteSpace s) -> s
         | _ -> UserInput.getUserPassword "NuGet Key: "
-    Paket.push (fun p -> { p with WorkingDir = nugetDir; ApiKey = key }))
+    let pushParams = { NuGet.NuGet.NuGetPushParams.Create () with ApiKey = Some key; Source = Some "https://api.nuget.org/v3/index.json" }
+    DotNet.nugetPush (fun o -> o.WithPushParams pushParams) (sprintf "%s**.*.nupkg" nugetDir)
+)
 
 // --------------------------------------------------------------------------------------
 // Build order
