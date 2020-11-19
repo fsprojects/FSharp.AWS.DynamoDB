@@ -10,7 +10,7 @@ nuget FsCheck 2.14.2
 nuget Expecto.FsCheck
 nuget Expecto.VisualStudio.TestAdapter version_in_path: true
 
-nuget AWSSDK.DynamoDBv2 ~> 3.3.5
+nuget AWSSDK.DynamoDBv2 ~> 3.5.3
 github eiriktsarpalis/TypeShape:2.10 src/TypeShape/TypeShape.fs
 
 group Build
