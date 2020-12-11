@@ -201,16 +201,27 @@ let SparseGSITests =
             testCase "GSI Query Operation (missing)" sparseGSITests.``GSI Query Operation (missing)``
         ]
 
+let paginationTestsTableFixture = new TableFixture()
+let paginationTests = ``Pagination Tests``(paginationTestsTableFixture)
+let PaginationTests =
+    testList "PaginationTests"
+        [
+            testCase "Paginated Query on Primary Key" paginationTests.``Paginated Query on Primary Key``
+            testCase "Paginated Query on GSI " paginationTests.``Paginated Query on GSI``
+            testCase "Paginated Query with filter" paginationTests.``Paginated Query with filter``
+        ]
+
 [<Tests>]
 let tests =
     testList ""
         [
-            RecordGenerationTests
-            SimpleTableOperationTests
-            ConditionalExpressionTests
-            UpdateExpressionTests
-            ProjectionExpressionTests
-            SparseGSITests
+            // RecordGenerationTests
+            // SimpleTableOperationTests
+            // ConditionalExpressionTests
+            // UpdateExpressionTests
+            // ProjectionExpressionTests
+            // SparseGSITests
+            PaginationTests
         ]
 
 [<EntryPoint>]

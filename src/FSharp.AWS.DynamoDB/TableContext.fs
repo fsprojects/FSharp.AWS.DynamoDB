@@ -21,6 +21,21 @@ type ResourceNotFoundException = Amazon.DynamoDBv2.Model.ResourceNotFoundExcepti
 /// Represents the provisioned throughput for given table or index
 type ProvisionedThroughput = Amazon.DynamoDBv2.Model.ProvisionedThroughput
 
+// Scan/query limit type (internal only)
+type private LimitType = All | Default | Count of int
+    with
+    member x.GetCount () =
+        match x with
+        | Count l -> Some l
+        | _ -> None
+    member x.IsDownloadIncomplete (count : int) =
+        match x with
+        | Count l -> count < l
+        | All -> true
+        | Default -> false
+    static member AllOrCount (l : int option) = l |> Option.map Count |> Option.defaultValue All
+    static member DefaultOrCount (l : int option) = l |> Option.map Count |> Option.defaultValue Default
+
 /// DynamoDB client object for performing table operations
 /// in the context of given F# record representationss
 [<Sealed; AutoSerializable(false)>]
@@ -72,10 +87,11 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return response.Responses.[tableName]
     }
 
-    let queryAsync (keyCondition : ConditionalExpr.ConditionalExpression)
+    let queryPaginatedAsync (keyCondition : ConditionalExpr.ConditionalExpression)
                     (filterCondition : ConditionalExpr.ConditionalExpression option)
                     (projectionExpr : ProjectionExpr.ProjectionExpr option)
-                    (limit: int option) (consistentRead : bool option) (scanIndexForward : bool option) = async {
+                    (limit: LimitType) (exclusiveStartKey : TableKey option)
+                    (consistentRead : bool option) (scanIndexForward : bool option) = async {
 
         if not keyCondition.IsKeyConditionCompatible then
             invalidArg "keyCondition"
@@ -89,6 +105,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
 """
 
         let downloaded = new ResizeArray<_>()
+        let mutable lastEvaluatedKey : Dictionary<string,AttributeValue> option = None
         let rec aux last = async {
             let request = new QueryRequest(tableName)
             keyCondition.IndexName |> Option.iter (fun name -> request.IndexName <- name)
@@ -103,7 +120,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
             | None -> ()
             | Some pe -> request.ProjectionExpression <- pe.Write writer
 
-            limit |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
+            limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
             consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
             scanIndexForward |> Option.iter (fun sif -> request.ScanIndexForward <- sif)
             last |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
@@ -114,22 +131,35 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                 failwithf "Query request returned error %O" response.HttpStatusCode
 
             downloaded.AddRange response.Items
-            if response.LastEvaluatedKey.Count > 0 &&
-               limit |> Option.forall (fun l -> downloaded.Count < l)
-            then
-                do! aux (Some response.LastEvaluatedKey)
+            if response.LastEvaluatedKey.Count > 0 then
+                lastEvaluatedKey <- Some response.LastEvaluatedKey
+                if limit.IsDownloadIncomplete downloaded.Count then
+                    do! aux lastEvaluatedKey
+            else
+                lastEvaluatedKey <- None
         }
 
-        do! aux None
+        do! aux (exclusiveStartKey |> Option.map template.ToAttributeValues)
+
+        return (downloaded, lastEvaluatedKey |> Option.map template.ExtractKey)
+    }
+
+    let queryAsync (keyCondition : ConditionalExpr.ConditionalExpression)
+                    (filterCondition : ConditionalExpr.ConditionalExpression option)
+                    (projectionExpr : ProjectionExpr.ProjectionExpr option)
+                    (limit: int option) (consistentRead : bool option) (scanIndexForward : bool option) = async {
+
+        let! (downloaded, _) = queryPaginatedAsync keyCondition filterCondition projectionExpr (LimitType.AllOrCount limit) None consistentRead scanIndexForward
 
         return downloaded
     }
 
-    let scanAsync (filterCondition : ConditionalExpr.ConditionalExpression option)
-                    (projectionExpr : ProjectionExpr.ProjectionExpr option)
-                    (limit : int option) (consistentRead : bool option) = async {
+    let scanPaginatedAsync (filterCondition : ConditionalExpr.ConditionalExpression option)
+                            (projectionExpr : ProjectionExpr.ProjectionExpr option)
+                            (limit : LimitType) (exclusiveStartKey : TableKey option) (consistentRead : bool option) = async {
 
         let downloaded = new ResizeArray<_>()
+        let mutable lastEvaluatedKey : Dictionary<string,AttributeValue> option = None
         let rec aux last = async {
             let request = new ScanRequest(tableName)
             let writer = new AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
@@ -141,7 +171,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
             | None -> ()
             | Some pe -> request.ProjectionExpression <- pe.Write writer
 
-            limit |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
+            limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
             consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
             last |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
 
@@ -151,13 +181,24 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                 failwithf "Query request returned error %O" response.HttpStatusCode
 
             downloaded.AddRange response.Items
-            if response.LastEvaluatedKey.Count > 0 &&
-                limit |> Option.forall (fun l -> downloaded.Count < l)
-            then
-                do! aux (Some response.LastEvaluatedKey)
+            if response.LastEvaluatedKey.Count > 0 then
+                lastEvaluatedKey <- Some response.LastEvaluatedKey
+                if limit.IsDownloadIncomplete downloaded.Count then
+                    do! aux lastEvaluatedKey
+            else
+                lastEvaluatedKey <- None
         }
 
-        do! aux None
+        do! aux (exclusiveStartKey |> Option.map template.ToAttributeValues)
+
+        return (downloaded, lastEvaluatedKey |> Option.map template.ExtractKey)
+    }
+
+    let scanAsync (filterCondition : ConditionalExpr.ConditionalExpression option)
+                    (projectionExpr : ProjectionExpr.ProjectionExpr option)
+                    (limit : int option) (consistentRead : bool option) = async {
+
+        let! (downloaded, _) = scanPaginatedAsync filterCondition projectionExpr (LimitType.AllOrCount limit) None consistentRead
 
         return downloaded
     }
@@ -731,6 +772,154 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         |> Async.RunSynchronously
 
     /// <summary>
+    ///     Asynchronously queries table with given condition expressions.
+    /// </summary>
+    /// <param name="keyCondition">Key condition expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    member __.QueryPaginatedAsync(keyCondition : ConditionExpression<'TRecord>, ?filterCondition : ConditionExpression<'TRecord>,
+                            ?limit: int, ?exclusiveStartKey: TableKey, ?consistentRead : bool, ?scanIndexForward : bool) : Async<PaginatedResult<'TRecord>> = async {
+
+        let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+        let! (downloaded, lastEvaluatedKey) = queryPaginatedAsync keyCondition.Conditional filterCondition None (LimitType.DefaultOrCount limit) exclusiveStartKey consistentRead scanIndexForward
+        return { Records = downloaded |> Seq.map template.OfAttributeValues |> Seq.toArray; LastEvaluatedKey = lastEvaluatedKey }
+    }
+
+    /// <summary>
+    ///     Asynchronously queries table with given condition expressions.
+    /// </summary>
+    /// <param name="keyCondition">Key condition expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    member __.QueryPaginatedAsync(keyCondition : Expr<'TRecord -> bool>, ?filterCondition : Expr<'TRecord -> bool>,
+                            ?limit : int, ?exclusiveStartKey: TableKey, ?consistentRead : bool, ?scanIndexForward : bool) : Async<PaginatedResult<'TRecord>> = async {
+
+        let kc = template.PrecomputeConditionalExpr keyCondition
+        let fc = filterCondition |> Option.map template.PrecomputeConditionalExpr
+        return! __.QueryPaginatedAsync(kc, ?filterCondition = fc, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+    }
+
+    /// <summary>
+    ///     Queries table with given condition expressions.
+    /// </summary>
+    /// <param name="keyCondition">Key condition expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    member __.QueryPaginated(keyCondition : ConditionExpression<'TRecord>, ?filterCondition : ConditionExpression<'TRecord>,
+                            ?limit: int, ?exclusiveStartKey: TableKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TRecord> =
+        __.QueryPaginatedAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
+                        ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+        |> Async.RunSynchronously
+
+    /// <summary>
+    ///     Queries table with given condition expressions.
+    /// </summary>
+    /// <param name="keyCondition">Key condition expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    member __.QueryPaginated(keyCondition : Expr<'TRecord -> bool>, ?filterCondition : Expr<'TRecord -> bool>,
+                            ?limit: int, ?exclusiveStartKey: TableKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TRecord> =
+        __.QueryPaginatedAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
+                        ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+        |> Async.RunSynchronously
+
+
+    /// <summary>
+    ///     Asynchronously queries table with given condition expressions.
+    ///     Uses supplied projection expression to narrow downloaded attributes.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
+    /// </summary>
+    /// <param name="keyCondition">Key condition expression.</param>
+    /// <param name="projection">Projection expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    member __.QueryProjectedPaginatedAsync<'TProjection>(keyCondition : ConditionExpression<'TRecord>, projection : ProjectionExpression<'TRecord, 'TProjection>,
+                                                ?filterCondition : ConditionExpression<'TRecord>,
+                                                ?limit: int, ?exclusiveStartKey: TableKey, ?consistentRead : bool, ?scanIndexForward : bool) : Async<PaginatedResult<'TProjection>> = async {
+
+        let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+        let! (downloaded, lastEvaluatedKey) = queryPaginatedAsync keyCondition.Conditional filterCondition None (LimitType.DefaultOrCount limit) exclusiveStartKey consistentRead scanIndexForward
+        return { Records= downloaded |> Seq.map projection.UnPickle |> Seq.toArray; LastEvaluatedKey = lastEvaluatedKey }
+    }
+
+    /// <summary>
+    ///     Asynchronously queries table with given condition expressions.
+    ///     Uses supplied projection expression to narrow downloaded attributes.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
+    /// </summary>
+    /// <param name="keyCondition">Key condition expression.</param>
+    /// <param name="projection">Projection expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    member __.QueryProjectedPaginatedAsync<'TProjection>(keyCondition : Expr<'TRecord -> bool>, projection : Expr<'TRecord -> 'TProjection>,
+                                                ?filterCondition : Expr<'TRecord -> bool>,
+                                                ?limit: int, ?exclusiveStartKey: TableKey, ?consistentRead : bool, ?scanIndexForward : bool) : Async<PaginatedResult<'TProjection>> = async {
+
+        let filterCondition = filterCondition |> Option.map (fun fc -> template.PrecomputeConditionalExpr fc)
+        return! __.QueryProjectedPaginatedAsync(template.PrecomputeConditionalExpr keyCondition, template.PrecomputeProjectionExpr projection,
+                                        ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
+                                        ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+    }
+
+    /// <summary>
+    ///     Queries table with given condition expressions.
+    ///     Uses supplied projection expression to narrow downloaded attributes.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
+    /// </summary>
+    /// <param name="keyCondition">Key condition expression.</param>
+    /// <param name="projection">Projection expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    member __.QueryProjectedPaginated<'TProjection>(keyCondition : ConditionExpression<'TRecord>, projection : ProjectionExpression<'TRecord, 'TProjection>,
+                                                ?filterCondition : ConditionExpression<'TRecord>,
+                                                ?limit: int, ?exclusiveStartKey: TableKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TProjection> =
+
+        __.QueryProjectedPaginatedAsync(keyCondition, projection, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
+                                ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+        |> Async.RunSynchronously
+
+    /// <summary>
+    ///     Queries table with given condition expressions.
+    ///     Uses supplied projection expression to narrow downloaded attributes.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
+    /// </summary>
+    /// <param name="keyCondition">Key condition expression.</param>
+    /// <param name="projection">Projection expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    member __.QueryProjectedPaginated<'TProjection>(keyCondition : Expr<'TRecord -> bool>, projection : Expr<'TRecord -> 'TProjection>,
+                                                ?filterCondition : Expr<'TRecord -> bool>,
+                                                ?limit: int, ?exclusiveStartKey: TableKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TProjection> =
+
+        __.QueryProjectedPaginatedAsync(keyCondition, projection, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
+                                ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+        |> Async.RunSynchronously
+
+    /// <summary>
     ///     Asynchronously scans table with given condition expressions.
     /// </summary>
     /// <param name="filterCondition">Filter condition expression.</param>
@@ -838,6 +1027,124 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                                                 ?limit : int, ?consistentRead : bool) : 'TProjection [] =
         __.ScanProjectedAsync(projection, ?filterCondition = filterCondition,
                                 ?limit = limit, ?consistentRead = consistentRead)
+        |> Async.RunSynchronously
+
+    /// <summary>
+    ///     Asynchronously scans table with given condition expressions.
+    /// </summary>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member __.ScanPaginatedAsync(?filterCondition : ConditionExpression<'TRecord>, ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : Async<PaginatedResult<'TRecord>> = async {
+        let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+        let! (downloaded, lastEvaluatedKey) = scanPaginatedAsync filterCondition None (LimitType.DefaultOrCount limit) exclusiveStartKey consistentRead
+        return { Records = downloaded |> Seq.map template.OfAttributeValues |> Seq.toArray; LastEvaluatedKey = lastEvaluatedKey }
+    }
+
+    /// <summary>
+    ///     Asynchronously scans table with given condition expressions.
+    /// </summary>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member __.ScanPaginatedAsync(filterExpr : Expr<'TRecord -> bool>, ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : Async<PaginatedResult<'TRecord>> = async {
+        let cond = template.PrecomputeConditionalExpr filterExpr
+        return! __.ScanPaginatedAsync(cond, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
+    }
+
+    /// <summary>
+    ///     Scans table with given condition expressions.
+    /// </summary>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member __.ScanPaginated(?filterCondition : ConditionExpression<'TRecord>, ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : PaginatedResult<'TRecord> =
+        __.ScanPaginatedAsync(?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
+        |> Async.RunSynchronously
+
+    /// <summary>
+    ///     Scans table with given condition expressions.
+    /// </summary>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member __.ScanPaginated(filterCondition : Expr<'TRecord -> bool>, ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : PaginatedResult<'TRecord> =
+        __.ScanPaginatedAsync(filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
+        |> Async.RunSynchronously
+
+
+    /// <summary>
+    ///     Asynchronously scans table with given condition expressions.
+    ///     Uses supplied projection expression to narrow downloaded attributes.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
+    /// </summary>
+    /// <param name="projection">Projection expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member __.ScanProjectedPaginatedAsync<'TProjection>(projection : ProjectionExpression<'TRecord, 'TProjection>,
+                                                ?filterCondition : ConditionExpression<'TRecord>,
+                                                ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : Async<PaginatedResult<'TProjection>> = async {
+        let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+        let! (downloaded, lastEvaluatedKey) = scanPaginatedAsync filterCondition (Some projection.ProjectionExpr) (LimitType.DefaultOrCount limit) exclusiveStartKey consistentRead
+        return { Records = downloaded |> Seq.map projection.UnPickle |> Seq.toArray; LastEvaluatedKey = lastEvaluatedKey }
+    }
+
+    /// <summary>
+    ///     Asynchronously scans table with given condition expressions.
+    ///     Uses supplied projection expression to narrow downloaded attributes.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
+    /// </summary>
+    /// <param name="projection">Projection expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member __.ScanProjectedPaginatedAsync<'TProjection>(projection : Expr<'TRecord -> 'TProjection>,
+                                                ?filterCondition : Expr<'TRecord -> bool>,
+                                                ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : Async<PaginatedResult<'TProjection>> = async {
+        let filterCondition = filterCondition |> Option.map (fun fc -> template.PrecomputeConditionalExpr fc)
+        return! __.ScanProjectedPaginatedAsync(template.PrecomputeProjectionExpr projection, ?filterCondition = filterCondition,
+                                        ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
+    }
+
+    /// <summary>
+    ///     Scans table with given condition expressions.
+    ///     Uses supplied projection expression to narrow downloaded attributes.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
+    /// </summary>
+    /// <param name="projection">Projection expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member __.ScanProjectedPaginated<'TProjection>(projection : ProjectionExpression<'TRecord, 'TProjection>,
+                                                ?filterCondition : ConditionExpression<'TRecord>,
+                                                ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : PaginatedResult<'TProjection> =
+        __.ScanProjectedPaginatedAsync(projection, ?filterCondition = filterCondition,
+                                ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
+        |> Async.RunSynchronously
+
+    /// <summary>
+    ///     Scans table with given condition expressions.
+    ///     Uses supplied projection expression to narrow downloaded attributes.
+    ///     Projection type must be a tuple of zero or more non-conflicting properties.
+    /// </summary>
+    /// <param name="projection">Projection expression.</param>
+    /// <param name="filterCondition">Filter condition expression.</param>
+    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member __.ScanProjectedPaginated<'TProjection>(projection : Expr<'TRecord -> 'TProjection>,
+                                                ?filterCondition : Expr<'TRecord -> bool>,
+                                                ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : PaginatedResult<'TProjection> =
+        __.ScanProjectedPaginatedAsync(projection, ?filterCondition = filterCondition,
+                                ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
         |> Async.RunSynchronously
 
     /// <summary>

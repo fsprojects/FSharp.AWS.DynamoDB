@@ -49,7 +49,7 @@ type LocalSecondaryIndexAttribute private (indexName : string option) =
 [<Sealed; AttributeUsage(AttributeTargets.Class, AllowMultiple = false)>]
 type ConstantHashKeyAttribute(name : string, hashkey : obj) =
     inherit Attribute()
-    do 
+    do
         if name = null then raise <| ArgumentNullException("'Name' parameter cannot be null.")
         if hashkey = null then raise <| ArgumentNullException("'HashKey' parameter cannot be null.")
 
@@ -62,7 +62,7 @@ type ConstantHashKeyAttribute(name : string, hashkey : obj) =
 [<Sealed; AttributeUsage(AttributeTargets.Class, AllowMultiple = false)>]
 type ConstantRangeKeyAttribute(name : string, rangeKey : obj) =
     inherit Attribute()
-    do 
+    do
         if name = null then raise <| ArgumentNullException("'Name' parameter cannot be null.")
         if rangeKey = null then raise <| ArgumentNullException("'HashKey' parameter cannot be null.")
 
@@ -127,11 +127,11 @@ type BinaryFormatterAttribute() =
         use m = new MemoryStream(pickle)
         bfs.Deserialize(m) :?> 'T
 
-/// Metadata on a table key attribute 
-type KeyAttributeSchema = 
+/// Metadata on a table key attribute
+type KeyAttributeSchema =
     {
         AttributeName : string
-        KeyType : ScalarAttributeType 
+        KeyType : ScalarAttributeType
     }
 
 /// Identifies type of DynamoDB table key schema
@@ -164,7 +164,7 @@ type TableKey private (hashKey : obj, rangeKey : obj) =
     member private __.Format =
         match rangeKey with
         | null -> sprintf "{ HashKey = %A }" hashKey
-        | rk -> 
+        | rk ->
             match hashKey with
             | null -> sprintf "{ RangeKey = %A }" rk
             | hk -> sprintf "{ HashKey = %A ; RangeKey = %A }" hk rk
@@ -179,7 +179,7 @@ type TableKey private (hashKey : obj, rangeKey : obj) =
     override tk.GetHashCode() = hash2 hashKey rangeKey
 
     /// Defines a table key using provided HashKey
-    static member Hash<'HashKey>(hashKey : 'HashKey) = 
+    static member Hash<'HashKey>(hashKey : 'HashKey) =
         if isNull hashKey then raise <| new ArgumentNullException("HashKey must not be null")
         TableKey(hashKey, null)
 
@@ -189,9 +189,33 @@ type TableKey private (hashKey : obj, rangeKey : obj) =
         TableKey(null, rangeKey)
 
     /// Defines a table key using combined HashKey and RangeKey
-    static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey) = 
+    static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey) =
         if isNull hashKey then raise <| new ArgumentNullException("HashKey must not be null")
         new TableKey(hashKey, rangeKey)
+
+/// Pagination result type
+type PaginatedResult<'TRecord> =
+    {
+        Records : 'TRecord[]
+        LastEvaluatedKey : TableKey option
+    }
+    member x.GetLastEvaluatedHashKey<'HashKey> () =
+        match x.LastEvaluatedKey with
+        | Some k when k.IsHashKeySpecified ->
+            Some (k.HashKey :?> 'HashKey)
+        | _ ->
+            None
+    member x.GetLastEvaluatedRangeKey<'RangeKey> () =
+        match x.LastEvaluatedKey with
+        | Some k when k.IsRangeKeySpecified ->
+            Some (k.RangeKey :?> 'RangeKey)
+        | _ ->
+            None
+    interface System.Collections.IEnumerable with
+        member x.GetEnumerator () = x.Records.GetEnumerator ()
+    interface System.Collections.Generic.IEnumerable<'TRecord> with
+        member x.GetEnumerator () = (x.Records :> System.Collections.Generic.IEnumerable<'TRecord>).GetEnumerator ()
+
 
 #nowarn "1182"
 
@@ -215,7 +239,7 @@ module ConditionalOperators =
 [<AutoOpen>]
 module UpdateOperators =
 
-    /// Table Update operation placeholder type 
+    /// Table Update operation placeholder type
     type UpdateOp =
         /// Combines two update operations into one
         static member (&&&) (left : UpdateOp, right : UpdateOp) : UpdateOp =
