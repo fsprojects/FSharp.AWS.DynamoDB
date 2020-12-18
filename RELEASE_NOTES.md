@@ -1,3 +1,7 @@
+### 0.8.2-beta
+* Replace attribute name validation with something that sticks closer to the [AWS naming rules](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html) - fixes #29
+* Update project to net50 & bumped dependencies
+
 ### 0.8.1-beta
 * Replace deprecated AWS ProfileManager usage
 * Bumped test project netcoreapp version to 3.1
