@@ -28,25 +28,25 @@ with
         match nf with
         | FParam i -> sprintf "<$param%d>" i
         | FField f when not <| isValidFieldName f ->
-            sprintf "map keys must be alphanumeric and not starting with a digit."
+            sprintf "map keys must be 1 to 64k long (as utf8)."
             |> invalidArg f
 
         | FField f -> "." + f
         | FIndex i -> sprintf "[%d]" i
 
 /// DynamoDB Attribute identifier
-type AttributeId = 
-    { 
+type AttributeId =
+    {
         RootName : string
         RootId : string
         NestedAttributes : NestedAttribute list
-        KeySchemata : (TableKeySchema * KeyType) [] 
+        KeySchemata : (TableKeySchema * KeyType) []
     }
 with
     member id.IsParametric =
         id.NestedAttributes |> List.exists (function FParam _ -> true | _ -> false)
 
-    member id.Id = 
+    member id.Id =
         mkString(fun append ->
             append id.RootId
             for nf in id.NestedAttributes do append <| nf.Print())
@@ -56,7 +56,7 @@ with
             append id.RootId
             for nf in id.NestedAttributes do append <| nf.Print())
 
-    member id.Tokens = 
+    member id.Tokens =
         seq { yield id.RootName ; yield! id.NestedAttributes |> Seq.map (fun nf -> nf.Print()) }
 
     member id.IsHashKey =
@@ -75,12 +75,12 @@ with
     member id.Apply (inputs : obj[]) =
         let applyField nf =
             match nf with
-            | FParam i -> 
-                match inputs.[i] with 
-                | :? string as f -> FField f 
-                | :? int as i -> 
+            | FParam i ->
+                match inputs.[i] with
+                | :? string as f -> FField f
+                | :? int as i ->
                     if i < 0 then raise <| ArgumentOutOfRangeException()
-                    else FIndex i 
+                    else FIndex i
                 | _ -> raise <| new InvalidCastException()
             | _ -> nf
 
@@ -163,10 +163,10 @@ with
 
         let rec extractProps props e =
             match e with
-            | PropertyGet(Some (Var r'), p, []) when record = r' -> 
+            | PropertyGet(Some (Var r'), p, []) when record = r' ->
                 match tryGetPropInfo info.Properties (List.isEmpty props) p with
                 | None -> None
-                | Some rp -> 
+                | Some rp ->
                     let root = Root(rp, info.GetPropertySchemata rp.Name)
                     mkAttrPath root rp.NestedRecord props
 
@@ -179,18 +179,18 @@ with
 
             | PropertyGet(Some e, p, []) -> extractProps (Choice1Of3 p :: props) e
 
-            | SpecificCall2 <@ fst @> (None, _, _, [e]) -> 
-                let p = e.Type.GetProperty("Item1") 
+            | SpecificCall2 <@ fst @> (None, _, _, [e]) ->
+                let p = e.Type.GetProperty("Item1")
                 extractProps (Choice1Of3 p :: props) e
 
-            | SpecificCall2 <@ snd @> (None, _, _, [e]) -> 
+            | SpecificCall2 <@ snd @> (None, _, _, [e]) ->
                 let p = e.Type.GetProperty("Item2")
                 extractProps (Choice1Of3 p :: props) e
 
             | SpecificCall2 <@ Option.get @> (None, _, [et], [e]) ->
                 extractProps (Choice2Of3 et :: props) e
 
-            | IndexGet(e, et, i) -> 
+            | IndexGet(e, et, i) ->
                 extractProps (Choice3Of3 (et, i) :: props) e
 
             | _ -> None
@@ -214,7 +214,7 @@ with
                 match ie with
                 | _ when ie.IsClosed ->
                     match evalRaw ie : obj with
-                    | :? int as i -> 
+                    | :? int as i ->
                         if i < 0 then raise <| ArgumentOutOfRangeException() else
                         mkAttrPath (FIndex i)
                     | :? string as f -> mkAttrPath (FField f)
@@ -288,7 +288,7 @@ let tryFindConflictingPaths (attrs : seq<AttributeId>) =
             let t = enum.Current
             let child =
                 match ctx.FindIndex(fun n -> n.Value = t) with
-                | -1 -> 
+                | -1 ->
                     isNodeAdded <- true
                     let ch = { Value = t ; Children = new ResizeArray<_>() }
                     ctx.Add ch

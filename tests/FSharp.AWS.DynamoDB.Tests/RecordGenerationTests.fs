@@ -13,7 +13,7 @@ module ``Record Generation Tests`` =
 
     type Test private () =
         static let config =
-            { Config.QuickThrowOnFailure with 
+            { Config.QuickThrowOnFailure with
                 Arbitrary = [ typeof<FsCheckGenerators> ] }
 
         static member RoundTrip<'Record when 'Record : equality> (?tolerateInequality) =
@@ -26,18 +26,18 @@ module ``Record Generation Tests`` =
                     if tolerateInequality then
                         if not !isFoundInequality && r <> r' then
                             isFoundInequality := true
-                            sprintf "Error when equality testing %O:\nExpected: %A\nActual: %A" 
+                            sprintf "Error when equality testing %O:\nExpected: %A\nActual: %A"
                                 typeof<'Record> r r'
                             |> Console.WriteLine
                     else
                         Expect.equal r' r "Record should be equal"
-                with 
+                with
                 // account for random inputs not supported by the library
-                | :? System.InvalidOperationException as e 
+                | :? System.InvalidOperationException as e
                     when e.Message = "empty strings not supported by DynamoDB." -> ()
                 | :? System.ArgumentException as e
-                    when e.Message.Contains "unsupported key name" && 
-                         e.Message.Contains "should be alphanumeric and not starting with digit" -> ()
+                    when e.Message.Contains "unsupported key name" &&
+                         e.Message.Contains "should be 1 to 64k long (as utf8)" -> ()
 
             Check.One(config, roundTrip)
 
@@ -58,8 +58,8 @@ module ``Record Generation Tests`` =
     [<ConstantRangeKeyAttribute("RangeKey", "Constant")>]
     type ``BS Constant RangeKey Record`` = { [<HashKey>] A1 : byte[] }
 
-    type ``SS String Representation Record`` = 
-        { 
+    type ``SS String Representation Record`` =
+        {
             [<HashKey; StringRepresentation>]  A1 : byte[]
             [<RangeKey; StringRepresentation>] B1 : int64
         }
@@ -141,8 +141,8 @@ module ``Record Generation Tests`` =
 
     type NestedUnion = UA of int | UB of string | UC of byte[] * DateTimeOffset
 
-    type ``Complex Record A`` = 
-        { 
+    type ``Complex Record A`` =
+        {
             [<HashKey>]HashKey : string
             [<RangeKey>]RangeKey : string
 
@@ -165,8 +165,8 @@ module ``Record Generation Tests`` =
         }
 
 
-    type ``Complex Record B`` = 
-        { 
+    type ``Complex Record B`` =
+        {
             [<HashKey>]HashKey : byte[]
             [<RangeKey>]RangeKey : decimal
 
@@ -177,8 +177,8 @@ module ``Record Generation Tests`` =
             BlobValue : (int * string) [][]
         }
 
-    type ``Complex Record C`` = 
-        { 
+    type ``Complex Record C`` =
+        {
             [<HashKey>]HashKey : decimal
             [<RangeKey>]RangeKey : byte
 
@@ -275,7 +275,7 @@ module ``Record Generation Tests`` =
         |> shouldFailwith<_, ArgumentException>
 
     [<ConstantHashKeyAttribute("HashKey", "HashKeyValue")>]
-    type ``Record containing costant HashKey attribute with HashKey attribute`` = 
+    type ``Record containing costant HashKey attribute with HashKey attribute`` =
         { [<HashKey>]HashKey : string ; [<RangeKey>]RangeKey : string }
 
     let ``Record containing costant HashKey attribute with HashKey attribute should fail`` () =
@@ -286,7 +286,7 @@ module ``Record Generation Tests`` =
     type FooRecord = { A : int ; B : string ; C : DateTimeOffset * string }
 
     let ``Generated picklers should be singletons`` () =
-        Expect.equal 
+        Expect.equal
             (Array.Parallel.init 100 (fun _ -> Pickler.resolve<FooRecord>())
              |> Seq.distinct
              |> Seq.length)
@@ -367,7 +367,7 @@ module ``Record Generation Tests`` =
 
     let ``GSI should fail if invalid key type`` () =
         fun () -> RecordTemplate.Define<GSI4>()
-        |> shouldFailwith<_, ArgumentException>        
+        |> shouldFailwith<_, ArgumentException>
 
     let ``Sparse GSI`` () =
         let template = RecordTemplate.Define<GSI5>()
@@ -378,8 +378,8 @@ module ``Record Generation Tests`` =
 
     let ``GSI should fail with option primary hash key`` () =
         fun () -> RecordTemplate.Define<GSI6>()
-        |> shouldFailwith<_, ArgumentException>  
-        
+        |> shouldFailwith<_, ArgumentException>
+
     type LSI1 =
         {
             [<HashKey>]
@@ -435,8 +435,8 @@ module ``Record Generation Tests`` =
     let ``DateTimeOffset pickler encoding should preserve offsets`` () =
         let config = { Config.QuickThrowOnFailure with MaxTest = 1000 }
         let pickler = new DateTimeOffsetPickler()
-        Check.One(config, 
-            fun (d:DateTimeOffset) -> 
-                let d' = pickler.UnParse d |> pickler.Parse 
+        Check.One(config,
+            fun (d:DateTimeOffset) ->
+                let d' = pickler.UnParse d |> pickler.Parse
                 Expect.equal d'.DateTime d.DateTime "Date should be equal"
                 d'.Offset |> Expect.equal d.Offset)
