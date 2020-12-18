@@ -8,7 +8,7 @@ open System.Reflection
 //  Pickler metadata for F# type properties
 //
 
-[<CustomEquality; NoComparison>] 
+[<CustomEquality; NoComparison>]
 type PropertyMetadata =
     {
         Name : string
@@ -30,10 +30,10 @@ with
 
     static member FromPropertyInfo (resolver : IPicklerResolver) (attrId : int) (prop : PropertyInfo) =
         let attributes = prop.GetAttributes()
-        let pickler = 
+        let pickler =
             match attributes |> Seq.tryPick (fun a -> match box a with :? IPropertySerializer as ps -> Some ps | _ -> None) with
             | Some serializer -> mkSerializerAttributePickler resolver serializer prop.PropertyType
-            | None when attributes |> containsAttribute<StringRepresentationAttribute> -> 
+            | None when attributes |> containsAttribute<StringRepresentationAttribute> ->
                 mkStringRepresentationPickler resolver prop
             | None -> resolver.Resolve prop.PropertyType
 
@@ -43,7 +43,7 @@ with
             | None -> prop.Name
 
         if not <| isValidFieldName name then
-            invalidArg name "invalid record field name; must be alphanumeric and should not begin with a number."
+            invalidArg name "invalid record field name; must be 1 to 64k long (as utf8)."
 
         {
             Name = name
