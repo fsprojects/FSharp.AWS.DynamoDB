@@ -121,9 +121,14 @@ let isValidTableName (tableName : string) =
     elif not <| tableNameRegex.IsMatch tableName then false
     else true
 
-let private fieldNameRegex = new Regex("^[a-zA-Z][a-zA-Z0-9]*", RegexOptions.Compiled)
+let private utf8Length (str : string) =
+    System.Text.Encoding.UTF8.GetBytes(str).Length
+
 let isValidFieldName (name : string) =
-    name <> null && fieldNameRegex.IsMatch name
+    name <> null && name.Length > 0 && utf8Length name <= 65535
+
+let isValidKeyName (name : string) =
+    name <> null && name.Length > 0 && utf8Length name <= 255
 
 let unprocessedDeleteAttributeValues tableName (response : BatchWriteItemResponse) =
     let (ok, reqs) = response.UnprocessedItems.TryGetValue tableName

@@ -53,6 +53,7 @@ type RecordTableInfo =
     }
 
 
+
 type PrimaryKeyStructure with
     /// Extracts given TableKey to AttributeValue form
     static member ExtractKey(keyStructure : PrimaryKeyStructure, key : TableKey) =
@@ -197,8 +198,8 @@ type RecordTableInfo with
                     |> invalidArg (string typeof<'T>)
 
                 | Some hkca, None, [|(KeyType.Range, rk)|] ->
-                    if not <| isValidFieldName hkca.Name then
-                        invalidArg hkca.Name "invalid hashkey name; must be alphanumeric and should not begin with a number."
+                    if not <| isValidKeyName hkca.Name then
+                        invalidArg hkca.Name "invalid hashkey name; must be 1 to 255 bytes long (as utf8)."
 
                     if pickler.Properties |> Array.exists(fun p -> p.Name = hkca.Name) then
                         invalidArg (string typeof<'T>) "Default HashKey attribute contains conflicting name."
@@ -207,8 +208,8 @@ type RecordTableInfo with
                     DefaultHashKey(hkca.Name, hkca.HashKey, pickler, rk) |> setResult
 
                 | None, Some rkca, [|(KeyType.Hash, hk)|] ->
-                    if not <| isValidFieldName rkca.Name then
-                        invalidArg rkca.Name "invalid rangekey name; must be alphanumeric and should not begin with a number."
+                    if not <| isValidKeyName rkca.Name then
+                        invalidArg rkca.Name "invalid rangekey name; must be 1 to 255 bytes long (as utf8)."
 
                     if pickler.Properties |> Array.exists(fun p -> p.Name = rkca.Name) then
                         invalidArg (string typeof<'T>) "Default RangeKey attribute contains conflicting name."

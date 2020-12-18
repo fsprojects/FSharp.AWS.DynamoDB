@@ -24,7 +24,7 @@ type ListPickler<'List, 'T when 'List :> seq<'T>>(ctor : seq<'T> -> 'List, nullV
     override __.PickleCoerced obj =
         match obj with
         | null -> Some <| AttributeValue(NULL = true)
-        | :? 'T as t -> 
+        | :? 'T as t ->
             match tp.Pickle t with
             | None -> None
             | Some av -> Some <| AttributeValue(L = rlist [|av|])
@@ -54,14 +54,14 @@ type BytesSetPickler() =
     override __.PickleCoerced obj =
         match obj with
         | null -> Some <| AttributeValue(NULL = true)
-        | :? (byte[]) as bs -> 
+        | :? (byte[]) as bs ->
             if bs.Length = 0 then None
             else
                 Some <| AttributeValue(BS = rlist [|new MemoryStream(bs)|])
 
         | _ ->
-            let rl = 
-                unbox<seq<byte[]>> obj 
+            let rl =
+                unbox<seq<byte[]>> obj
                 |> Seq.choose (fun bs -> if bs.Length = 0 then None else Some(new MemoryStream(bs)))
                 |> rlist
 
@@ -149,22 +149,22 @@ type MapPickler<'Value>(vp : Pickler<'Value>) =
         if isNull map then AttributeValue(NULL = true) |> Some
         elif map.Count = 0 then None
         else
-            let m = 
-                map 
+            let m =
+                map
                 |> Seq.choose (fun kv ->
                     if not <| isValidFieldName kv.Key then
-                        let msg = sprintf "unsupported key name '%s'. should be alphanumeric and not starting with digit." kv.Key
+                        let msg = sprintf "unsupported key name '%s'. should be 1 to 64k long (as utf8)." kv.Key
                         invalidArg "map" msg
 
-                    match vp.Pickle kv.Value with 
-                    | None -> None 
-                    | Some av -> Some (keyVal kv.Key av)) 
+                    match vp.Pickle kv.Value with
+                    | None -> None
+                    | Some av -> Some (keyVal kv.Key av))
                 |> cdict
 
             if m.Count = 0 then None else
 
             AttributeValue(M = m) |> Some
-            
+
 
     override __.UnPickle a =
         if a.NULL then Map.empty
