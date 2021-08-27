@@ -1,15 +1,15 @@
 source https://api.nuget.org/v3/index.json
 
 storage: none
-framework: netcoreapp3.1, netstandard2.0, netstandard2.1
+framework: net50, netstandard20, netstandard21
 
 nuget Unquote ~> 5.0.0
 nuget FSharp.Core
 nuget Expecto
-nuget FsCheck 2.14.2
+nuget FsCheck 2.14.3
 nuget Expecto.FsCheck
 
-nuget AWSSDK.DynamoDBv2 ~> 3.3.5
+nuget AWSSDK.DynamoDBv2 ~> 3.5.4
 github eiriktsarpalis/TypeShape:2.10 src/TypeShape/TypeShape.fs
 
 group Build
@@ -18,6 +18,7 @@ group Build
   framework: netstandard2.0
   storage: none
   
+  nuget FSharp.Core
   nuget Fake.Core.Target
   nuget Fake.Core.Process
   nuget Fake.DotNet.Cli
