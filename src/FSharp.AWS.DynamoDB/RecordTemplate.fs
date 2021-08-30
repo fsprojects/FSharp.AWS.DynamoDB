@@ -72,8 +72,8 @@ type RecordTemplate<'TRecord> internal () =
     /// </summary>
     /// <param name="keySchema">Key schema for the index used for the Scan/Query</param>
     /// <param name="attributeValues">Key attribute values</param>
-    member __.ExtractQueryKey(keySchema: TableKeySchema, attributeValues : Dictionary<string, AttributeValue>) =
-        RecordTableInfo.ExtractQueryKey(keySchema, recordInfo, attributeValues)
+    member __.ExtractIndexKey(keySchema: TableKeySchema, attributeValues : Dictionary<string, AttributeValue>) =
+        RecordTableInfo.ExtractIndexKey(keySchema, recordInfo, attributeValues)
 
     /// Generates a conditional which verifies whether an item already exists.
     member __.ItemExists =
@@ -261,8 +261,8 @@ type RecordTemplate<'TRecord> internal () =
         PrimaryKeyStructure.ToAttributeValues(recordInfo.PrimaryKeyStructure, key)
 
     /// Convert query (index) key to attribute values
-    member internal __.ToAttributeValues(key : QueryKey, schema: TableKeySchema) =
-        RecordTableInfo.QueryKeyToAttributeValues(schema, recordInfo, key)
+    member internal __.ToAttributeValues(key : IndexKey, schema: TableKeySchema) =
+        RecordTableInfo.IndexKeyToAttributeValues(schema, recordInfo, key)
 
     /// Converts a record instance to attribute values
     member internal __.ToAttributeValues(record : 'TRecord) =

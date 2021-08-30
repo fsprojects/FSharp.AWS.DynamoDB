@@ -194,47 +194,39 @@ type TableKey private (hashKey : obj, rangeKey : obj) =
 
 /// Query (start/last evaluated) key identifier
 [<Struct; CustomEquality; NoComparison; StructuredFormatDisplay("{Format}")>]
-type QueryKey private (hashKey : obj, rangeKey : obj, primaryKey: TableKey option) =
+type IndexKey private (hashKey : obj, rangeKey : obj, primaryKey: TableKey) =
     member __.HashKey = hashKey
     member __.RangeKey = rangeKey
     member __.IsRangeKeySpecified = notNull rangeKey
     member __.PrimaryKey = primaryKey
     member private __.Format =
-        match rangeKey with
-        | null -> sprintf "{ HashKey = %A }" hashKey
-        | rk ->
-            match hashKey with
-            | null -> sprintf "{ RangeKey = %A }" rk
-            | hk -> sprintf "{ HashKey = %A ; RangeKey = %A }" hk rk
+        match (hashKey, rangeKey) with
+        | (null, null) -> sprintf "{ Primary = %A }" primaryKey
+        | (hk, null) -> sprintf "{ HashKey = %A ; Primary = %A }" hk primaryKey
+        | (hk, rk) -> sprintf "{ HashKey = %A ; RangeKey = %A ; Primary = %A }" hk rk primaryKey
 
     override __.ToString() = __.Format
 
     override __.Equals o =
         match o with
-        | :? QueryKey as qk' -> hashKey = qk'.HashKey && rangeKey = qk'.RangeKey && primaryKey = qk'.PrimaryKey
+        | :? IndexKey as qk' -> hashKey = qk'.HashKey && rangeKey = qk'.RangeKey && primaryKey = qk'.PrimaryKey
         | _ -> false
 
     override __.GetHashCode() = hash3 hashKey rangeKey primaryKey
 
-    /// Defines a table key using provided HashKey
-    static member Hash<'HashKey>(hashKey : 'HashKey) =
+    /// Defines an index key using provided HashKey and primary TableKey
+    static member Hash<'HashKey>(hashKey : 'HashKey, primaryKey: TableKey) =
         if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
-        QueryKey(hashKey, null, None)
+        IndexKey(hashKey, null, primaryKey)
 
-    /// Defines a table key using combined HashKey and RangeKey
-    static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey) =
+    /// Defines an index key using combined HashKey, RangeKey and primary TableKey
+    static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey, primaryKey: TableKey) =
         if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
-        QueryKey(hashKey, rangeKey, None)
+        IndexKey(hashKey, rangeKey, primaryKey)
 
-    // Defines a table key for an index query using a provided HashKey and the primary TableKey
-    static member IndexQueryHash<'HashKey>(hashKey : 'HashKey, primaryKey: TableKey) =
-        if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
-        QueryKey(hashKey, null, Some primaryKey)
-
-    // Defines a table key for an index query using a combined HashKey and RangeKey, as well as the primary TableKey
-    static member IndexQueryCombined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey, primaryKey: TableKey) =
-        if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
-        QueryKey(hashKey, rangeKey, Some primaryKey)
+    // Defines an index key using just the primary TableKey
+    static member Primary(primaryKey: TableKey) =
+        IndexKey(null, null, primaryKey)
 
 /// Pagination result type
 type PaginatedResult<'TRecord, 'Key> =

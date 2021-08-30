@@ -90,7 +90,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     let queryPaginatedAsync (keyCondition : ConditionalExpr.ConditionalExpression)
                     (filterCondition : ConditionalExpr.ConditionalExpression option)
                     (projectionExpr : ProjectionExpr.ProjectionExpr option)
-                    (limit: LimitType) (exclusiveStartKey : QueryKey option)
+                    (limit: LimitType) (exclusiveStartKey : IndexKey option)
                     (consistentRead : bool option) (scanIndexForward : bool option) = async {
 
         if not keyCondition.IsKeyConditionCompatible then
@@ -141,7 +141,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
 
         do! aux (exclusiveStartKey |> Option.map (fun k -> template.ToAttributeValues(k, keyCondition.KeyCondition.Value)))
 
-        return (downloaded, lastEvaluatedKey |> Option.map (fun av -> template.ExtractQueryKey(keyCondition.KeyCondition.Value, av)))
+        return (downloaded, lastEvaluatedKey |> Option.map (fun av -> template.ExtractIndexKey(keyCondition.KeyCondition.Value, av)))
     }
 
     let queryAsync (keyCondition : ConditionalExpr.ConditionalExpression)
@@ -781,7 +781,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
     member __.QueryPaginatedAsync(keyCondition : ConditionExpression<'TRecord>, ?filterCondition : ConditionExpression<'TRecord>,
-                            ?limit: int, ?exclusiveStartKey: QueryKey, ?consistentRead : bool, ?scanIndexForward : bool) : Async<PaginatedResult<'TRecord, QueryKey>> = async {
+                            ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : Async<PaginatedResult<'TRecord, IndexKey>> = async {
 
         let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
         let! (downloaded, lastEvaluatedKey) = queryPaginatedAsync keyCondition.Conditional filterCondition None (LimitType.DefaultOrCount limit) exclusiveStartKey consistentRead scanIndexForward
@@ -798,7 +798,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
     member __.QueryPaginatedAsync(keyCondition : Expr<'TRecord -> bool>, ?filterCondition : Expr<'TRecord -> bool>,
-                            ?limit : int, ?exclusiveStartKey: QueryKey, ?consistentRead : bool, ?scanIndexForward : bool) : Async<PaginatedResult<'TRecord, QueryKey>> = async {
+                            ?limit : int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : Async<PaginatedResult<'TRecord, IndexKey>> = async {
 
         let kc = template.PrecomputeConditionalExpr keyCondition
         let fc = filterCondition |> Option.map template.PrecomputeConditionalExpr
@@ -815,7 +815,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
     member __.QueryPaginated(keyCondition : ConditionExpression<'TRecord>, ?filterCondition : ConditionExpression<'TRecord>,
-                            ?limit: int, ?exclusiveStartKey: QueryKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TRecord, QueryKey> =
+                            ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TRecord, IndexKey> =
         __.QueryPaginatedAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
                         ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
         |> Async.RunSynchronously
@@ -830,7 +830,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
     member __.QueryPaginated(keyCondition : Expr<'TRecord -> bool>, ?filterCondition : Expr<'TRecord -> bool>,
-                            ?limit: int, ?exclusiveStartKey: QueryKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TRecord, QueryKey> =
+                            ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TRecord, IndexKey> =
         __.QueryPaginatedAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
                         ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
         |> Async.RunSynchronously
@@ -850,7 +850,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
     member __.QueryProjectedPaginatedAsync<'TProjection>(keyCondition : ConditionExpression<'TRecord>, projection : ProjectionExpression<'TRecord, 'TProjection>,
                                                 ?filterCondition : ConditionExpression<'TRecord>,
-                                                ?limit: int, ?exclusiveStartKey: QueryKey, ?consistentRead : bool, ?scanIndexForward : bool) : Async<PaginatedResult<'TProjection, QueryKey>> = async {
+                                                ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : Async<PaginatedResult<'TProjection, IndexKey>> = async {
 
         let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
         let! (downloaded, lastEvaluatedKey) = queryPaginatedAsync keyCondition.Conditional filterCondition None (LimitType.DefaultOrCount limit) exclusiveStartKey consistentRead scanIndexForward
@@ -871,7 +871,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
     member __.QueryProjectedPaginatedAsync<'TProjection>(keyCondition : Expr<'TRecord -> bool>, projection : Expr<'TRecord -> 'TProjection>,
                                                 ?filterCondition : Expr<'TRecord -> bool>,
-                                                ?limit: int, ?exclusiveStartKey: QueryKey, ?consistentRead : bool, ?scanIndexForward : bool) : Async<PaginatedResult<'TProjection, QueryKey>> = async {
+                                                ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : Async<PaginatedResult<'TProjection, IndexKey>> = async {
 
         let filterCondition = filterCondition |> Option.map (fun fc -> template.PrecomputeConditionalExpr fc)
         return! __.QueryProjectedPaginatedAsync(template.PrecomputeConditionalExpr keyCondition, template.PrecomputeProjectionExpr projection,
@@ -893,7 +893,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
     member __.QueryProjectedPaginated<'TProjection>(keyCondition : ConditionExpression<'TRecord>, projection : ProjectionExpression<'TRecord, 'TProjection>,
                                                 ?filterCondition : ConditionExpression<'TRecord>,
-                                                ?limit: int, ?exclusiveStartKey: QueryKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TProjection, QueryKey> =
+                                                ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TProjection, IndexKey> =
 
         __.QueryProjectedPaginatedAsync(keyCondition, projection, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
                                 ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
@@ -913,7 +913,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
     member __.QueryProjectedPaginated<'TProjection>(keyCondition : Expr<'TRecord -> bool>, projection : Expr<'TRecord -> 'TProjection>,
                                                 ?filterCondition : Expr<'TRecord -> bool>,
-                                                ?limit: int, ?exclusiveStartKey: QueryKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TProjection, QueryKey> =
+                                                ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TProjection, IndexKey> =
 
         __.QueryProjectedPaginatedAsync(keyCondition, projection, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
                                 ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)

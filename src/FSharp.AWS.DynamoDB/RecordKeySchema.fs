@@ -280,8 +280,8 @@ type RecordTableInfo with
     member info.GetPropertySchemata(propName : string) =
         defaultArg (info.PropertySchemata.TryFind propName) [||]
 
-    /// Extracts a QueryKey from attribute values
-    static member ExtractQueryKey(indexKeySchema: TableKeySchema, recordInfo: RecordTableInfo, attributeValues : Dictionary<string, AttributeValue>) =
+    /// Extracts a IndexKey from attribute values
+    static member ExtractIndexKey(indexKeySchema: TableKeySchema, recordInfo: RecordTableInfo, attributeValues : Dictionary<string, AttributeValue>) =
         let inline getValue (ks : KeyAttributeSchema) =
             let notFound() = raise <| KeyNotFoundException(sprintf "attribute %A not found." ks.AttributeName)
             let meta = recordInfo.Properties |> Array.find (fun p -> p.Name = ks.AttributeName)
@@ -292,23 +292,21 @@ type RecordTableInfo with
         | { HashKey = hk; RangeKey = Some rk; Type = PrimaryKey } ->
             let hash = getValue hk
             let range = getValue rk
-            QueryKey.Combined(hash, range)
+            IndexKey.Primary(TableKey.Combined(hash, range))
         | { HashKey = hk; RangeKey = None; Type = PrimaryKey } ->
             let hash = getValue hk
-            QueryKey.Hash(hash)
+            IndexKey.Primary(TableKey.Hash(hash))
         | { HashKey = hk; RangeKey = Some rk; Type = LocalSecondaryIndex _ } | { HashKey = hk; RangeKey = Some rk; Type = GlobalSecondaryIndex _ } ->
             let hash = getValue hk
             let range = getValue rk
-            QueryKey.IndexQueryCombined(hash, range, PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, attributeValues))
+            IndexKey.Combined(hash, range, PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, attributeValues))
         | { HashKey = hk; RangeKey = None; Type = LocalSecondaryIndex _ } | { HashKey = hk; RangeKey = None; Type = GlobalSecondaryIndex _ } ->
             let hash = getValue hk
-            QueryKey.IndexQueryHash(hash, PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, attributeValues))
+            IndexKey.Hash(hash, PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, attributeValues))
 
-    /// Converts given QueryKey to AttributeValue form
-    static member QueryKeyToAttributeValues(indexKeySchema: TableKeySchema, recordInfo : RecordTableInfo, key : QueryKey) =
-        let dict = match key.PrimaryKey with
-                   | Some key -> PrimaryKeyStructure.ToAttributeValues(recordInfo.PrimaryKeyStructure, key)
-                   | None -> new Dictionary<string, AttributeValue> ()
+    /// Converts given IndexKey to AttributeValue form
+    static member IndexKeyToAttributeValues(indexKeySchema: TableKeySchema, recordInfo : RecordTableInfo, key : IndexKey) =
+        let dict = PrimaryKeyStructure.ToAttributeValues(recordInfo.PrimaryKeyStructure, key.PrimaryKey)
         let extractKey (ks : KeyAttributeSchema) (value : obj) =
             if isNull value then invalidArg ks.AttributeName "Key value was not specified."
             let meta = recordInfo.Properties |> Array.find (fun p -> p.Name = ks.AttributeName)
@@ -316,14 +314,7 @@ type RecordTableInfo with
             dict.[ks.AttributeName] <- av
 
         match indexKeySchema with
-        | { RangeKey = Some _; Type = PrimaryKey } ->
-            let pk = TableKey.Combined(key.HashKey, key.RangeKey)
-            for pair in PrimaryKeyStructure.ToAttributeValues(recordInfo.PrimaryKeyStructure, pk) do
-                dict.[pair.Key] <- pair.Value
-        | { RangeKey = None; Type = PrimaryKey } ->
-            let pk = TableKey.Hash(key.HashKey)
-            for pair in PrimaryKeyStructure.ToAttributeValues(recordInfo.PrimaryKeyStructure, pk) do
-                dict.[pair.Key] <- pair.Value
+        | { Type = PrimaryKey } -> ()
         | { HashKey = hk; RangeKey = Some rk } ->
             extractKey hk key.HashKey
             extractKey rk key.RangeKey
