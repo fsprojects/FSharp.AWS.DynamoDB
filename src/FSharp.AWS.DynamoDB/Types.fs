@@ -5,7 +5,6 @@ open System.IO
 open System.Runtime.Serialization.Formatters.Binary
 
 open Amazon.DynamoDBv2
-open Amazon.DynamoDBv2.Model
 
 /// Declares that the carrying property contains the HashKey
 /// for the record instance. Property type must be of type
@@ -40,8 +39,8 @@ type GlobalSecondaryRangeKeyAttribute(indexName : string) =
 [<Sealed; AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
 type LocalSecondaryIndexAttribute private (indexName : string option) =
     inherit Attribute()
-    new () = new LocalSecondaryIndexAttribute(None)
-    new (indexName : string)  = new LocalSecondaryIndexAttribute(Some indexName)
+    new () = LocalSecondaryIndexAttribute(None)
+    new (indexName : string) = LocalSecondaryIndexAttribute(Some indexName)
     member internal __.IndexName = indexName
 
 /// Declares a constant HashKey attribute for the given record.
@@ -50,8 +49,8 @@ type LocalSecondaryIndexAttribute private (indexName : string option) =
 type ConstantHashKeyAttribute(name : string, hashkey : obj) =
     inherit Attribute()
     do
-        if name = null then raise <| ArgumentNullException("'Name' parameter cannot be null.")
-        if hashkey = null then raise <| ArgumentNullException("'HashKey' parameter cannot be null.")
+        if isNull name then raise <| ArgumentNullException("'Name' parameter cannot be null.")
+        if isNull hashkey then raise <| ArgumentNullException("'HashKey' parameter cannot be null.")
 
     member __.Name = name
     member __.HashKey = hashkey
@@ -63,8 +62,8 @@ type ConstantHashKeyAttribute(name : string, hashkey : obj) =
 type ConstantRangeKeyAttribute(name : string, rangeKey : obj) =
     inherit Attribute()
     do
-        if name = null then raise <| ArgumentNullException("'Name' parameter cannot be null.")
-        if rangeKey = null then raise <| ArgumentNullException("'HashKey' parameter cannot be null.")
+        if isNull name then raise <| ArgumentNullException("'Name' parameter cannot be null.")
+        if isNull rangeKey then raise <| ArgumentNullException("'HashKey' parameter cannot be null.")
 
     member __.Name = name
     member __.RangeKey = rangeKey
@@ -80,7 +79,7 @@ type StringRepresentationAttribute() =
 [<AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
 type CustomNameAttribute(name : string) =
     inherit System.Attribute()
-    do if name = null then raise <| ArgumentNullException("'Name' parameter cannot be null.")
+    do if isNull name then raise <| ArgumentNullException("'Name' parameter cannot be null.")
     member __.Name = name
 
 /// Specifies that record deserialization should fail if not corresponding attribute
@@ -117,13 +116,13 @@ type BinaryFormatterAttribute() =
     inherit PropertySerializerAttribute<byte[]>()
 
     override __.Serialize(value:'T) =
-        let bfs = new BinaryFormatter()
+        let bfs = BinaryFormatter()
         use m = new MemoryStream()
         bfs.Serialize(m, value)
         m.ToArray()
 
     override __.Deserialize(pickle : byte[]) =
-        let bfs = new BinaryFormatter()
+        let bfs = BinaryFormatter()
         use m = new MemoryStream(pickle)
         bfs.Deserialize(m) :?> 'T
 
@@ -180,37 +179,69 @@ type TableKey private (hashKey : obj, rangeKey : obj) =
 
     /// Defines a table key using provided HashKey
     static member Hash<'HashKey>(hashKey : 'HashKey) =
-        if isNull hashKey then raise <| new ArgumentNullException("HashKey must not be null")
+        if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
         TableKey(hashKey, null)
 
     /// Defines a table key using provided RangeKey
     static member Range<'RangeKey>(rangeKey : 'RangeKey) =
-        if isNull rangeKey then raise <| new ArgumentNullException("RangeKey must not be null")
+        if isNull rangeKey then raise <| ArgumentNullException("RangeKey must not be null")
         TableKey(null, rangeKey)
 
     /// Defines a table key using combined HashKey and RangeKey
     static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey) =
-        if isNull hashKey then raise <| new ArgumentNullException("HashKey must not be null")
-        new TableKey(hashKey, rangeKey)
+        if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
+        TableKey(hashKey, rangeKey)
+
+/// Query (start/last evaluated) key identifier
+[<Struct; CustomEquality; NoComparison; StructuredFormatDisplay("{Format}")>]
+type QueryKey private (hashKey : obj, rangeKey : obj, primaryKey: TableKey option) =
+    member __.HashKey = hashKey
+    member __.RangeKey = rangeKey
+    member __.IsRangeKeySpecified = notNull rangeKey
+    member __.PrimaryKey = primaryKey
+    member private __.Format =
+        match rangeKey with
+        | null -> sprintf "{ HashKey = %A }" hashKey
+        | rk ->
+            match hashKey with
+            | null -> sprintf "{ RangeKey = %A }" rk
+            | hk -> sprintf "{ HashKey = %A ; RangeKey = %A }" hk rk
+
+    override __.ToString() = __.Format
+
+    override __.Equals o =
+        match o with
+        | :? QueryKey as qk' -> hashKey = qk'.HashKey && rangeKey = qk'.RangeKey && primaryKey = qk'.PrimaryKey
+        | _ -> false
+
+    override __.GetHashCode() = hash3 hashKey rangeKey primaryKey
+
+    /// Defines a table key using provided HashKey
+    static member Hash<'HashKey>(hashKey : 'HashKey) =
+        if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
+        QueryKey(hashKey, null, None)
+
+    /// Defines a table key using combined HashKey and RangeKey
+    static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey) =
+        if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
+        QueryKey(hashKey, rangeKey, None)
+
+    // Defines a table key for an index query using a provided HashKey and the primary TableKey
+    static member IndexQueryHash<'HashKey>(hashKey : 'HashKey, primaryKey: TableKey) =
+        if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
+        QueryKey(hashKey, null, Some primaryKey)
+
+    // Defines a table key for an index query using a combined HashKey and RangeKey, as well as the primary TableKey
+    static member IndexQueryCombined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey, primaryKey: TableKey) =
+        if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
+        QueryKey(hashKey, rangeKey, Some primaryKey)
 
 /// Pagination result type
-type PaginatedResult<'TRecord> =
+type PaginatedResult<'TRecord, 'Key> =
     {
         Records : 'TRecord[]
-        LastEvaluatedKey : TableKey option
+        LastEvaluatedKey : 'Key option
     }
-    member x.GetLastEvaluatedHashKey<'HashKey> () =
-        match x.LastEvaluatedKey with
-        | Some k when k.IsHashKeySpecified ->
-            Some (k.HashKey :?> 'HashKey)
-        | _ ->
-            None
-    member x.GetLastEvaluatedRangeKey<'RangeKey> () =
-        match x.LastEvaluatedKey with
-        | Some k when k.IsRangeKeySpecified ->
-            Some (k.RangeKey :?> 'RangeKey)
-        | _ ->
-            None
     interface System.Collections.IEnumerable with
         member x.GetEnumerator () = x.Records.GetEnumerator ()
     interface System.Collections.Generic.IEnumerable<'TRecord> with

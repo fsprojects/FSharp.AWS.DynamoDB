@@ -3,14 +3,14 @@ source https://api.nuget.org/v3/index.json
 storage: none
 framework: net50, netstandard20, netstandard21
 
-nuget Unquote ~> 5.0.0
+nuget Unquote ~> 6.1.0
 nuget FSharp.Core
 nuget Expecto
 nuget FsCheck 2.14.3
 nuget Expecto.FsCheck
 
-nuget AWSSDK.DynamoDBv2 ~> 3.5.4
-github eiriktsarpalis/TypeShape:2.10 src/TypeShape/TypeShape.fs
+nuget AWSSDK.DynamoDBv2 ~> 3.7.0
+github eiriktsarpalis/TypeShape:2.16 src/TypeShape/TypeShape.fs
 
 group Build
   source https://api.nuget.org/v3/index.json

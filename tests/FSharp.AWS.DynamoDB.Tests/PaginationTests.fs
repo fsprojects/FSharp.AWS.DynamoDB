@@ -58,6 +58,21 @@ type ``Pagination Tests`` (fixture : TableFixture) =
         Expect.sequenceEqual (Array.append res1.Records res2.Records) items ""
         Expect.isEmpty res3.Records ""
 
+    member __.``Paginated Query on LSI`` () =
+        let hk = guid()
+        let gsk = guid()
+        let items = seq { for _ in 0 .. 9 -> mkItem hk gsk } |> Seq.toArray |> Array.sortBy (fun r -> r.LocalSecondaryRangeKey)
+        for item in items do
+          table.PutItem item |> ignore
+        let res1 = table.QueryPaginated (<@ fun r -> r.HashKey = hk && r.LocalSecondaryRangeKey > "0" @>, limit = 5)
+        let res2 = table.QueryPaginated (<@ fun r -> r.HashKey = hk && r.LocalSecondaryRangeKey > "0" @>, limit = 5, ?exclusiveStartKey = res1.LastEvaluatedKey)
+        let res3 = table.QueryPaginated (<@ fun r -> r.HashKey = hk && r.LocalSecondaryRangeKey > "0" @>, limit = 5, ?exclusiveStartKey = res2.LastEvaluatedKey)
+        Expect.isSome res1.LastEvaluatedKey ""
+        Expect.isSome res2.LastEvaluatedKey ""
+        Expect.isNone res3.LastEvaluatedKey ""
+        Expect.sequenceEqual (Array.append res1.Records res2.Records) items ""
+        Expect.isEmpty res3.Records ""
+
     member __.``Paginated Query on GSI`` () =
         let hk = guid()
         let gsk = guid()

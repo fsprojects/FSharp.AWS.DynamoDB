@@ -52,11 +52,9 @@ type RecordTableInfo =
         PropertySchemata : Map<string, (TableKeySchema * KeyType) []>
     }
 
-
-
 type PrimaryKeyStructure with
-    /// Extracts given TableKey to AttributeValue form
-    static member ExtractKey(keyStructure : PrimaryKeyStructure, key : TableKey) =
+    /// Converts given TableKey to AttributeValue form
+    static member ToAttributeValues(keyStructure : PrimaryKeyStructure, key : TableKey) =
         let dict = new Dictionary<string, AttributeValue> ()
         let extractKey name (pickler : Pickler) (value:obj) =
             if isNull value then invalidArg name "Key value was not specified."
@@ -86,7 +84,6 @@ type PrimaryKeyStructure with
                 let av = value |> pickler.PickleUntyped |> Option.get
                 dict.Add(name, av)
 
-
         dict
 
     /// Extracts key from given record instance
@@ -108,7 +105,7 @@ type PrimaryKeyStructure with
     /// Extracts key from attribute values
     static member ExtractKey(keyStructure : PrimaryKeyStructure, attributeValues : Dictionary<string, AttributeValue>) =
         let inline getValue (rp : PropertyMetadata) =
-            let notFound() = raise <| new KeyNotFoundException(sprintf "attribute %A not found." rp.Name)
+            let notFound() = raise <| KeyNotFoundException(sprintf "attribute %A not found." rp.Name)
             let ok, av = attributeValues.TryGetValue rp.Name
             if ok then rp.Pickler.UnPickleUntyped av
             else notFound()
@@ -283,6 +280,59 @@ type RecordTableInfo with
     member info.GetPropertySchemata(propName : string) =
         defaultArg (info.PropertySchemata.TryFind propName) [||]
 
+    /// Extracts a QueryKey from attribute values
+    static member ExtractQueryKey(indexKeySchema: TableKeySchema, recordInfo: RecordTableInfo, attributeValues : Dictionary<string, AttributeValue>) =
+        let inline getValue (ks : KeyAttributeSchema) =
+            let notFound() = raise <| KeyNotFoundException(sprintf "attribute %A not found." ks.AttributeName)
+            let meta = recordInfo.Properties |> Array.find (fun p -> p.Name = ks.AttributeName)
+            let ok, av = attributeValues.TryGetValue ks.AttributeName
+            if ok then meta.Pickler.UnPickleUntyped av
+            else notFound()
+        match indexKeySchema with
+        | { HashKey = hk; RangeKey = Some rk; Type = PrimaryKey } ->
+            let hash = getValue hk
+            let range = getValue rk
+            QueryKey.Combined(hash, range)
+        | { HashKey = hk; RangeKey = None; Type = PrimaryKey } ->
+            let hash = getValue hk
+            QueryKey.Hash(hash)
+        | { HashKey = hk; RangeKey = Some rk; Type = LocalSecondaryIndex _ } | { HashKey = hk; RangeKey = Some rk; Type = GlobalSecondaryIndex _ } ->
+            let hash = getValue hk
+            let range = getValue rk
+            QueryKey.IndexQueryCombined(hash, range, PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, attributeValues))
+        | { HashKey = hk; RangeKey = None; Type = LocalSecondaryIndex _ } | { HashKey = hk; RangeKey = None; Type = GlobalSecondaryIndex _ } ->
+            let hash = getValue hk
+            QueryKey.IndexQueryHash(hash, PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, attributeValues))
+
+    /// Converts given QueryKey to AttributeValue form
+    static member QueryKeyToAttributeValues(indexKeySchema: TableKeySchema, recordInfo : RecordTableInfo, key : QueryKey) =
+        let dict = match key.PrimaryKey with
+                   | Some key -> PrimaryKeyStructure.ToAttributeValues(recordInfo.PrimaryKeyStructure, key)
+                   | None -> new Dictionary<string, AttributeValue> ()
+        let extractKey (ks : KeyAttributeSchema) (value : obj) =
+            if isNull value then invalidArg ks.AttributeName "Key value was not specified."
+            let meta = recordInfo.Properties |> Array.find (fun p -> p.Name = ks.AttributeName)
+            let av = meta.Pickler.PickleUntyped value |> Option.get
+            dict.[ks.AttributeName] <- av
+
+        match indexKeySchema with
+        | { RangeKey = Some _; Type = PrimaryKey } ->
+            let pk = TableKey.Combined(key.HashKey, key.RangeKey)
+            for pair in PrimaryKeyStructure.ToAttributeValues(recordInfo.PrimaryKeyStructure, pk) do
+                dict.[pair.Key] <- pair.Value
+        | { RangeKey = None; Type = PrimaryKey } ->
+            let pk = TableKey.Hash(key.HashKey)
+            for pair in PrimaryKeyStructure.ToAttributeValues(recordInfo.PrimaryKeyStructure, pk) do
+                dict.[pair.Key] <- pair.Value
+        | { HashKey = hk; RangeKey = Some rk } ->
+            extractKey hk key.HashKey
+            extractKey rk key.RangeKey
+        | { HashKey = hk; RangeKey = None } ->
+            extractKey hk key.HashKey
+
+        dict
+
+
 type TableKeySchemata with
 
     /// Extract key schema from DynamoDB table description object
@@ -322,15 +372,15 @@ type TableKeySchemata with
                 Type = LocalSecondaryIndex lsid.IndexName
             }
 
-        new TableKeySchemata(
+        TableKeySchemata(
             [|  yield primaryKey
                 yield! td.GlobalSecondaryIndexes |> Seq.map mkGlobalSecondaryIndex
                 yield! td.LocalSecondaryIndexes |> Seq.map mkLocalSecondaryIndex |])
 
     /// Create a CreateTableRequest using supplied key schema
     member schema.CreateCreateTableRequest (tableName : string, provisionedThroughput : ProvisionedThroughput) =
-        let ctr = new CreateTableRequest(TableName = tableName)
-        let inline mkKSE n t = new KeySchemaElement(n, t)
+        let ctr = CreateTableRequest(TableName = tableName)
+        let inline mkKSE n t = KeySchemaElement(n, t)
 
         ctr.ProvisionedThroughput <- provisionedThroughput
 
@@ -349,7 +399,7 @@ type TableKeySchemata with
                 gsi.IndexName <- name
                 gsi.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
                 tks.RangeKey |> Option.iter (fun rk -> gsi.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
-                gsi.Projection <- new Projection(ProjectionType = ProjectionType.ALL)
+                gsi.Projection <- Projection(ProjectionType = ProjectionType.ALL)
                 gsi.ProvisionedThroughput <- provisionedThroughput
                 ctr.GlobalSecondaryIndexes.Add gsi
 
@@ -358,11 +408,11 @@ type TableKeySchemata with
                 lsi.IndexName <- name
                 lsi.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
                 tks.RangeKey |> Option.iter (fun rk -> lsi.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
-                lsi.Projection <- new Projection(ProjectionType = ProjectionType.ALL)
+                lsi.Projection <- Projection(ProjectionType = ProjectionType.ALL)
                 ctr.LocalSecondaryIndexes.Add lsi
 
         for attr in keyAttrs.Values do
-            let ad = new AttributeDefinition(attr.AttributeName, attr.KeyType)
+            let ad = AttributeDefinition(attr.AttributeName, attr.KeyType)
             ctr.AttributeDefinitions.Add ad
 
         ctr
