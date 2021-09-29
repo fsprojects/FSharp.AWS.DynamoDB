@@ -1,5 +1,5 @@
-### 0.8.3-beta
-* Added `ScanPaginated*` and `QueryPaginated*` methods to `TableContext` to support paginating queries
+### 0.9.0-beta
+* Added `ScanPaginated*` and `QueryPaginated*` methods to `TableContext` to support paginating queries (implements #27)
 * Added `IndexKey` type to support additional key fields in LastEvaluatedKey for queries (ie on LSI & GSI indices)
 * **Breaking** renamed one of the method parameters from `filterExpr` to `filterCondition` for consistency
 
