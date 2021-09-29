@@ -31,3 +31,4 @@ group Build
   nuget Fake.IO.FileSystem
   nuget Fake.DotNet.MsBuild
   nuget Fake.Api.GitHub
+  nuget Octokit 0.48 // Temp fix for Fake build issue https://github.com/fsprojects/FAKE/issues/2601
