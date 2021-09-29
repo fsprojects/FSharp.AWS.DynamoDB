@@ -154,6 +154,23 @@ Queries can now be performed using LSI as a secondary RangeKey.
 NB: Due to API restrictions, secondary indices in the scope of FSharp.AWS.DynamoDB always project *all* table attributes
 which can incur additional costs from Amazon.
 
+### Pagination
+
+Pagination is supported on both scans & queries:
+```fsharp
+let firstPage = table.ScanPaginated(limit = 100)
+printfn "First 100 results = %A" firstPage.Records
+match firstPage.LastEvaluatedKey with
+| Some key ->
+    let nextPage = table.ScanPaginated(limit = 100, exclusiveStartKey = key)
+```
+Note that the `exclusiveStartKey` on paginated queries must include both the table key fields and the index fields (if querying an LSI or GSI).
+This is accomplished via the `IndexKey` type - if constructing manually (eg deserialising a start key from an API call):
+```fsharp
+let startKey = IndexKey.Combined(gsiHashValue, gsiRangeValue, TableKey.Hash(primaryKey))
+let page = table.QueryPaginated(<@ fun t -> t.GsiHash = gsiHashValue @>, limit = 100, exclusiveStartKey = startKey)
+```
+
 ## Notes on value representation
 
 Due to restrictions of DynamoDB, it may sometimes be the case that objects are not persisted faithfully.
