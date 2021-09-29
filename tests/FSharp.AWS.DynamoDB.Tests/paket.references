@@ -2,4 +2,3 @@ AWSSDK.DynamoDBv2
 Expecto
 Expecto.FsCheck
 FsCheck
-Expecto.VisualStudio.TestAdapter

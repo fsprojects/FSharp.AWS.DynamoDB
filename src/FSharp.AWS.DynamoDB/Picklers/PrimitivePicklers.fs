@@ -73,7 +73,7 @@ type CharPickler() =
 
 let inline mkNumericalPickler< ^N when ^N : (static member Parse : string * IFormatProvider -> ^N)
                                    and ^N : (member ToString : IFormatProvider -> string)> () =
-    let inline parseNum s = 
+    let inline parseNum s =
         ( ^N : (static member Parse : string * IFormatProvider -> ^N) (s, CultureInfo.InvariantCulture))
 
     let inline toString n =
@@ -89,8 +89,8 @@ let inline mkNumericalPickler< ^N when ^N : (static member Parse : string * IFor
 
         member __.DefaultValue = Unchecked.defaultof< ^N>
         member __.Pickle num = AttributeValue(N = toString num) |> Some
-        member __.UnPickle a = 
-            if not <| isNull a.N then parseNum a.N 
+        member __.UnPickle a =
+            if not <| isNull a.N then parseNum a.N
             else invalidCast a
 
         member __.PickleCoerced o =
@@ -112,8 +112,8 @@ type DoublePickler() =
 
     override __.DefaultValue = Unchecked.defaultof<double>
     override __.Pickle num = AttributeValue(N = unparse num) |> Some
-    override __.UnPickle a = 
-        if not <| isNull a.N then parse a.N 
+    override __.UnPickle a =
+        if not <| isNull a.N then parse a.N
         else invalidCast a
 
     override __.PickleCoerced o =
@@ -130,12 +130,12 @@ type ByteArrayPickler() =
     override __.UnParse b = Convert.ToBase64String b
 
     override __.DefaultValue = [||]
-    override __.Pickle bs = 
+    override __.Pickle bs =
         if isNull bs then Some <| AttributeValue(NULL = true)
-        elif bs.Length = 0 then None 
+        elif bs.Length = 0 then None
         else Some <| AttributeValue(B = new MemoryStream(bs))
 
-    override __.UnPickle a = 
+    override __.UnPickle a =
         if a.NULL then null
         elif not <| isNull a.B then a.B.ToArray()
         else
@@ -148,12 +148,12 @@ type MemoryStreamPickler() =
     override __.PicklerType = PicklerType.Value
 
     override __.DefaultValue = null
-    override __.Pickle m = 
+    override __.Pickle m =
         if isNull m then Some <| AttributeValue(NULL = true)
-        elif m.Length = 0L then None 
+        elif m.Length = 0L then None
         else Some <| AttributeValue(B = m)
 
-    override __.UnPickle a = 
+    override __.UnPickle a =
         if a.NULL then null
         elif notNull a.B then a.B
         else
@@ -189,8 +189,8 @@ type DateTimeOffsetPickler() =
     override __.UnParse d = unparse d
 
     override __.Pickle d = AttributeValue(unparse d) |> Some
-    override __.UnPickle a = 
-        if not <| isNull a.S then parse a.S 
+    override __.UnPickle a =
+        if not <| isNull a.S then parse a.S
         else invalidCast a
 
 
@@ -204,8 +204,8 @@ type TimeSpanPickler() =
     override __.UnParse t = string t.Ticks
     override __.DefaultValue = TimeSpan.Zero
     override __.Pickle t = AttributeValue(N = string t.Ticks) |> Some
-    override __.UnPickle a = 
-        if not <| isNull a.N then TimeSpan.FromTicks(int64 a.N) 
+    override __.UnPickle a =
+        if not <| isNull a.N then TimeSpan.FromTicks(int64 a.N)
         else invalidCast a
 
 
@@ -216,7 +216,7 @@ type EnumerationPickler<'E, 'U when 'E : enum<'U>>() =
 
     override __.DefaultValue = Unchecked.defaultof<'E>
     override __.Pickle e = AttributeValue(S = e.ToString()) |> Some
-    override __.UnPickle a = 
+    override __.UnPickle a =
         if notNull a.S then Enum.Parse(typeof<'E>, a.S) :?> 'E
         else invalidCast a
 
@@ -252,7 +252,7 @@ type StringRepresentationPickler<'T>(ep : StringRepresentablePickler<'T>) =
     override __.PicklerType = ep.PicklerType
     override __.DefaultValue = ep.DefaultValue
     override __.Pickle t = AttributeValue(S = ep.UnParse t) |> Some
-    override __.UnPickle a = 
+    override __.UnPickle a =
         if notNull a.S then ep.Parse a.S
         else invalidCast a
 
@@ -275,10 +275,10 @@ type SerializerAttributePickler<'T>(serializer : IPropertySerializer, resolver :
 
     override __.PickleType = picklePickler.PickleType
     override __.PicklerType = PicklerType.Serialized
-    override __.DefaultValue = 
+    override __.DefaultValue =
         raise <| NotSupportedException("Default values not supported in serialized types.")
 
-    override __.Pickle value = 
+    override __.Pickle value =
         let pickle = serializer.Serialize value
         picklePickler.PickleUntyped pickle
 
@@ -287,7 +287,7 @@ type SerializerAttributePickler<'T>(serializer : IPropertySerializer, resolver :
         serializer.Deserialize pickle
 
 let mkSerializerAttributePickler (resolver : IPicklerResolver) (serializer : IPropertySerializer) (t : Type) =
-    TypeShape.Create(t).Accept { 
-        new ITypeShapeVisitor<Pickler> with 
-            member __.Visit<'T> () = 
+    TypeShape.Create(t).Accept {
+        new ITypeShapeVisitor<Pickler> with
+            member __.Visit<'T> () =
                 new SerializerAttributePickler<'T>(serializer, resolver) :> _ }

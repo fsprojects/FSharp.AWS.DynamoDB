@@ -50,7 +50,7 @@ module private ResolverImpl =
         | Shape.Nullable s ->
             s.Accept {
                 new INullableVisitor<Pickler> with
-                    member __.Visit<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct> () = 
+                    member __.Visit<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct> () =
                         new NullablePickler<'T>(resolver.Resolve()) :> _ }
 
         | Shape.FSharpOption s ->
@@ -88,7 +88,7 @@ module private ResolverImpl =
                         mkSetPickler<'T>(resolver.Resolve()) :> _ }
 
         | Shape.FSharpMap s ->
-            s.Accept { 
+            s.Accept {
                 new IFSharpMapVisitor<Pickler> with
                     member __.Visit<'K, 'V when 'K : comparison> () =
                         if typeof<'K> <> typeof<string> then
@@ -116,11 +116,11 @@ module private ResolverImpl =
     type CachedResolver private () as self =
         static let globalCache = new ConcurrentDictionary<Type, Lazy<Pickler>>()
         let stack = new Stack<Type>()
-        let resolve t = 
+        let resolve t =
             try
                 if stack.Contains t then
                     UnSupportedType.Raise(t, "recursive types not supported.")
-                
+
                 stack.Push t
                 let pf = globalCache.GetOrAdd(t, fun t -> lazy(resolvePickler self t))
                 let _ = stack.Pop()

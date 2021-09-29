@@ -67,6 +67,14 @@ type RecordTemplate<'TRecord> internal () =
     member __.ExtractKey(attributeValues : Dictionary<string, AttributeValue>) =
         PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, attributeValues)
 
+    /// <summary>
+    ///     Extracts the last evaluated key from the supplied attributes
+    /// </summary>
+    /// <param name="keySchema">Key schema for the index used for the Scan/Query</param>
+    /// <param name="attributeValues">Key attribute values</param>
+    member __.ExtractIndexKey(keySchema: TableKeySchema, attributeValues : Dictionary<string, AttributeValue>) =
+        RecordTableInfo.ExtractIndexKey(keySchema, recordInfo, attributeValues)
+
     /// Generates a conditional which verifies whether an item already exists.
     member __.ItemExists =
         let cond = mkItemExistsCondition recordInfo.PrimaryKeySchema
@@ -248,9 +256,13 @@ type RecordTemplate<'TRecord> internal () =
         let pexpr = ProjectionExpr.Extract recordInfo expr
         new ProjectionExpression<'TRecord, 'TProjection>(pexpr)
 
-    /// Convert table key to attribute values
+    /// Convert primary table key to attribute values
     member internal __.ToAttributeValues(key : TableKey) =
-        PrimaryKeyStructure.ExtractKey(recordInfo.PrimaryKeyStructure, key)
+        PrimaryKeyStructure.ToAttributeValues(recordInfo.PrimaryKeyStructure, key)
+
+    /// Convert query (index) key to attribute values
+    member internal __.ToAttributeValues(key : IndexKey, schema: TableKeySchema) =
+        RecordTableInfo.IndexKeyToAttributeValues(schema, recordInfo, key)
 
     /// Converts a record instance to attribute values
     member internal __.ToAttributeValues(record : 'TRecord) =

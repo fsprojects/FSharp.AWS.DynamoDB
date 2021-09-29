@@ -14,6 +14,7 @@
     <Compile Include="UpdateExpressionTests.fs" />
     <Compile Include="ProjectionExpressionTests.fs" />
     <Compile Include="SparseGSITests.fs" />
+    <Compile Include="PaginationTests.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
     <Content Include="App.config" />
