@@ -2,10 +2,10 @@ STORAGE: NONE
 RESTRICTION: || (== net50) (== netstandard2.0) (== netstandard2.1)
 NUGET
   remote: https://api.nuget.org/v3/index.json
-    AWSSDK.Core (3.7.3.12)
+    AWSSDK.Core (3.7.3.13)
       Microsoft.Bcl.AsyncInterfaces (>= 1.1) - restriction: || (&& (== net50) (< netcoreapp3.1)) (== netstandard2.0) (== netstandard2.1)
-    AWSSDK.DynamoDBv2 (3.7.0.73)
-      AWSSDK.Core (>= 3.7.3.12 < 4.0)
+    AWSSDK.DynamoDBv2 (3.7.0.74)
+      AWSSDK.Core (>= 3.7.3.13 < 4.0)
     Expecto (9.0.4)
       FSharp.Core (>= 4.6)
       Mono.Cecil (>= 0.11.3)

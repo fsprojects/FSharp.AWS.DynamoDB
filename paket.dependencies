@@ -4,7 +4,7 @@ storage: none
 framework: net50, netstandard20, netstandard21
 
 nuget Unquote ~> 6.1.0
-nuget FSharp.Core
+nuget FSharp.Core >= 4.7.2
 nuget Expecto
 nuget FsCheck 2.14.3
 nuget Expecto.FsCheck

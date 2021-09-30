@@ -1,3 +1,6 @@
+### 0.9.1-beta
+* Pinned FSharp.Core to 4.7.2
+
 ### 0.9.0-beta
 * Added `ScanPaginated*` and `QueryPaginated*` methods to `TableContext` to support paginating queries (implements #27)
 * Added `IndexKey` type to support additional key fields in LastEvaluatedKey for queries (ie on LSI & GSI indices)
