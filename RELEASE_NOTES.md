@@ -1,3 +1,6 @@
+### 0.9.2-beta
+* Pinned FSharp.Core to 4.7.2, properly this time I hope
+
 ### 0.9.1-beta
 * Pinned FSharp.Core to 4.7.2
 
