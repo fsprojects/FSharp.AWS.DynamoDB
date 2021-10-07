@@ -1,3 +1,7 @@
+### 0.9.3-beta
+* Added `RequestMetrics` record type
+* Added an optional `metricsCollector` parameter to `TableContext.Create` to receive operation metrics
+
 ### 0.9.2-beta
 * Pinned FSharp.Core to 4.7.2, properly this time I hope
 

@@ -212,6 +212,19 @@ let startedBefore = table.Template.PrecomputeConditionalExpr <@ fun time w -> w.
 table.Scan(startedBefore (DateTimeOffset.Now - TimeSpan.FromDays 1.))
 ```
 
+## Observability
+
+A hook is provided so metrics can be published via your preferred Observability provider. For example, using [Prometheus.NET](https://github.com/prometheus-net/prometheus-net):
+```fsharp
+let dbCounter = Metrics.CreateCounter ("aws_dynamodb_requests_total", "Count of all DynamoDB requests", "table", "operation")
+let processMetrics (m : RequestMetrics) =
+    dbCounter.WithLabels(m.TableName, m.Operation.ToString ()).Inc () |> ignore
+let table = TableContext.Create<WorkItemInfo>(client, tableName = "workItems", metricsCollector = processMetrics)
+```
+If `metricsCollector` is supplied, the requests will include `ReturnConsumedCapacity = ReturnConsumedCapacity.INDEX` 
+and the `RequestMetrics` parameter will contain a list of `ConsumedCapacity` objects returned from the DynamoDB operations.
+
+
 ### Building & Running Tests
 
 To build using the dotnet SDK:

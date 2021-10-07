@@ -21,7 +21,19 @@ type ResourceNotFoundException = Amazon.DynamoDBv2.Model.ResourceNotFoundExcepti
 /// Represents the provisioned throughput for given table or index
 type ProvisionedThroughput = Amazon.DynamoDBv2.Model.ProvisionedThroughput
 
-// Scan/query limit type (internal only)
+/// Represents the operation performed on the table, for metrics collection purposes
+type Operation = GetItem | PutItem | UpdateItem | DeleteItem | BatchGetItems | BatchWriteItems | Scan | Query
+
+/// Represents metrics returned by the table operation, for plugging in to an observability framework
+type RequestMetrics =
+    {
+        TableName : string
+        Operation : Operation
+        ConsumedCapacity : ConsumedCapacity list
+        ItemCount : int
+    }
+
+/// Scan/query limit type (internal only)
 type private LimitType = All | Default | Count of int
     with
     member x.GetCount () =
@@ -39,16 +51,25 @@ type private LimitType = All | Default | Count of int
 /// DynamoDB client object for performing table operations
 /// in the context of given F# record representationss
 [<Sealed; AutoSerializable(false)>]
-type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : string, template : RecordTemplate<'TRecord>) =
+type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : string, template : RecordTemplate<'TRecord>, metricsCollector : (RequestMetrics -> unit) option) =
+    let returnConsumedCapacity = if metricsCollector.IsSome then ReturnConsumedCapacity.INDEXES else ReturnConsumedCapacity.NONE
+
+    let reportMetrics (operation : Operation) (consumedCapacity : ConsumedCapacity list) (itemCount : int) =
+        match metricsCollector with
+        | Some f ->
+            f { TableName = tableName; Operation = operation; ConsumedCapacity = consumedCapacity; ItemCount = itemCount }
+        | None -> ()
 
     let getItemAsync (key : TableKey) (proj : ProjectionExpr.ProjectionExpr option) = async {
         let kav = template.ToAttributeValues(key)
-        let request = new GetItemRequest(tableName, kav)
+        let request = GetItemRequest(tableName, kav)
         match proj with
         | None -> ()
         | Some proj ->
-            let aw = new AttributeWriter(request.ExpressionAttributeNames, null)
+            let aw = AttributeWriter(request.ExpressionAttributeNames, null)
             request.ProjectionExpression <- proj.Write aw
+
+        request.ReturnConsumedCapacity <- returnConsumedCapacity
 
         let! ct = Async.CancellationToken
         let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
@@ -57,7 +78,9 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
 
         if not response.IsItemSet then
             let msg = sprintf "could not find item %O" key
-            raise <| new ResourceNotFoundException(msg)
+            raise <| ResourceNotFoundException(msg)
+
+        reportMetrics GetItem [ response.ConsumedCapacity ] 1
 
         return response
     }
@@ -66,23 +89,26 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                             (projExpr : ProjectionExpr.ProjectionExpr option) = async {
 
         let consistentRead = defaultArg consistentRead false
-        let kna = new KeysAndAttributes()
+        let kna = KeysAndAttributes()
         kna.AttributesToGet.AddRange(template.Info.Properties |> Seq.map (fun p -> p.Name))
         kna.Keys.AddRange(keys |> Seq.map template.ToAttributeValues)
         kna.ConsistentRead <- consistentRead
         match projExpr with
         | None -> ()
         | Some projExpr ->
-            let aw = new AttributeWriter(kna.ExpressionAttributeNames, null)
+            let aw = AttributeWriter(kna.ExpressionAttributeNames, null)
             kna.ProjectionExpression <- projExpr.Write aw
 
-        let request = new BatchGetItemRequest()
+        let request = BatchGetItemRequest()
         request.RequestItems.[tableName] <- kna
+        request.ReturnConsumedCapacity <- returnConsumedCapacity
 
         let! ct = Async.CancellationToken
         let! response = client.BatchGetItemAsync(request, ct) |> Async.AwaitTaskCorrect
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "GetItem request returned error %O" response.HttpStatusCode
+
+        reportMetrics BatchGetItems (List.ofSeq response.ConsumedCapacity) response.Responses.[tableName].Count
 
         return response.Responses.[tableName]
     }
@@ -105,7 +131,9 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
 """
 
         let downloaded = new ResizeArray<_>()
+        let consumedCapacity = new ResizeArray<ConsumedCapacity>()
         let mutable lastEvaluatedKey : Dictionary<string,AttributeValue> option = None
+
         let rec aux last = async {
             let request = QueryRequest(tableName)
             keyCondition.IndexName |> Option.iter (fun name -> request.IndexName <- name)
@@ -120,6 +148,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
             | None -> ()
             | Some pe -> request.ProjectionExpression <- pe.Write writer
 
+            request.ReturnConsumedCapacity <- returnConsumedCapacity
+
             limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
             consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
             scanIndexForward |> Option.iter (fun sif -> request.ScanIndexForward <- sif)
@@ -131,6 +161,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                 failwithf "Query request returned error %O" response.HttpStatusCode
 
             downloaded.AddRange response.Items
+            consumedCapacity.Add response.ConsumedCapacity
             if response.LastEvaluatedKey.Count > 0 then
                 lastEvaluatedKey <- Some response.LastEvaluatedKey
                 if limit.IsDownloadIncomplete downloaded.Count then
@@ -140,6 +171,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         }
 
         do! aux (exclusiveStartKey |> Option.map (fun k -> template.ToAttributeValues(k, keyCondition.KeyCondition.Value)))
+
+        reportMetrics Query (Seq.toList consumedCapacity) downloaded.Count
 
         return (downloaded, lastEvaluatedKey |> Option.map (fun av -> template.ExtractIndexKey(keyCondition.KeyCondition.Value, av)))
     }
@@ -159,6 +192,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                             (limit : LimitType) (exclusiveStartKey : TableKey option) (consistentRead : bool option) = async {
 
         let downloaded = new ResizeArray<_>()
+        let consumedCapacity = new ResizeArray<ConsumedCapacity>()
         let mutable lastEvaluatedKey : Dictionary<string,AttributeValue> option = None
         let rec aux last = async {
             let request = ScanRequest(tableName)
@@ -171,6 +205,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
             | None -> ()
             | Some pe -> request.ProjectionExpression <- pe.Write writer
 
+            request.ReturnConsumedCapacity <- returnConsumedCapacity
+
             limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
             consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
             last |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
@@ -181,6 +217,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                 failwithf "Query request returned error %O" response.HttpStatusCode
 
             downloaded.AddRange response.Items
+            consumedCapacity.Add response.ConsumedCapacity
             if response.LastEvaluatedKey.Count > 0 then
                 lastEvaluatedKey <- Some response.LastEvaluatedKey
                 if limit.IsDownloadIncomplete downloaded.Count then
@@ -190,6 +227,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         }
 
         do! aux (exclusiveStartKey |> Option.map template.ToAttributeValues)
+
+        reportMetrics Scan (Seq.toList consumedCapacity) downloaded.Count
 
         return (downloaded, lastEvaluatedKey |> Option.map template.ExtractKey)
     }
@@ -224,7 +263,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         if template.PrimaryKey <> rd.PrimaryKey then
             invalidArg (string typeof<'TRecord2>) "incompatible key schema."
 
-        new TableContext<'TRecord2>(client, tableName, rd)
+        new TableContext<'TRecord2>(client, tableName, rd, metricsCollector)
 
     /// <summary>
     ///     Asynchronously puts a record item in the table.
@@ -233,11 +272,12 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
     member __.PutItemAsync(item : 'TRecord, ?precondition : ConditionExpression<'TRecord>) : Async<TableKey> = async {
         let attrValues = template.ToAttributeValues(item)
-        let request = new PutItemRequest(tableName, attrValues)
+        let request = PutItemRequest(tableName, attrValues)
         request.ReturnValues <- ReturnValue.NONE
+        request.ReturnConsumedCapacity <- returnConsumedCapacity
         match precondition with
         | Some pc ->
-            let writer = new AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+            let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
             request.ConditionExpression <- pc.Conditional.Write writer
         | _ -> ()
 
@@ -245,6 +285,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let! response = client.PutItemAsync(request, ct) |> Async.AwaitTaskCorrect
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "PutItem request returned error %O" response.HttpStatusCode
+
+        reportMetrics PutItem [ response.ConsumedCapacity ] 0
 
         return template.ExtractKey item
     }
@@ -283,18 +325,21 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.BatchPutItemsAsync(items : seq<'TRecord>) : Async<'TRecord[]> = async {
         let mkWriteRequest (item : 'TRecord) =
             let attrValues = template.ToAttributeValues(item)
-            let pr = new PutRequest(attrValues)
-            new WriteRequest(pr)
+            let pr = PutRequest(attrValues)
+            WriteRequest(pr)
 
         let items = Seq.toArray items
         if items.Length > 25 then invalidArg "items" "item length must be less than or equal to 25."
         let writeRequests = items |> Seq.map mkWriteRequest |> rlist
-        let pbr = new BatchWriteItemRequest()
+        let pbr = BatchWriteItemRequest()
         pbr.RequestItems.[tableName] <- writeRequests
+        pbr.ReturnConsumedCapacity <- returnConsumedCapacity
         let! ct = Async.CancellationToken
         let! response = client.BatchWriteItemAsync(pbr, ct) |> Async.AwaitTaskCorrect
         if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf "PutItem request returned error %O" response.HttpStatusCode
+            failwithf "BatchPutItems request returned error %O" response.HttpStatusCode
+
+        reportMetrics BatchWriteItems (Seq.toList response.ConsumedCapacity) 0
 
         return unprocessedPutAttributeValues tableName response |> Array.map template.OfAttributeValues
     }
@@ -319,12 +364,14 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                                 ?precondition : ConditionExpression<'TRecord>, ?returnLatest : bool) : Async<'TRecord> = async {
 
         let kav = template.ToAttributeValues(key)
-        let request = new UpdateItemRequest(Key = kav, TableName = tableName)
+        let request = UpdateItemRequest(Key = kav, TableName = tableName)
         request.ReturnValues <-
             if defaultArg returnLatest true then ReturnValue.ALL_NEW
             else ReturnValue.ALL_OLD
 
-        let writer = new AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+        request.ReturnConsumedCapacity <- returnConsumedCapacity
+
+        let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
         request.UpdateExpression <- updater.UpdateOps.Write(writer)
 
         match precondition with
@@ -336,6 +383,8 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "PutItem request returned error %O" response.HttpStatusCode
 
+        reportMetrics UpdateItem [ response.ConsumedCapacity ] 0
+
         return template.OfAttributeValues response.Attributes
     }
 
@@ -343,7 +392,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     ///     Asynchronously updates item with supplied key using provided record update expression.
     /// </summary>
     /// <param name="key">Key of item to be updated.</param>
-    /// <param name="updater">Table update expression.</param>
+    /// <param name="updateExpr">Table update expression.</param>
     /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
     /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
     member __.UpdateItemAsync(key : TableKey, updateExpr : Expr<'TRecord -> 'TRecord>,
@@ -357,7 +406,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     ///     Asynchronously updates item with supplied key using provided update operation expression.
     /// </summary>
     /// <param name="key">Key of item to be updated.</param>
-    /// <param name="updater">Table update expression.</param>
+    /// <param name="updateExpr">Table update expression.</param>
     /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
     /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
     member __.UpdateItemAsync(key : TableKey, updateExpr : Expr<'TRecord -> UpdateOp>,
@@ -410,11 +459,13 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="key">Key to be checked.</param>
     member __.ContainsKeyAsync(key : TableKey) : Async<bool> = async {
         let kav = template.ToAttributeValues(key)
-        let request = new GetItemRequest(tableName, kav)
+        let request = GetItemRequest(tableName, kav)
         request.ExpressionAttributeNames.Add("#HKEY", template.PrimaryKey.HashKey.AttributeName)
         request.ProjectionExpression <- "#HKEY"
+        request.ReturnConsumedCapacity <- returnConsumedCapacity
         let! ct = Async.CancellationToken
         let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
+        reportMetrics GetItem [ response.ConsumedCapacity ] 0
         return response.IsItemSet
     }
 
@@ -507,6 +558,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     ///     Asynchronously performs a batch fetch of items with supplied keys.
     /// </summary>
     /// <param name="keys">Keys of items to be fetched.</param>
+    /// <param name="projection">Projection expression to be applied to item.</param>
     /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
     member __.BatchGetItemsProjectedAsync<'TProjection>(keys : seq<TableKey>, projection : ProjectionExpression<'TRecord, 'TProjection>,
                                                         ?consistentRead : bool) : Async<'TProjection[]> = async {
@@ -519,6 +571,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     ///     Asynchronously performs a batch fetch of items with supplied keys.
     /// </summary>
     /// <param name="keys">Keys of items to be fetched.</param>
+    /// <param name="projection">Projection expression to be applied to item.</param>
     /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
     member __.BatchGetItemsProjectedAsync<'TProjection>(keys : seq<TableKey>, projection : Expr<'TRecord -> 'TProjection>,
                                                         ?consistentRead : bool) : Async<'TProjection[]> = async {
@@ -529,6 +582,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     ///     Asynchronously performs a batch fetch of items with supplied keys.
     /// </summary>
     /// <param name="keys">Keys of items to be fetched.</param>
+    /// <param name="projection">Projection expression to be applied to item.</param>
     /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
     member __.BatchGetItemsProjected<'TProjection>(keys : seq<TableKey>, projection : ProjectionExpression<'TRecord, 'TProjection>,
                                                         ?consistentRead : bool) : 'TProjection [] =
@@ -539,6 +593,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     ///     Asynchronously performs a batch fetch of items with supplied keys.
     /// </summary>
     /// <param name="keys">Keys of items to be fetched.</param>
+    /// <param name="projection">Projection expression to be applied to item.</param>
     /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
     member __.BatchGetItemsProjected<'TProjection>(keys : seq<TableKey>, projection : Expr<'TRecord -> 'TProjection>,
                                                         ?consistentRead : bool) : 'TProjection [] =
@@ -553,18 +608,21 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
     member __.DeleteItemAsync(key : TableKey, ?precondition : ConditionExpression<'TRecord>) : Async<'TRecord option> = async {
         let kav = template.ToAttributeValues key
-        let request = new DeleteItemRequest(tableName, kav)
+        let request = DeleteItemRequest(tableName, kav)
         match precondition with
         | Some pc ->
-            let writer = new AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+            let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
             request.ConditionExpression <- pc.Conditional.Write writer
         | None -> ()
 
         request.ReturnValues <- ReturnValue.ALL_OLD
+        request.ReturnConsumedCapacity <- returnConsumedCapacity
         let! ct = Async.CancellationToken
         let! response = client.DeleteItemAsync(request, ct) |> Async.AwaitTaskCorrect
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "DeleteItem request returned error %O" response.HttpStatusCode
+
+        reportMetrics DeleteItem [ response.ConsumedCapacity ] 0
 
         if response.Attributes.Count = 0 then
             return None
@@ -606,19 +664,22 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     member __.BatchDeleteItemsAsync(keys : seq<TableKey>) = async {
         let mkDeleteRequest (key : TableKey) =
             let kav = template.ToAttributeValues(key)
-            let pr = new DeleteRequest(kav)
-            new WriteRequest(pr)
+            let pr = DeleteRequest(kav)
+            WriteRequest(pr)
 
         let keys = Seq.toArray keys
         if keys.Length > 25 then invalidArg "items" "key length must be less than or equal to 25."
-        let request = new BatchWriteItemRequest()
+        let request = BatchWriteItemRequest()
         let deleteRequests = keys |> Seq.map mkDeleteRequest |> rlist
         request.RequestItems.[tableName] <- deleteRequests
+        request.ReturnConsumedCapacity <- returnConsumedCapacity
 
         let! ct = Async.CancellationToken
         let! response = client.BatchWriteItemAsync(request, ct) |> Async.AwaitTaskCorrect
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "PutItem request returned error %O" response.HttpStatusCode
+
+        reportMetrics BatchWriteItems (Seq.toList response.ConsumedCapacity) 0
 
         return unprocessedDeleteAttributeValues tableName response |> Array.map template.ExtractKey
     }
@@ -1152,7 +1213,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     /// </summary>
     /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
     member __.UpdateProvisionedThroughputAsync(provisionedThroughput : ProvisionedThroughput) : Async<unit> = async {
-        let request = new UpdateTableRequest(tableName, provisionedThroughput)
+        let request = UpdateTableRequest(tableName, provisionedThroughput)
         let! ct = Async.CancellationToken
         let! _response = client.UpdateTableAsync(request, ct) |> Async.AwaitTaskCorrect
         return ()
@@ -1206,7 +1267,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
             | Choice2Of2 (:? ResourceNotFoundException) when createIfNotExists ->
                 let provisionedThroughput =
                     match provisionedThroughput with
-                    | None -> new ProvisionedThroughput(10L,10L)
+                    | None -> ProvisionedThroughput(10L,10L)
                     | Some pt -> pt
 
                 let ctr = template.Info.Schemata.CreateCreateTableRequest (tableName, provisionedThroughput)
@@ -1254,13 +1315,14 @@ type TableContext =
     /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
     /// <param name="createIfNotExists">Create the table now instance if it does not exist. Defaults to false.</param>
     /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Defaults to (10,10).</param>
+    /// <param name="metricsCollector">Function to receive request metrics.</param>
     static member CreateAsync<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool,
-                                                                    ?provisionedThroughput : ProvisionedThroughput) : Async<TableContext<'TRecord>> = async {
+                                                                    ?provisionedThroughput : ProvisionedThroughput, ?metricsCollector : (RequestMetrics -> unit)) : Async<TableContext<'TRecord>> = async {
 
         if not <| isValidTableName tableName then invalidArg tableName "unsupported DynamoDB table name."
         let verifyTable = defaultArg verifyTable true
         let createIfNotExists = defaultArg createIfNotExists false
-        let context = new TableContext<'TRecord>(client, tableName, RecordTemplate.Define<'TRecord>())
+        let context = new TableContext<'TRecord>(client, tableName, RecordTemplate.Define<'TRecord>(), metricsCollector)
         if verifyTable || createIfNotExists then
             do! context.VerifyTableAsync(createIfNotExists = createIfNotExists, ?provisionedThroughput = provisionedThroughput)
 
@@ -1275,8 +1337,9 @@ type TableContext =
     /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
     /// <param name="createIfNotExists">Create the table now instance if it does not exist. Defaults to false.</param>
     /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
+    /// <param name="metricsCollector">Function to receive request metrics.</param>
     static member Create<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool,
-                                        ?provisionedThroughput : ProvisionedThroughput) =
+                                        ?provisionedThroughput : ProvisionedThroughput, ?metricsCollector : (RequestMetrics -> unit)) =
         TableContext.CreateAsync<'TRecord>(client, tableName, ?verifyTable = verifyTable, ?createIfNotExists = createIfNotExists,
-                                                ?provisionedThroughput = provisionedThroughput)
+                                                ?provisionedThroughput = provisionedThroughput, ?metricsCollector = metricsCollector)
         |> Async.RunSynchronously
