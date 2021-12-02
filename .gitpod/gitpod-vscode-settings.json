@@ -1,0 +1,20 @@
+{
+  ////////////
+  // General
+  ////////////
+  "extensions.ignoreRecommendations": true,
+  "extensions.autoUpdate": false,
+  "terminal.integrated.profiles.linux": {
+    "bash": {
+      "path": "bash",
+      "args": []
+    }
+  },
+  "terminal.integrated.defaultProfile.linux": "bash",
+  //////////
+  // F#
+  //////////
+  "FSharp.enableMSBuildProjectGraph": false,
+  "FSharp.externalAutocomplete": true,
+  "FSharp.workspacePath": "./FSharp.AWS.DynamoDB.sln",
+}

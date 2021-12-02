@@ -1,0 +1,29 @@
+image:
+  file: .gitpod/gitpod.Dockerfile
+
+tasks:
+  - name: Init Gitpod
+    before: |
+      ./.gitpod/gitpod-init.sh
+  - name: Build
+    init: |
+      dotnet tool restore
+      dotnet fake build -t Build
+  - name: Localstack
+    command: docker run --rm --name=localstack -p 8000:4566 -e SERVICES=dynamodb localstack/localstack
+
+vscode:
+  extensions:
+    - Ionide.Ionide-fsharp@5.10.2 # Frequently updated on VSX
+    - muhammad-sammy.csharp@1.23.16 # Frequently updated on VSX
+
+github:
+  prebuilds:
+    # enable for the master/default branch (defaults to true)
+    master: true
+    # enable for all branches in this repo (defaults to false)
+    branches: true
+    # enable for pull requests coming from this repo (defaults to true)
+    pullRequests: true
+    # enable for pull requests coming from forks (defaults to false)
+    pullRequestsFromForks: true
