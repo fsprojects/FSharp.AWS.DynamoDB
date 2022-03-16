@@ -19,9 +19,14 @@ open Amazon.Util
 let account = AWSCredentialsProfile.LoadFrom("default").Credentials
 let ddb = new AmazonDynamoDBClient(account, RegionEndpoint.EUCentral1) :> IAmazonDynamoDB
 #else // Use Docker-hosted dynamodb-local instance
+// See https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.DownloadingAndRunning.html#docker for details of how to deploy a simulator instance
 let clientConfig = AmazonDynamoDBConfig(ServiceURL = "http://localhost:8000")
-// Credenitals are not validated if connecting to local instance so anything will do (this avoids it looking for profiles to be configured)
-let credentials = Amazon.Runtime.BasicAWSCredentials("A", "A") // or Amazon.Runtime.AWSCredentials.FromEnvironmentVariables()
+#if USE_CREDS_FROM_ENV_VARS // 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' must be set for this to work
+let credentials = AWSCredentials.FromEnvironmentVariables()
+#else
+// Credentials are not validated if connecting to local instance so anything will do (this avoids it looking for profiles to be configured)
+let credentials = Amazon.Runtime.BasicAWSCredentials("A", "A")
+#endif
 let ddb = new AmazonDynamoDBClient(credentials, clientConfig) :> IAmazonDynamoDB
 #endif
 
