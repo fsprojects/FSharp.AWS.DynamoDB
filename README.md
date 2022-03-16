@@ -2,7 +2,7 @@
 
 ![](https://github.com/fsprojects/FSharp.AWS.DynamoDB/workflows/Build/badge.svg) [![NuGet Badge](https://buildstats.info/nuget/FSharp.AWS.DynamoDB?includePreReleases=true)](https://www.nuget.org/packages/FSharp.AWS.DynamoDB)
 
-FSharp.AWS.DynamoDB an F# wrapper over the standard Amazon.DynamoDB library which
+`FSharp.AWS.DynamoDB` an F# wrapper over the standard `AWSSDK.DynamoDBv2` library which
 allows you to represent table items using F# records and perform updates, queries and scans
 using F# quotation expressions.
 
@@ -29,7 +29,7 @@ type WorkItemInfo =
 		Started : DateTimeOffset option
 	}
 ```
-We can now perfom table operations on DynamoDB like so
+We can now perform table operations on DynamoDB like so
 ```fsharp
 open Amazon.DynamoDBv2
 
@@ -67,17 +67,17 @@ let updated = table.UpdateItem <@ fun r -> SET r.Name "newName" &&& ADD r.Depend
 
 ## Supported Field Types
 
-FSharp.AWS.DynamoDB supports the following field types:
+`FSharp.AWS.DynamoDB` supports the following field types:
 * Numerical types, enumerations and strings.
 * Array, Nullable, Guid, DateTimeOffset and TimeSpan.
 * F# lists
 * F# sets with elements of type number, string or `byte[]`.
 * F# maps with key of type string.
-* F# records and unions (recursive types not supported).
+* F# records and unions (recursive types not supported, nested ones are).
 
-## Supported methods in Query Expressions
+## Supported operators in Query Expressions
 
-Query expressions support the following F# methods in their predicates:
+Query expressions support the following F# operators in their predicates:
 * `Array.length`, `List.length`, `Set.count` and `Map.Count`.
 * `String.StartsWith` and `String.Contains`.
 * `Set.contains` and `Map.containsKey`.
@@ -85,7 +85,7 @@ Query expressions support the following F# methods in their predicates:
 * `Option.isSome`, `Option.isNone`, `Option.Value` and `Option.get`.
 * `fst` and `snd` for tuple records.
 
-## Supported methods in Update Expressions
+## Supported operators in Update Expressions
 
 Update expressions support the following F# value constructors:
 * `(+)` and `(-)` in numerical and set types.
@@ -100,11 +100,11 @@ Update expressions support the following F# value constructors:
 ## Example: Creating an atomic counter
 
 ```fsharp
-type private CounterEntry = { [<HashKey>]Id : Guid ; Value : int64 }
+type private CounterEntry = { [<HashKey>] Id : Guid ; Value : int64 }
 
 type Counter private (table : TableContext<CounterEntry>, key : TableKey) =
-    member __.Value = table.GetItem(key).Value
-    member __.Incr() = 
+    member _.Value = table.GetItem(key).Value
+    member _.Incr() = 
         let updated = table.UpdateItem(key, <@ fun e -> { e with Value = e.Value + 1L } @>)
         updated.Value
 
@@ -132,8 +132,8 @@ type Record =
     {
         [<HashKey>] HashKey : string
         ...
-        [<GlobalSecondaryHashKey(indexName = "Index")>]GSIH : string
-        [<GlobalSecondaryRangeKey(indexName = "Index")>]GSIR : string
+        [<GlobalSecondaryHashKey(indexName = "Index")>] GSIH : string
+        [<GlobalSecondaryRangeKey(indexName = "Index")>] GSIR : string
     }
 ```
 Queries can now be performed on the `GSIH` and `GSIR` fields as if they were regular hashkey and rangekey attributes.
@@ -151,7 +151,7 @@ type Record =
 ```
 Queries can now be performed using LSI as a secondary RangeKey.
 
-NB: Due to API restrictions, secondary indices in the scope of FSharp.AWS.DynamoDB always project *all* table attributes
+NB: Due to API restrictions, secondary indices in the scope of `FSharp.AWS.DynamoDB` always project *all* table attributes,
 which can incur additional costs from Amazon.
 
 ### Pagination
@@ -238,7 +238,7 @@ Tests are run using dynamodb-local on port 8000. Using the docker image is recom
 
 then
 
-`dotnet run -p tests/FSharp.AWS.DynamoDB.Tests/FSharp.AWS.DynamoDB.Tests.fsproj`
+`dotnet run --project tests/FSharp.AWS.DynamoDB.Tests/FSharp.AWS.DynamoDB.Tests.fsproj`
 
 ## Maintainer(s)
 
