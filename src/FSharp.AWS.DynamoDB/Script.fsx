@@ -9,15 +9,21 @@
 
 open System
 
-open Amazon
-open Amazon.Util
 open Amazon.DynamoDBv2
-open Amazon.DynamoDBv2.Model
 
 open FSharp.AWS.DynamoDB
 
+#if USE_CLOUD
+open Amazon
+open Amazon.Util
 let account = AWSCredentialsProfile.LoadFrom("default").Credentials
 let ddb = new AmazonDynamoDBClient(account, RegionEndpoint.EUCentral1) :> IAmazonDynamoDB
+#else // Use Docker-hosted dynamodb-local instance
+let clientConfig = AmazonDynamoDBConfig(ServiceURL = "http://localhost:8000")
+// Credenitals are not validated if connecting to local instance so anything will do (this avoids it looking for profiles to be configured)
+let credentials = Amazon.Runtime.BasicAWSCredentials("A", "A") // or Amazon.Runtime.AWSCredentials.FromEnvironmentVariables()
+let ddb = new AmazonDynamoDBClient(credentials, clientConfig) :> IAmazonDynamoDB
+#endif
 
 type Nested = { A : string ; B : System.Reflection.BindingFlags }
 
