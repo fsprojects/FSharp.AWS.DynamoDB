@@ -14,6 +14,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "project", "project", "{BF60
 		License.md = License.md
 		README.md = README.md
 		RELEASE_NOTES.md = RELEASE_NOTES.md
+		global.json = global.json
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A157294B-F680-4AA4-910C-BC63840FF6E3}"
