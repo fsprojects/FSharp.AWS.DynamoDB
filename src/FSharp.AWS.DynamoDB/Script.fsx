@@ -1,19 +1,34 @@
-﻿#I "../../bin"
+﻿#if USE_PUBLISHED_NUGET // If you don't want to do a local build first
+#r "nuget: FSharp.AWS.DynamoDB, *-*" // *-* to white-list the fact that all releases to date have been `-beta` sufficed
+#else
+#I "../../bin/net5.0/"
 #r "AWSSDK.Core.dll"
 #r "AWSSDK.DynamoDBv2.dll"
 #r "FSharp.AWS.DynamoDB.dll"
+#endif
 
 open System
 
-open Amazon
-open Amazon.Util
 open Amazon.DynamoDBv2
-open Amazon.DynamoDBv2.Model
 
 open FSharp.AWS.DynamoDB
 
+#if USE_CLOUD
+open Amazon
+open Amazon.Util
 let account = AWSCredentialsProfile.LoadFrom("default").Credentials
 let ddb = new AmazonDynamoDBClient(account, RegionEndpoint.EUCentral1) :> IAmazonDynamoDB
+#else // Use Docker-hosted dynamodb-local instance
+// See https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.DownloadingAndRunning.html#docker for details of how to deploy a simulator instance
+let clientConfig = AmazonDynamoDBConfig(ServiceURL = "http://localhost:8000")
+#if USE_CREDS_FROM_ENV_VARS // 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' must be set for this to work
+let credentials = AWSCredentials.FromEnvironmentVariables()
+#else
+// Credentials are not validated if connecting to local instance so anything will do (this avoids it looking for profiles to be configured)
+let credentials = Amazon.Runtime.BasicAWSCredentials("A", "A")
+#endif
+let ddb = new AmazonDynamoDBClient(credentials, clientConfig) :> IAmazonDynamoDB
+#endif
 
 type Nested = { A : string ; B : System.Reflection.BindingFlags }
 

@@ -1319,7 +1319,7 @@ type TableContext =
     static member CreateAsync<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool,
                                                                     ?provisionedThroughput : ProvisionedThroughput, ?metricsCollector : (RequestMetrics -> unit)) : Async<TableContext<'TRecord>> = async {
 
-        if not <| isValidTableName tableName then invalidArg tableName "unsupported DynamoDB table name."
+        if not <| isValidTableName tableName then invalidArg "tableName" "unsupported DynamoDB table name."
         let verifyTable = defaultArg verifyTable true
         let createIfNotExists = defaultArg createIfNotExists false
         let context = new TableContext<'TRecord>(client, tableName, RecordTemplate.Define<'TRecord>(), metricsCollector)

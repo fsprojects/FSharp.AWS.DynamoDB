@@ -2,8 +2,8 @@
 
 ![](https://github.com/fsprojects/FSharp.AWS.DynamoDB/workflows/Build/badge.svg) [![NuGet Badge](https://buildstats.info/nuget/FSharp.AWS.DynamoDB?includePreReleases=true)](https://www.nuget.org/packages/FSharp.AWS.DynamoDB)
 
-FSharp.AWS.DynamoDB an F# wrapper over the standard Amazon.DynamoDB library which
-allows you to represent table items using F# records and perform updates, queries and scans
+`FSharp.AWS.DynamoDB` is an F# wrapper over the standard `AWSSDK.DynamoDBv2` library that
+represents Table Items as F# records, enabling one to perform updates, queries and scans
 using F# quotation expressions.
 
 The API draws heavily on the corresponding [FSharp.Azure.Storage](https://github.com/fsprojects/FSharp.Azure.Storage)
@@ -29,7 +29,9 @@ type WorkItemInfo =
 		Started : DateTimeOffset option
 	}
 ```
-We can now perfom table operations on DynamoDB like so
+
+We can now perform table operations on DynamoDB like so:
+
 ```fsharp
 open Amazon.DynamoDBv2
 
@@ -42,7 +44,7 @@ let key : TableKey = table.PutItem(workItem)
 let workItem' = table.GetItem(key)
 ```
 
-Queries and scans can be performed using quoted predicates
+Queries and scans can be performed using quoted predicates:
 
 ```fsharp
 let qResults = table.Query(keyCondition = <@ fun r -> r.ProcessId = 0 @>, 
@@ -51,15 +53,15 @@ let qResults = table.Query(keyCondition = <@ fun r -> r.ProcessId = 0 @>,
 let sResults = table.Scan <@ fun r -> r.Started.Value >= DateTimeOffset.Now - TimeSpan.FromMinutes 1.  @>
 ```
 
-Values can be updated using quoted update expressions
+Values can be updated using quoted update expressions:
 
 ```fsharp
 let updated = table.UpdateItem(<@ fun r -> { r with Started = Some DateTimeOffset.Now } @>, 
                                 preCondition = <@ fun r -> r.DateTimeOffset = None @>)
 ```
 
-Or they can be updated using the `UpdateOp` DSL
-which is closer to the underlying DynamoDB API
+Or they can be updated using the `UpdateOp` DSL,
+which is closer to the underlying DynamoDB API:
 
 ```fsharp
 let updated = table.UpdateItem <@ fun r -> SET r.Name "newName" &&& ADD r.Dependencies ["MBrace.Core.dll"] @>
@@ -67,17 +69,17 @@ let updated = table.UpdateItem <@ fun r -> SET r.Name "newName" &&& ADD r.Depend
 
 ## Supported Field Types
 
-FSharp.AWS.DynamoDB supports the following field types:
+`FSharp.AWS.DynamoDB` supports the following field types:
 * Numerical types, enumerations and strings.
 * Array, Nullable, Guid, DateTimeOffset and TimeSpan.
 * F# lists
 * F# sets with elements of type number, string or `byte[]`.
 * F# maps with key of type string.
-* F# records and unions (recursive types not supported).
+* F# records and unions (recursive types not supported, nested ones are).
 
-## Supported methods in Query Expressions
+## Supported operators in Query Expressions
 
-Query expressions support the following F# methods in their predicates:
+Query expressions support the following F# operators in their predicates:
 * `Array.length`, `List.length`, `Set.count` and `Map.Count`.
 * `String.StartsWith` and `String.Contains`.
 * `Set.contains` and `Map.containsKey`.
@@ -85,7 +87,7 @@ Query expressions support the following F# methods in their predicates:
 * `Option.isSome`, `Option.isNone`, `Option.Value` and `Option.get`.
 * `fst` and `snd` for tuple records.
 
-## Supported methods in Update Expressions
+## Supported operators in Update Expressions
 
 Update expressions support the following F# value constructors:
 * `(+)` and `(-)` in numerical and set types.
@@ -100,11 +102,11 @@ Update expressions support the following F# value constructors:
 ## Example: Creating an atomic counter
 
 ```fsharp
-type private CounterEntry = { [<HashKey>]Id : Guid ; Value : int64 }
+type private CounterEntry = { [<HashKey>] Id : Guid ; Value : int64 }
 
 type Counter private (table : TableContext<CounterEntry>, key : TableKey) =
-    member __.Value = table.GetItem(key).Value
-    member __.Incr() = 
+    member _.Value = table.GetItem(key).Value
+    member _.Incr() = 
         let updated = table.UpdateItem(key, <@ fun e -> { e with Value = e.Value + 1L } @>)
         updated.Value
 
@@ -122,7 +124,8 @@ Projection expressions can be used to fetch a subset of table attributes, which 
 ```fsharp
 table.QueryProjected(<@ fun r -> r.HashKey = "Foo" @>, <@ fun r -> r.HashKey, r.Values.Nested.[0] @>)
 ```
-which returns a tuple of specified attributes. Tuples can be of any arity and must contain non-conflicting document paths.
+
+which returns a tuple of the specified attributes. Tuples can be of any arity and must contain non-conflicting document paths.
 
 ## Secondary Indices
 
@@ -132,10 +135,11 @@ type Record =
     {
         [<HashKey>] HashKey : string
         ...
-        [<GlobalSecondaryHashKey(indexName = "Index")>]GSIH : string
-        [<GlobalSecondaryRangeKey(indexName = "Index")>]GSIR : string
+        [<GlobalSecondaryHashKey(indexName = "Index")>] GSIH : string
+        [<GlobalSecondaryRangeKey(indexName = "Index")>] GSIR : string
     }
 ```
+
 Queries can now be performed on the `GSIH` and `GSIR` fields as if they were regular hashkey and rangekey attributes.
 Global secondary indices are created using the same provisioned throughput as the primary keys.
 
@@ -149,9 +153,10 @@ type Record =
         [<LocalSecondaryIndex>] LSI : double
     }
 ```
+
 Queries can now be performed using LSI as a secondary RangeKey.
 
-NB: Due to API restrictions, secondary indices in the scope of FSharp.AWS.DynamoDB always project *all* table attributes
+NB: Due to API restrictions, secondary indices in the scope of `FSharp.AWS.DynamoDB` always project *all* table attributes,
 which can incur additional costs from Amazon.
 
 ### Pagination
@@ -175,6 +180,7 @@ let page = table.QueryPaginated(<@ fun t -> t.GsiHash = gsiHashValue @>, limit =
 
 Due to restrictions of DynamoDB, it may sometimes be the case that objects are not persisted faithfully.
 For example, consider the following record definition:
+
 ```fsharp
 type Record = 
     {         
@@ -188,7 +194,9 @@ type Record =
 let item = { HashKey = Guid.NewGuid() ; Optional = Some None ; Lists = [[1;2];[];[3;4]] }
 let key = table.PutItem item
 ```
+
 Subsequently recovering the given key will result in the following value:
+
 ```fsharp
 > table.GetItem key
 val it : Record = {HashKey = 8d4f0678-6def-4bc9-a0ff-577a53c1337c;
@@ -199,28 +207,37 @@ val it : Record = {HashKey = 8d4f0678-6def-4bc9-a0ff-577a53c1337c;
 ## Precomputing DynamoDB Expressions
 
 It is possible to precompute a DynamoDB expression as follows:
+
 ```fsharp
 let precomputedConditional = table.Template.PrecomputeConditionalExpr <@ fun w -> w.Name <> "test" && w.Dependencies.Contains "mscorlib" @>
 ```
+
 This precomputed conditional can now be used in place of the original expression in the FSharp.AWS.DynamoDB API:
+
 ```fsharp
 let results = table.Scan precomputedConditional
 ```
+
 FSharp.AWS.DynamoDB also supports precomputation of parametric expressions:
+
 ```fsharp
 let startedBefore = table.Template.PrecomputeConditionalExpr <@ fun time w -> w.StartTime.Value <= time @>
 table.Scan(startedBefore (DateTimeOffset.Now - TimeSpan.FromDays 1.))
 ```
 
+(See [`Script.fsx`](src/FSharp.AWS.DynamoDB/Script.fsx) for example timings showing the relative efficiency.)
+
 ## Observability
 
 A hook is provided so metrics can be published via your preferred Observability provider. For example, using [Prometheus.NET](https://github.com/prometheus-net/prometheus-net):
+
 ```fsharp
 let dbCounter = Metrics.CreateCounter ("aws_dynamodb_requests_total", "Count of all DynamoDB requests", "table", "operation")
 let processMetrics (m : RequestMetrics) =
-    dbCounter.WithLabels(m.TableName, m.Operation.ToString ()).Inc () |> ignore
+    dbCounter.WithLabels(m.TableName, string m.Operation).Inc () |> ignore
 let table = TableContext.Create<WorkItemInfo>(client, tableName = "workItems", metricsCollector = processMetrics)
 ```
+
 If `metricsCollector` is supplied, the requests will include `ReturnConsumedCapacity = ReturnConsumedCapacity.INDEX` 
 and the `RequestMetrics` parameter will contain a list of `ConsumedCapacity` objects returned from the DynamoDB operations.
 
@@ -238,7 +255,7 @@ Tests are run using dynamodb-local on port 8000. Using the docker image is recom
 
 then
 
-`dotnet run -p tests/FSharp.AWS.DynamoDB.Tests/FSharp.AWS.DynamoDB.Tests.fsproj`
+`dotnet run --project tests/FSharp.AWS.DynamoDB.Tests/FSharp.AWS.DynamoDB.Tests.fsproj`
 
 ## Maintainer(s)
 

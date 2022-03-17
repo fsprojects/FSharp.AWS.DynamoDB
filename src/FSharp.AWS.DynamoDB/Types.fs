@@ -49,8 +49,8 @@ type LocalSecondaryIndexAttribute private (indexName : string option) =
 type ConstantHashKeyAttribute(name : string, hashkey : obj) =
     inherit Attribute()
     do
-        if isNull name then raise <| ArgumentNullException("'Name' parameter cannot be null.")
-        if isNull hashkey then raise <| ArgumentNullException("'HashKey' parameter cannot be null.")
+        if isNull name then raise <| ArgumentNullException("name")
+        if isNull hashkey then raise <| ArgumentNullException("hashkey")
 
     member __.Name = name
     member __.HashKey = hashkey
@@ -62,8 +62,8 @@ type ConstantHashKeyAttribute(name : string, hashkey : obj) =
 type ConstantRangeKeyAttribute(name : string, rangeKey : obj) =
     inherit Attribute()
     do
-        if isNull name then raise <| ArgumentNullException("'Name' parameter cannot be null.")
-        if isNull rangeKey then raise <| ArgumentNullException("'HashKey' parameter cannot be null.")
+        if isNull name then raise <| ArgumentNullException("name")
+        if isNull rangeKey then raise <| ArgumentNullException("rangeKey")
 
     member __.Name = name
     member __.RangeKey = rangeKey
@@ -79,7 +79,7 @@ type StringRepresentationAttribute() =
 [<AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
 type CustomNameAttribute(name : string) =
     inherit System.Attribute()
-    do if isNull name then raise <| ArgumentNullException("'Name' parameter cannot be null.")
+    do if isNull name then raise <| ArgumentNullException("name")
     member __.Name = name
 
 /// Specifies that record deserialization should fail if not corresponding attribute
@@ -179,17 +179,17 @@ type TableKey private (hashKey : obj, rangeKey : obj) =
 
     /// Defines a table key using provided HashKey
     static member Hash<'HashKey>(hashKey : 'HashKey) =
-        if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
+        if isNull hashKey then raise <| ArgumentNullException("hashKey")
         TableKey(hashKey, null)
 
     /// Defines a table key using provided RangeKey
     static member Range<'RangeKey>(rangeKey : 'RangeKey) =
-        if isNull rangeKey then raise <| ArgumentNullException("RangeKey must not be null")
+        if isNull rangeKey then raise <| ArgumentNullException("rangeKey")
         TableKey(null, rangeKey)
 
     /// Defines a table key using combined HashKey and RangeKey
     static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey) =
-        if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
+        if isNull hashKey then raise <| ArgumentNullException("hashKey")
         TableKey(hashKey, rangeKey)
 
 /// Query (start/last evaluated) key identifier
@@ -216,12 +216,12 @@ type IndexKey private (hashKey : obj, rangeKey : obj, primaryKey: TableKey) =
 
     /// Defines an index key using provided HashKey and primary TableKey
     static member Hash<'HashKey>(hashKey : 'HashKey, primaryKey: TableKey) =
-        if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
+        if isNull hashKey then raise <| ArgumentNullException("hashKey") 
         IndexKey(hashKey, null, primaryKey)
 
     /// Defines an index key using combined HashKey, RangeKey and primary TableKey
     static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey, primaryKey: TableKey) =
-        if isNull hashKey then raise <| ArgumentNullException("HashKey must not be null")
+        if isNull hashKey then raise <| ArgumentNullException("hashKey")
         IndexKey(hashKey, rangeKey, primaryKey)
 
     // Defines an index key using just the primary TableKey
