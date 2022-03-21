@@ -1,5 +1,6 @@
 ### 0.9.4-beta
 * Moved Sync-over-Async versions of `TableContext` operations into `namespace FSharp.AWS.DynamoDB.Scripting`
+* Added `?collector` parameter to each operation on `TableContext` to enable separated collection for concurrent requests
 
 ### 0.9.3-beta
 * Added `RequestMetrics` record type
