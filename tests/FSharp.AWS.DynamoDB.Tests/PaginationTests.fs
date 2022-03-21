@@ -5,6 +5,7 @@ open System
 open Expecto
 
 open FSharp.AWS.DynamoDB
+open FSharp.AWS.DynamoDB.Scripting
 
 [<AutoOpen>]
 module PaginationTests =

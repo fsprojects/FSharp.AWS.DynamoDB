@@ -1,11 +1,11 @@
 ﻿namespace FSharp.AWS.DynamoDB.Tests
 
 open System
-open System.Threading
 
 open Expecto
 
 open FSharp.AWS.DynamoDB
+open FSharp.AWS.DynamoDB.Scripting
 
 [<AutoOpen>]
 module UpdateExprTypes =

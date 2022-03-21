@@ -12,6 +12,7 @@ open System
 open Amazon.DynamoDBv2
 
 open FSharp.AWS.DynamoDB
+open FSharp.AWS.DynamoDB.Scripting // non-Async overloads
 
 #if USE_CLOUD
 open Amazon

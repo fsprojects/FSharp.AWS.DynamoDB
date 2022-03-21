@@ -265,6 +265,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
 
         new TableContext<'TRecord2>(client, tableName, rd, metricsCollector)
 
+
     /// <summary>
     ///     Asynchronously puts a record item in the table.
     /// </summary>
@@ -301,22 +302,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
     }
 
     /// <summary>
-    ///     Puts a record item in the table.
-    /// </summary>
-    /// <param name="item">Item to be written.</param>
-    /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
-    member __.PutItem(item : 'TRecord, ?precondition : ConditionExpression<'TRecord>) =
-        __.PutItemAsync(item, ?precondition = precondition) |> Async.RunSynchronously
-
-    /// <summary>
-    ///     Puts a record item in the table.
-    /// </summary>
-    /// <param name="item">Item to be written.</param>
-    /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
-    member __.PutItem(item : 'TRecord, precondition : Expr<'TRecord -> bool>) =
-        __.PutItemAsync(item, precondition) |> Async.RunSynchronously
-
-    /// <summary>
     ///     Asynchronously puts a collection of items to the table as a batch write operation.
     ///     At most 25 items can be written in a single batch write operation.
     /// </summary>
@@ -344,14 +329,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return unprocessedPutAttributeValues tableName response |> Array.map template.OfAttributeValues
     }
 
-    /// <summary>
-    ///     Puts a collection of items to the table as a batch write operation.
-    ///     At most 25 items can be written in a single batch write operation.
-    /// </summary>
-    /// <returns>Any unprocessed items due to throttling.</returns>
-    /// <param name="items">Items to be written.</param>
-    member __.BatchPutItems(items : seq<'TRecord>) =
-        __.BatchPutItemsAsync(items) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously updates item with supplied key using provided update expression.
@@ -381,7 +358,7 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let! ct = Async.CancellationToken
         let! response = client.UpdateItemAsync(request, ct) |> Async.AwaitTaskCorrect
         if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf "PutItem request returned error %O" response.HttpStatusCode
+            failwithf ".Value <-  request returned error %O" response.HttpStatusCode
 
         reportMetrics UpdateItem [ response.ConsumedCapacity ] 0
 
@@ -417,41 +394,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return! __.UpdateItemAsync(key, updater, ?returnLatest = returnLatest, ?precondition = precondition)
     }
 
-    /// <summary>
-    ///     Updates item with supplied key using provided update expression.
-    /// </summary>
-    /// <param name="key">Key of item to be updated.</param>
-    /// <param name="updater">Table update expression.</param>
-    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
-    /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
-    member __.UpdateItem(key : TableKey, updater : UpdateExpression<'TRecord>,
-                                ?precondition : ConditionExpression<'TRecord>, ?returnLatest : bool) =
-        __.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
-        |> Async.RunSynchronously
-
-    /// <summary>
-    ///     Updates item with supplied key using provided record update expression.
-    /// </summary>
-    /// <param name="key">Key of item to be updated.</param>
-    /// <param name="updater">Table update expression.</param>
-    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
-    /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
-    member __.UpdateItem(key : TableKey, updater : Expr<'TRecord -> 'TRecord>,
-                                ?precondition : Expr<'TRecord -> bool>, ?returnLatest : bool) =
-        __.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
-        |> Async.RunSynchronously
-
-    /// <summary>
-    ///     Updates item with supplied key using provided record update operation.
-    /// </summary>
-    /// <param name="key">Key of item to be updated.</param>
-    /// <param name="updater">Table update expression.</param>
-    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
-    /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
-    member __.UpdateItem(key : TableKey, updater : Expr<'TRecord -> UpdateOp>,
-                                ?precondition : Expr<'TRecord -> bool>, ?returnLatest : bool) =
-        __.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
-        |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously checks whether item of supplied key exists in table.
@@ -469,12 +411,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return response.IsItemSet
     }
 
-    /// <summary>
-    ///     Checks whether item of supplied key exists in table.
-    /// </summary>
-    /// <param name="key">Key to be checked.</param>
-    member __.ContainsKey(key : TableKey) =
-        __.ContainsKeyAsync(key) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously fetches item of given key from table.
@@ -485,11 +421,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return template.OfAttributeValues response.Item
     }
 
-    /// <summary>
-    ///     Fetches item of given key from table.
-    /// </summary>
-    /// <param name="key">Key of item to be fetched.</param>
-    member __.GetItem(key : TableKey) = __.GetItemAsync(key) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously fetches item of given key from table.
@@ -514,26 +445,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return! __.GetItemProjectedAsync(key, template.PrecomputeProjectionExpr projection)
     }
 
-    /// <summary>
-    ///     Fetches item of given key from table.
-    ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must be a tuple of zero or more non-conflicting properties.
-    /// </summary>
-    /// <param name="key">Key of item to be fetched.</param>
-    /// <param name="projection">Projection expression to be applied to item.</param>
-    member __.GetItemProjected(key : TableKey, projection : ProjectionExpression<'TRecord, 'TProjection>) : 'TProjection =
-        __.GetItemProjectedAsync(key, projection) |> Async.RunSynchronously
-
-
-    /// <summary>
-    ///     Fetches item of given key from table.
-    ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must be a tuple of zero or more non-conflicting properties.
-    /// </summary>
-    /// <param name="key">Key of item to be fetched.</param>
-    /// <param name="projection">Projection expression to be applied to item.</param>
-    member __.GetItemProjected(key : TableKey, projection : Expr<'TRecord -> 'TProjection>) : 'TProjection =
-        __.GetItemProjected(key, template.PrecomputeProjectionExpr projection)
 
     /// <summary>
     ///     Asynchronously performs a batch fetch of items with supplied keys.
@@ -545,14 +456,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return response |> Seq.map template.OfAttributeValues |> Seq.toArray
     }
 
-    /// <summary>
-    ///     Performs a batch fetch of items with supplied keys.
-    /// </summary>
-    /// <param name="keys">Keys of items to be fetched.</param>
-    /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
-    member __.BatchGetItems(keys : seq<TableKey>, ?consistentRead : bool) =
-        __.BatchGetItemsAsync(keys, ?consistentRead = consistentRead)
-        |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously performs a batch fetch of items with supplied keys.
@@ -577,27 +480,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                                                         ?consistentRead : bool) : Async<'TProjection[]> = async {
         return! __.BatchGetItemsProjectedAsync(keys, template.PrecomputeProjectionExpr projection, ?consistentRead = consistentRead)
     }
-
-    /// <summary>
-    ///     Asynchronously performs a batch fetch of items with supplied keys.
-    /// </summary>
-    /// <param name="keys">Keys of items to be fetched.</param>
-    /// <param name="projection">Projection expression to be applied to item.</param>
-    /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
-    member __.BatchGetItemsProjected<'TProjection>(keys : seq<TableKey>, projection : ProjectionExpression<'TRecord, 'TProjection>,
-                                                        ?consistentRead : bool) : 'TProjection [] =
-        __.BatchGetItemsProjectedAsync(keys, projection, ?consistentRead = consistentRead) |> Async.RunSynchronously
-
-
-    /// <summary>
-    ///     Asynchronously performs a batch fetch of items with supplied keys.
-    /// </summary>
-    /// <param name="keys">Keys of items to be fetched.</param>
-    /// <param name="projection">Projection expression to be applied to item.</param>
-    /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
-    member __.BatchGetItemsProjected<'TProjection>(keys : seq<TableKey>, projection : Expr<'TRecord -> 'TProjection>,
-                                                        ?consistentRead : bool) : 'TProjection [] =
-        __.BatchGetItemsProjectedAsync(keys, projection, ?consistentRead = consistentRead) |> Async.RunSynchronously
 
 
     /// <summary>
@@ -640,21 +522,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return! __.DeleteItemAsync(key, template.PrecomputeConditionalExpr precondition)
     }
 
-    /// <summary>
-    ///     Deletes item of given key from table.
-    /// </summary>
-    /// <param name="key">Key of item to be deleted.</param>
-    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
-    member __.DeleteItem(key : TableKey, ?precondition : ConditionExpression<'TRecord>) =
-        __.DeleteItemAsync(key, ?precondition = precondition) |> Async.RunSynchronously
-
-    /// <summary>
-    ///     Deletes item of given key from table.
-    /// </summary>
-    /// <param name="key">Key of item to be deleted.</param>
-    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
-    member __.DeleteItem(key : TableKey, precondition : Expr<'TRecord -> bool>) =
-        __.DeleteItemAsync(key, precondition) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously performs batch delete operation on items of given keys.
@@ -684,13 +551,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return unprocessedDeleteAttributeValues tableName response |> Array.map template.ExtractKey
     }
 
-    /// <summary>
-    ///     Performs batch delete operation on items of given keys.
-    /// </summary>
-    /// <returns>Any unprocessed keys due to throttling.</returns>
-    /// <param name="keys">Keys of items to be deleted.</param>
-    member __.BatchDeleteItems(keys : seq<TableKey>) =
-        __.BatchDeleteItemsAsync(keys) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously queries table with given condition expressions.
@@ -723,34 +583,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let fc = filterCondition |> Option.map template.PrecomputeConditionalExpr
         return! __.QueryAsync(kc, ?filterCondition = fc, ?limit = limit, ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
     }
-
-    /// <summary>
-    ///     Queries table with given condition expressions.
-    /// </summary>
-    /// <param name="keyCondition">Key condition expression.</param>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items to evaluate.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
-    member __.Query(keyCondition : ConditionExpression<'TRecord>, ?filterCondition : ConditionExpression<'TRecord>,
-                            ?limit: int, ?consistentRead : bool, ?scanIndexForward : bool) : 'TRecord[] =
-        __.QueryAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit,
-                        ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
-        |> Async.RunSynchronously
-
-    /// <summary>
-    ///     Queries table with given condition expressions.
-    /// </summary>
-    /// <param name="keyCondition">Key condition expression.</param>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items to evaluate.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
-    member __.Query(keyCondition : Expr<'TRecord -> bool>, ?filterCondition : Expr<'TRecord -> bool>,
-                            ?limit: int, ?consistentRead : bool, ?scanIndexForward : bool) : 'TRecord[] =
-        __.QueryAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit,
-                        ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
-        |> Async.RunSynchronously
 
 
     /// <summary>
@@ -794,43 +626,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                                         ?scanIndexForward = scanIndexForward)
     }
 
-    /// <summary>
-    ///     Queries table with given condition expressions.
-    ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must be a tuple of zero or more non-conflicting properties.
-    /// </summary>
-    /// <param name="keyCondition">Key condition expression.</param>
-    /// <param name="projection">Projection expression.</param>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items to evaluate.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
-    member __.QueryProjected<'TProjection>(keyCondition : ConditionExpression<'TRecord>, projection : ProjectionExpression<'TRecord, 'TProjection>,
-                                                ?filterCondition : ConditionExpression<'TRecord>,
-                                                ?limit: int, ?consistentRead : bool, ?scanIndexForward : bool) : 'TProjection [] =
-
-        __.QueryProjectedAsync(keyCondition, projection, ?filterCondition = filterCondition, ?limit = limit,
-                                ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
-        |> Async.RunSynchronously
-
-    /// <summary>
-    ///     Queries table with given condition expressions.
-    ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must be a tuple of zero or more non-conflicting properties.
-    /// </summary>
-    /// <param name="keyCondition">Key condition expression.</param>
-    /// <param name="projection">Projection expression.</param>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items to evaluate.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
-    member __.QueryProjected<'TProjection>(keyCondition : Expr<'TRecord -> bool>, projection : Expr<'TRecord -> 'TProjection>,
-                                                ?filterCondition : Expr<'TRecord -> bool>,
-                                                ?limit: int, ?consistentRead : bool, ?scanIndexForward : bool) : 'TProjection [] =
-
-        __.QueryProjectedAsync(keyCondition, projection, ?filterCondition = filterCondition, ?limit = limit,
-                                ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
-        |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously queries table with given condition expressions.
@@ -865,36 +660,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let fc = filterCondition |> Option.map template.PrecomputeConditionalExpr
         return! __.QueryPaginatedAsync(kc, ?filterCondition = fc, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
     }
-
-    /// <summary>
-    ///     Queries table with given condition expressions.
-    /// </summary>
-    /// <param name="keyCondition">Key condition expression.</param>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
-    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
-    member __.QueryPaginated(keyCondition : ConditionExpression<'TRecord>, ?filterCondition : ConditionExpression<'TRecord>,
-                            ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TRecord, IndexKey> =
-        __.QueryPaginatedAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
-                        ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
-        |> Async.RunSynchronously
-
-    /// <summary>
-    ///     Queries table with given condition expressions.
-    /// </summary>
-    /// <param name="keyCondition">Key condition expression.</param>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
-    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
-    member __.QueryPaginated(keyCondition : Expr<'TRecord -> bool>, ?filterCondition : Expr<'TRecord -> bool>,
-                            ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TRecord, IndexKey> =
-        __.QueryPaginatedAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
-                        ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
-        |> Async.RunSynchronously
 
 
     /// <summary>
@@ -940,45 +705,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                                         ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
     }
 
-    /// <summary>
-    ///     Queries table with given condition expressions.
-    ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must be a tuple of zero or more non-conflicting properties.
-    /// </summary>
-    /// <param name="keyCondition">Key condition expression.</param>
-    /// <param name="projection">Projection expression.</param>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
-    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
-    member __.QueryProjectedPaginated<'TProjection>(keyCondition : ConditionExpression<'TRecord>, projection : ProjectionExpression<'TRecord, 'TProjection>,
-                                                ?filterCondition : ConditionExpression<'TRecord>,
-                                                ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TProjection, IndexKey> =
-
-        __.QueryProjectedPaginatedAsync(keyCondition, projection, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
-                                ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
-        |> Async.RunSynchronously
-
-    /// <summary>
-    ///     Queries table with given condition expressions.
-    ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must be a tuple of zero or more non-conflicting properties.
-    /// </summary>
-    /// <param name="keyCondition">Key condition expression.</param>
-    /// <param name="projection">Projection expression.</param>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
-    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
-    member __.QueryProjectedPaginated<'TProjection>(keyCondition : Expr<'TRecord -> bool>, projection : Expr<'TRecord -> 'TProjection>,
-                                                ?filterCondition : Expr<'TRecord -> bool>,
-                                                ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TProjection, IndexKey> =
-
-        __.QueryProjectedPaginatedAsync(keyCondition, projection, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
-                                ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
-        |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously scans table with given condition expressions.
@@ -1002,26 +728,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let cond = template.PrecomputeConditionalExpr filterCondition
         return! __.ScanAsync(cond, ?limit = limit, ?consistentRead = consistentRead)
     }
-
-    /// <summary>
-    ///     Scans table with given condition expressions.
-    /// </summary>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items to evaluate.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member __.Scan(?filterCondition : ConditionExpression<'TRecord>, ?limit : int, ?consistentRead : bool) : 'TRecord [] =
-        __.ScanAsync(?filterCondition = filterCondition, ?limit = limit, ?consistentRead = consistentRead)
-        |> Async.RunSynchronously
-
-    /// <summary>
-    ///     Scans table with given condition expressions.
-    /// </summary>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items to evaluate.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member __.Scan(filterCondition : Expr<'TRecord -> bool>, ?limit : int, ?consistentRead : bool) : 'TRecord [] =
-        __.ScanAsync(filterCondition, ?limit = limit, ?consistentRead = consistentRead)
-        |> Async.RunSynchronously
 
 
     /// <summary>
@@ -1058,37 +764,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                                         ?limit = limit, ?consistentRead = consistentRead)
     }
 
-    /// <summary>
-    ///     Scans table with given condition expressions.
-    ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must be a tuple of zero or more non-conflicting properties.
-    /// </summary>
-    /// <param name="projection">Projection expression.</param>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items to evaluate.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member __.ScanProjected<'TProjection>(projection : ProjectionExpression<'TRecord, 'TProjection>,
-                                                ?filterCondition : ConditionExpression<'TRecord>,
-                                                ?limit : int, ?consistentRead : bool) : 'TProjection [] =
-        __.ScanProjectedAsync(projection, ?filterCondition = filterCondition,
-                                ?limit = limit, ?consistentRead = consistentRead)
-        |> Async.RunSynchronously
-
-    /// <summary>
-    ///     Scans table with given condition expressions.
-    ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must be a tuple of zero or more non-conflicting properties.
-    /// </summary>
-    /// <param name="projection">Projection expression.</param>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items to evaluate.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member __.ScanProjected<'TProjection>(projection : Expr<'TRecord -> 'TProjection>,
-                                                ?filterCondition : Expr<'TRecord -> bool>,
-                                                ?limit : int, ?consistentRead : bool) : 'TProjection [] =
-        __.ScanProjectedAsync(projection, ?filterCondition = filterCondition,
-                                ?limit = limit, ?consistentRead = consistentRead)
-        |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously scans table with given condition expressions.
@@ -1114,28 +789,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         let cond = template.PrecomputeConditionalExpr filterCondition
         return! __.ScanPaginatedAsync(cond, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
     }
-
-    /// <summary>
-    ///     Scans table with given condition expressions.
-    /// </summary>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
-    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member __.ScanPaginated(?filterCondition : ConditionExpression<'TRecord>, ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : PaginatedResult<'TRecord, TableKey> =
-        __.ScanPaginatedAsync(?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
-        |> Async.RunSynchronously
-
-    /// <summary>
-    ///     Scans table with given condition expressions.
-    /// </summary>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
-    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member __.ScanPaginated(filterCondition : Expr<'TRecord -> bool>, ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : PaginatedResult<'TRecord, TableKey> =
-        __.ScanPaginatedAsync(filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
-        |> Async.RunSynchronously
 
 
     /// <summary>
@@ -1174,39 +827,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
                                         ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
     }
 
-    /// <summary>
-    ///     Scans table with given condition expressions.
-    ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must be a tuple of zero or more non-conflicting properties.
-    /// </summary>
-    /// <param name="projection">Projection expression.</param>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
-    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member __.ScanProjectedPaginated<'TProjection>(projection : ProjectionExpression<'TRecord, 'TProjection>,
-                                                ?filterCondition : ConditionExpression<'TRecord>,
-                                                ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : PaginatedResult<'TProjection, TableKey> =
-        __.ScanProjectedPaginatedAsync(projection, ?filterCondition = filterCondition,
-                                ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
-        |> Async.RunSynchronously
-
-    /// <summary>
-    ///     Scans table with given condition expressions.
-    ///     Uses supplied projection expression to narrow downloaded attributes.
-    ///     Projection type must be a tuple of zero or more non-conflicting properties.
-    /// </summary>
-    /// <param name="projection">Projection expression.</param>
-    /// <param name="filterCondition">Filter condition expression.</param>
-    /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
-    /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member __.ScanProjectedPaginated<'TProjection>(projection : Expr<'TRecord -> 'TProjection>,
-                                                ?filterCondition : Expr<'TRecord -> bool>,
-                                                ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : PaginatedResult<'TProjection, TableKey> =
-        __.ScanProjectedPaginatedAsync(projection, ?filterCondition = filterCondition,
-                                ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
-        |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously updates the underlying table with supplied provisioned throughput.
@@ -1219,12 +839,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         return ()
     }
 
-    /// <summary>
-    ///     Updates the underlying table with supplied provisioned throughput.
-    /// </summary>
-    /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
-    member __.UpdateProvisionedThroughput(provisionedThroughput : ProvisionedThroughput) =
-        __.UpdateProvisionedThroughputAsync(provisionedThroughput) |> Async.RunSynchronously
 
     /// <summary>
     ///     Asynchronously verify that the table exists and is compatible with record key schema.
@@ -1295,15 +909,6 @@ type TableContext<'TRecord> internal (client : IAmazonDynamoDB, tableName : stri
         do! verify None 10
     }
 
-    /// <summary>
-    ///     Asynchronously verify that the table exists and is compatible with record key schema.
-    /// </summary>
-    /// <param name="createIfNotExists">Create the table instance now if it does not exist. Defaults to false.</param>
-    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
-    member __.VerifyTable(?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) =
-        __.VerifyTableAsync(?createIfNotExists = createIfNotExists, ?provisionedThroughput = provisionedThroughput)
-        |> Async.RunSynchronously
-
 /// Table context factory methods
 type TableContext =
 
@@ -1329,17 +934,454 @@ type TableContext =
         return context
     }
 
-    /// <summary>
-    ///     Creates a DynamoDB client instance for given F# record and table name.
-    /// </summary>
-    /// <param name="client">DynamoDB client instance.</param>
-    /// <param name="tableName">Table name to target.</param>
-    /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
-    /// <param name="createIfNotExists">Create the table now instance if it does not exist. Defaults to false.</param>
-    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
-    /// <param name="metricsCollector">Function to receive request metrics.</param>
-    static member Create<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool,
-                                        ?provisionedThroughput : ProvisionedThroughput, ?metricsCollector : (RequestMetrics -> unit)) =
-        TableContext.CreateAsync<'TRecord>(client, tableName, ?verifyTable = verifyTable, ?createIfNotExists = createIfNotExists,
-                                                ?provisionedThroughput = provisionedThroughput, ?metricsCollector = metricsCollector)
-        |> Async.RunSynchronously
+/// <summary>
+/// Sync-over-Async helpers that can be opted-into when working in scripting scenarios.
+/// For normal usage, the <c>Async</c> versions of any given API is recommended, in order to ensure one
+/// implements correct handling of the intrinsic asynchronous nature of the underlying interface
+/// </summary>
+module Scripting =
+
+    type TableContext<'TRecord> with
+
+        /// <summary>
+        ///     Puts a record item in the table.
+        /// </summary>
+        /// <param name="item">Item to be written.</param>
+        /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
+        member __.PutItem(item : 'TRecord, ?precondition : ConditionExpression<'TRecord>) =
+            __.PutItemAsync(item, ?precondition = precondition) |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Puts a record item in the table.
+        /// </summary>
+        /// <param name="item">Item to be written.</param>
+        /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
+        member __.PutItem(item : 'TRecord, precondition : Expr<'TRecord -> bool>) =
+            __.PutItemAsync(item, precondition) |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Puts a collection of items to the table as a batch write operation.
+        ///     At most 25 items can be written in a single batch write operation.
+        /// </summary>
+        /// <returns>Any unprocessed items due to throttling.</returns>
+        /// <param name="items">Items to be written.</param>
+        member __.BatchPutItems(items : seq<'TRecord>) =
+            __.BatchPutItemsAsync(items) |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Updates item with supplied key using provided update expression.
+        /// </summary>
+        /// <param name="key">Key of item to be updated.</param>
+        /// <param name="updater">Table update expression.</param>
+        /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+        /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
+        member __.UpdateItem(key : TableKey, updater : UpdateExpression<'TRecord>,
+                                    ?precondition : ConditionExpression<'TRecord>, ?returnLatest : bool) =
+            __.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
+            |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Updates item with supplied key using provided record update expression.
+        /// </summary>
+        /// <param name="key">Key of item to be updated.</param>
+        /// <param name="updater">Table update expression.</param>
+        /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+        /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
+        member __.UpdateItem(key : TableKey, updater : Expr<'TRecord -> 'TRecord>,
+                                    ?precondition : Expr<'TRecord -> bool>, ?returnLatest : bool) =
+            __.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
+            |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Updates item with supplied key using provided record update operation.
+        /// </summary>
+        /// <param name="key">Key of item to be updated.</param>
+        /// <param name="updater">Table update expression.</param>
+        /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+        /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
+        member __.UpdateItem(key : TableKey, updater : Expr<'TRecord -> UpdateOp>,
+                                    ?precondition : Expr<'TRecord -> bool>, ?returnLatest : bool) =
+            __.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
+            |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Checks whether item of supplied key exists in table.
+        /// </summary>
+        /// <param name="key">Key to be checked.</param>
+        member __.ContainsKey(key : TableKey) =
+            __.ContainsKeyAsync(key) |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Fetches item of given key from table.
+        /// </summary>
+        /// <param name="key">Key of item to be fetched.</param>
+        member __.GetItem(key : TableKey) = __.GetItemAsync(key) |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Fetches item of given key from table.
+        ///     Uses supplied projection expression to narrow downloaded attributes.
+        ///     Projection type must be a tuple of zero or more non-conflicting properties.
+        /// </summary>
+        /// <param name="key">Key of item to be fetched.</param>
+        /// <param name="projection">Projection expression to be applied to item.</param>
+        member __.GetItemProjected(key : TableKey, projection : ProjectionExpression<'TRecord, 'TProjection>) : 'TProjection =
+            __.GetItemProjectedAsync(key, projection) |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Fetches item of given key from table.
+        ///     Uses supplied projection expression to narrow downloaded attributes.
+        ///     Projection type must be a tuple of zero or more non-conflicting properties.
+        /// </summary>
+        /// <param name="key">Key of item to be fetched.</param>
+        /// <param name="projection">Projection expression to be applied to item.</param>
+        member __.GetItemProjected(key : TableKey, projection : Expr<'TRecord -> 'TProjection>) : 'TProjection =
+            // TOCONSIDER implement in terms of Async equivalent as per the rest
+            __.GetItemProjected(key, __.Template.PrecomputeProjectionExpr projection)
+
+
+        /// <summary>
+        ///     Performs a batch fetch of items with supplied keys.
+        /// </summary>
+        /// <param name="keys">Keys of items to be fetched.</param>
+        /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
+        member __.BatchGetItems(keys : seq<TableKey>, ?consistentRead : bool) =
+            __.BatchGetItemsAsync(keys, ?consistentRead = consistentRead)
+            |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Asynchronously performs a batch fetch of items with supplied keys.
+        /// </summary>
+        /// <param name="keys">Keys of items to be fetched.</param>
+        /// <param name="projection">Projection expression to be applied to item.</param>
+        /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
+        member __.BatchGetItemsProjected<'TProjection>(keys : seq<TableKey>, projection : ProjectionExpression<'TRecord, 'TProjection>,
+                                                            ?consistentRead : bool) : 'TProjection [] =
+            __.BatchGetItemsProjectedAsync(keys, projection, ?consistentRead = consistentRead) |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Asynchronously performs a batch fetch of items with supplied keys.
+        /// </summary>
+        /// <param name="keys">Keys of items to be fetched.</param>
+        /// <param name="projection">Projection expression to be applied to item.</param>
+        /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
+        member __.BatchGetItemsProjected<'TProjection>(keys : seq<TableKey>, projection : Expr<'TRecord -> 'TProjection>,
+                                                            ?consistentRead : bool) : 'TProjection [] =
+            __.BatchGetItemsProjectedAsync(keys, projection, ?consistentRead = consistentRead) |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Deletes item of given key from table.
+        /// </summary>
+        /// <param name="key">Key of item to be deleted.</param>
+        /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+        member __.DeleteItem(key : TableKey, ?precondition : ConditionExpression<'TRecord>) =
+            __.DeleteItemAsync(key, ?precondition = precondition) |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Deletes item of given key from table.
+        /// </summary>
+        /// <param name="key">Key of item to be deleted.</param>
+        /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+        member __.DeleteItem(key : TableKey, precondition : Expr<'TRecord -> bool>) =
+            __.DeleteItemAsync(key, precondition) |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Performs batch delete operation on items of given keys.
+        /// </summary>
+        /// <returns>Any unprocessed keys due to throttling.</returns>
+        /// <param name="keys">Keys of items to be deleted.</param>
+        member __.BatchDeleteItems(keys : seq<TableKey>) =
+            __.BatchDeleteItemsAsync(keys) |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Queries table with given condition expressions.
+        /// </summary>
+        /// <param name="keyCondition">Key condition expression.</param>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items to evaluate.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+        member __.Query(keyCondition : ConditionExpression<'TRecord>, ?filterCondition : ConditionExpression<'TRecord>,
+                                ?limit: int, ?consistentRead : bool, ?scanIndexForward : bool) : 'TRecord[] =
+            __.QueryAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit,
+                            ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+            |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Queries table with given condition expressions.
+        /// </summary>
+        /// <param name="keyCondition">Key condition expression.</param>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items to evaluate.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+        member __.Query(keyCondition : Expr<'TRecord -> bool>, ?filterCondition : Expr<'TRecord -> bool>,
+                                ?limit: int, ?consistentRead : bool, ?scanIndexForward : bool) : 'TRecord[] =
+            __.QueryAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit,
+                            ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+            |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Queries table with given condition expressions.
+        ///     Uses supplied projection expression to narrow downloaded attributes.
+        ///     Projection type must be a tuple of zero or more non-conflicting properties.
+        /// </summary>
+        /// <param name="keyCondition">Key condition expression.</param>
+        /// <param name="projection">Projection expression.</param>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items to evaluate.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+        member __.QueryProjected<'TProjection>(keyCondition : ConditionExpression<'TRecord>, projection : ProjectionExpression<'TRecord, 'TProjection>,
+                                                    ?filterCondition : ConditionExpression<'TRecord>,
+                                                    ?limit: int, ?consistentRead : bool, ?scanIndexForward : bool) : 'TProjection [] =
+
+            __.QueryProjectedAsync(keyCondition, projection, ?filterCondition = filterCondition, ?limit = limit,
+                                    ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+            |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Queries table with given condition expressions.
+        ///     Uses supplied projection expression to narrow downloaded attributes.
+        ///     Projection type must be a tuple of zero or more non-conflicting properties.
+        /// </summary>
+        /// <param name="keyCondition">Key condition expression.</param>
+        /// <param name="projection">Projection expression.</param>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items to evaluate.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+        member __.QueryProjected<'TProjection>(keyCondition : Expr<'TRecord -> bool>, projection : Expr<'TRecord -> 'TProjection>,
+                                                    ?filterCondition : Expr<'TRecord -> bool>,
+                                                    ?limit: int, ?consistentRead : bool, ?scanIndexForward : bool) : 'TProjection [] =
+
+            __.QueryProjectedAsync(keyCondition, projection, ?filterCondition = filterCondition, ?limit = limit,
+                                    ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+            |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Queries table with given condition expressions.
+        /// </summary>
+        /// <param name="keyCondition">Key condition expression.</param>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+        /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+        member __.QueryPaginated(keyCondition : ConditionExpression<'TRecord>, ?filterCondition : ConditionExpression<'TRecord>,
+                                ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TRecord, IndexKey> =
+            __.QueryPaginatedAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
+                            ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+            |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Queries table with given condition expressions.
+        /// </summary>
+        /// <param name="keyCondition">Key condition expression.</param>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+        /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+        member __.QueryPaginated(keyCondition : Expr<'TRecord -> bool>, ?filterCondition : Expr<'TRecord -> bool>,
+                                ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TRecord, IndexKey> =
+            __.QueryPaginatedAsync(keyCondition, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
+                            ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+            |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Queries table with given condition expressions.
+        ///     Uses supplied projection expression to narrow downloaded attributes.
+        ///     Projection type must be a tuple of zero or more non-conflicting properties.
+        /// </summary>
+        /// <param name="keyCondition">Key condition expression.</param>
+        /// <param name="projection">Projection expression.</param>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+        /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+        member __.QueryProjectedPaginated<'TProjection>(keyCondition : ConditionExpression<'TRecord>, projection : ProjectionExpression<'TRecord, 'TProjection>,
+                                                    ?filterCondition : ConditionExpression<'TRecord>,
+                                                    ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TProjection, IndexKey> =
+
+            __.QueryProjectedPaginatedAsync(keyCondition, projection, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
+                                    ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+            |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Queries table with given condition expressions.
+        ///     Uses supplied projection expression to narrow downloaded attributes.
+        ///     Projection type must be a tuple of zero or more non-conflicting properties.
+        /// </summary>
+        /// <param name="keyCondition">Key condition expression.</param>
+        /// <param name="projection">Projection expression.</param>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+        /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+        member __.QueryProjectedPaginated<'TProjection>(keyCondition : Expr<'TRecord -> bool>, projection : Expr<'TRecord -> 'TProjection>,
+                                                    ?filterCondition : Expr<'TRecord -> bool>,
+                                                    ?limit: int, ?exclusiveStartKey: IndexKey, ?consistentRead : bool, ?scanIndexForward : bool) : PaginatedResult<'TProjection, IndexKey> =
+
+            __.QueryProjectedPaginatedAsync(keyCondition, projection, ?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey,
+                                    ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+            |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Scans table with given condition expressions.
+        /// </summary>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items to evaluate.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        member __.Scan(?filterCondition : ConditionExpression<'TRecord>, ?limit : int, ?consistentRead : bool) : 'TRecord [] =
+            __.ScanAsync(?filterCondition = filterCondition, ?limit = limit, ?consistentRead = consistentRead)
+            |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Scans table with given condition expressions.
+        /// </summary>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items to evaluate.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        member __.Scan(filterCondition : Expr<'TRecord -> bool>, ?limit : int, ?consistentRead : bool) : 'TRecord [] =
+            __.ScanAsync(filterCondition, ?limit = limit, ?consistentRead = consistentRead)
+            |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Scans table with given condition expressions.
+        ///     Uses supplied projection expression to narrow downloaded attributes.
+        ///     Projection type must be a tuple of zero or more non-conflicting properties.
+        /// </summary>
+        /// <param name="projection">Projection expression.</param>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items to evaluate.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        member __.ScanProjected<'TProjection>(projection : ProjectionExpression<'TRecord, 'TProjection>,
+                                                    ?filterCondition : ConditionExpression<'TRecord>,
+                                                    ?limit : int, ?consistentRead : bool) : 'TProjection [] =
+            __.ScanProjectedAsync(projection, ?filterCondition = filterCondition,
+                                    ?limit = limit, ?consistentRead = consistentRead)
+            |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Scans table with given condition expressions.
+        ///     Uses supplied projection expression to narrow downloaded attributes.
+        ///     Projection type must be a tuple of zero or more non-conflicting properties.
+        /// </summary>
+        /// <param name="projection">Projection expression.</param>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items to evaluate.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        member __.ScanProjected<'TProjection>(projection : Expr<'TRecord -> 'TProjection>,
+                                                    ?filterCondition : Expr<'TRecord -> bool>,
+                                                    ?limit : int, ?consistentRead : bool) : 'TProjection [] =
+            __.ScanProjectedAsync(projection, ?filterCondition = filterCondition,
+                                    ?limit = limit, ?consistentRead = consistentRead)
+            |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Scans table with given condition expressions.
+        /// </summary>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+        /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        member __.ScanPaginated(?filterCondition : ConditionExpression<'TRecord>, ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : PaginatedResult<'TRecord, TableKey> =
+            __.ScanPaginatedAsync(?filterCondition = filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
+            |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Scans table with given condition expressions.
+        /// </summary>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+        /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        member __.ScanPaginated(filterCondition : Expr<'TRecord -> bool>, ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : PaginatedResult<'TRecord, TableKey> =
+            __.ScanPaginatedAsync(filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
+            |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Scans table with given condition expressions.
+        ///     Uses supplied projection expression to narrow downloaded attributes.
+        ///     Projection type must be a tuple of zero or more non-conflicting properties.
+        /// </summary>
+        /// <param name="projection">Projection expression.</param>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+        /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        member __.ScanProjectedPaginated<'TProjection>(projection : ProjectionExpression<'TRecord, 'TProjection>,
+                                                    ?filterCondition : ConditionExpression<'TRecord>,
+                                                    ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : PaginatedResult<'TProjection, TableKey> =
+            __.ScanProjectedPaginatedAsync(projection, ?filterCondition = filterCondition,
+                                    ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
+            |> Async.RunSynchronously
+
+        /// <summary>
+        ///     Scans table with given condition expressions.
+        ///     Uses supplied projection expression to narrow downloaded attributes.
+        ///     Projection type must be a tuple of zero or more non-conflicting properties.
+        /// </summary>
+        /// <param name="projection">Projection expression.</param>
+        /// <param name="filterCondition">Filter condition expression.</param>
+        /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
+        /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
+        /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+        member __.ScanProjectedPaginated<'TProjection>(projection : Expr<'TRecord -> 'TProjection>,
+                                                    ?filterCondition : Expr<'TRecord -> bool>,
+                                                    ?limit : int, ?exclusiveStartKey : TableKey, ?consistentRead : bool) : PaginatedResult<'TProjection, TableKey> =
+            __.ScanProjectedPaginatedAsync(projection, ?filterCondition = filterCondition,
+                                    ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
+            |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Updates the underlying table with supplied provisioned throughput.
+        /// </summary>
+        /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
+        member __.UpdateProvisionedThroughput(provisionedThroughput : ProvisionedThroughput) =
+            __.UpdateProvisionedThroughputAsync(provisionedThroughput) |> Async.RunSynchronously
+
+
+        /// <summary>
+        ///     Asynchronously verify that the table exists and is compatible with record key schema.
+        /// </summary>
+        /// <param name="createIfNotExists">Create the table instance now if it does not exist. Defaults to false.</param>
+        /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
+        member __.VerifyTable(?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) =
+            __.VerifyTableAsync(?createIfNotExists = createIfNotExists, ?provisionedThroughput = provisionedThroughput)
+            |> Async.RunSynchronously
+
+  type TableContext with
+
+        /// <summary>
+        ///     Creates a DynamoDB client instance for given F# record and table name.
+        /// </summary>
+        /// <param name="client">DynamoDB client instance.</param>
+        /// <param name="tableName">Table name to target.</param>
+        /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
+        /// <param name="createIfNotExists">Create the table now instance if it does not exist. Defaults to false.</param>
+        /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
+        /// <param name="metricsCollector">Function to receive request metrics.</param>
+        static member Create<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool,
+                                            ?provisionedThroughput : ProvisionedThroughput, ?metricsCollector : (RequestMetrics -> unit)) =
+            TableContext.CreateAsync<'TRecord>(client, tableName, ?verifyTable = verifyTable, ?createIfNotExists = createIfNotExists,
+                                                    ?provisionedThroughput = provisionedThroughput, ?metricsCollector = metricsCollector)
+            |> Async.RunSynchronously
