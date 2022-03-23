@@ -60,7 +60,7 @@ let updated = table.UpdateItem(<@ fun r -> { r with Started = Some DateTimeOffse
                                 preCondition = <@ fun r -> r.DateTimeOffset = None @>)
 ```
 
-Or they can be updated using the `UpdateOp` DSL,
+Or they can be updated using [the `SET`, `ADD`, `REMOVE` and `DELETE` operations of the UpdateOp` DSL](./src/FSharp.AWS.DynamoDB/Types.fs#263),
 which is closer to the underlying DynamoDB API:
 
 ```fsharp
@@ -125,7 +125,7 @@ Projection expressions can be used to fetch a subset of table attributes, which 
 table.QueryProjected(<@ fun r -> r.HashKey = "Foo" @>, <@ fun r -> r.HashKey, r.Values.Nested.[0] @>)
 ```
 
-which returns a tuple of the specified attributes. Tuples can be of any arity and must contain non-conflicting document paths.
+the resulting value is a tuple of the specified attributes. Tuples can be of any arity but must contain non-conflicting document paths.
 
 ## Secondary Indices
 
@@ -141,7 +141,8 @@ type Record =
 ```
 
 Queries can now be performed on the `GSIH` and `GSIR` fields as if they were regular hashkey and rangekey attributes.
-Global secondary indices are created using the same provisioned throughput as the primary keys.
+
+_NOTE: Global secondary indices are created using the same provisioned throughput as for the primary keys_.
 
 [Local Secondary Indices](http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LSI.html) can be defined using the `LocalSecondaryIndex` attribute:
 ```fsharp
@@ -212,13 +213,13 @@ It is possible to precompute a DynamoDB expression as follows:
 let precomputedConditional = table.Template.PrecomputeConditionalExpr <@ fun w -> w.Name <> "test" && w.Dependencies.Contains "mscorlib" @>
 ```
 
-This precomputed conditional can now be used in place of the original expression in the FSharp.AWS.DynamoDB API:
+This precomputed conditional can now be used in place of the original expression in the `FSharp.AWS.DynamoDB` API:
 
 ```fsharp
 let results = table.Scan precomputedConditional
 ```
 
-FSharp.AWS.DynamoDB also supports precomputation of parametric expressions:
+`FSharp.AWS.DynamoDB` also supports precomputation of parametric expressions:
 
 ```fsharp
 let startedBefore = table.Template.PrecomputeConditionalExpr <@ fun time w -> w.StartTime.Value <= time @>
