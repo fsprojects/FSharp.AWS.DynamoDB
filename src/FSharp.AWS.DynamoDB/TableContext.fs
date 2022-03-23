@@ -930,24 +930,33 @@ type TableContext<'TRecord> internal
 type TableContext =
 
     /// <summary>
-    ///     Creates a DynamoDB client instance for given F# record and table name.
+    ///     Creates a DynamoDB client instance for given F# record and table name. <br/>
+    ///     See <c>CreateAsync</c> for the ability to create and/or verify the Table.
+    /// </summary>
+    /// <param name="client">DynamoDB client instance.</param>
+    /// <param name="tableName">Table name to target.</param>
+    /// <param name="metricsCollector">Function to receive request metrics.</param>
+    static member CreateUnverified<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?metricsCollector : RequestMetrics -> unit) : TableContext<'TRecord> =
+        if not <| isValidTableName tableName then invalidArg "tableName" "unsupported DynamoDB table name."
+        TableContext<'TRecord>(client, tableName, RecordTemplate.Define<'TRecord>(), metricsCollector)
+
+    /// <summary>
+    ///     Creates a DynamoDB client instance for given F# record and table name. <br/>
+    ///     See <c>CreateUnverified</c> if your deployment phase handles the creation of the Table and verification of the schema.
     /// </summary>
     /// <param name="client">DynamoDB client instance.</param>
     /// <param name="tableName">Table name to target.</param>
     /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
-    /// <param name="createIfNotExists">Create the table now instance if it does not exist. Defaults to false.</param>
-    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Defaults to (10,10).</param>
+    /// <param name="createIfNotExists">Create the table immediately if it does not exist. Defaults to false.</param>
+    /// <param name="provisionedThroughput">Provisioned throughput for the table if creation required. Defaults to (10,10).</param>
     /// <param name="metricsCollector">Function to receive request metrics.</param>
     static member CreateAsync<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool,
-                                                                    ?provisionedThroughput : ProvisionedThroughput, ?metricsCollector : RequestMetrics -> unit) : Async<TableContext<'TRecord>> = async {
-
-        if not <| isValidTableName tableName then invalidArg "tableName" "unsupported DynamoDB table name."
+                                        ?provisionedThroughput : ProvisionedThroughput, ?metricsCollector : RequestMetrics -> unit) : Async<TableContext<'TRecord>> = async {
+        let context = TableContext.CreateUnverified(client, tableName, ?metricsCollector = metricsCollector)
         let verifyTable = defaultArg verifyTable true
         let createIfNotExists = defaultArg createIfNotExists false
-        let context = new TableContext<'TRecord>(client, tableName, RecordTemplate.Define<'TRecord>(), metricsCollector)
         if verifyTable || createIfNotExists then
             do! context.VerifyTableAsync(createIfNotExists = createIfNotExists, ?provisionedThroughput = provisionedThroughput)
-
         return context
     }
 
