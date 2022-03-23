@@ -218,3 +218,4 @@ xunit.html
 .DS_Store
 .ionide/
 .vscode/
+.idea/

@@ -76,14 +76,13 @@ type TableContext<'TRecord> internal
 
         let! ct = Async.CancellationToken
         let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
+        match maybeReport with None -> () | Some r -> r GetItem [ response.ConsumedCapacity ] (if response.IsItemSet then 1 else 0)
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "GetItem request returned error %O" response.HttpStatusCode
 
         if not response.IsItemSet then
             let msg = sprintf "could not find item %O" key
             raise <| ResourceNotFoundException(msg)
-
-        match maybeReport with None -> () | Some r -> r GetItem [ response.ConsumedCapacity ] 1
 
         return response
     }
@@ -110,12 +109,10 @@ type TableContext<'TRecord> internal
 
         let! ct = Async.CancellationToken
         let! response = client.BatchGetItemAsync(request, ct) |> Async.AwaitTaskCorrect
-        if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf "GetItem request returned error %O" response.HttpStatusCode
+        match maybeReport with None -> () | Some r -> r BatchGetItems (List.ofSeq response.ConsumedCapacity) response.Responses.[tableName].Count
 
-        match maybeReport with
-        | None -> ()
-        | Some r -> r BatchGetItems (List.ofSeq response.ConsumedCapacity) response.Responses.[tableName].Count
+        if response.HttpStatusCode <> HttpStatusCode.OK then
+            failwithf "BatchGetItem request returned error %O" response.HttpStatusCode
 
         return response.Responses.[tableName]
     }
@@ -141,6 +138,10 @@ type TableContext<'TRecord> internal
         let downloaded = new ResizeArray<_>()
         let returnConsumedCapacity, maybeReport = metricsOptions collector
         let consumedCapacity = new ResizeArray<ConsumedCapacity>()
+        let emitMetrics () =
+            match maybeReport with
+            | None -> ()
+            | Some r -> r Query (Seq.toList consumedCapacity) downloaded.Count
         let mutable lastEvaluatedKey : Dictionary<string,AttributeValue> option = None
 
         let rec aux last = async {
@@ -167,6 +168,7 @@ type TableContext<'TRecord> internal
             let! ct = Async.CancellationToken
             let! response = client.QueryAsync(request, ct) |> Async.AwaitTaskCorrect
             if response.HttpStatusCode <> HttpStatusCode.OK then
+                emitMetrics ()
                 failwithf "Query request returned error %O" response.HttpStatusCode
 
             downloaded.AddRange response.Items
@@ -181,7 +183,7 @@ type TableContext<'TRecord> internal
 
         do! aux (exclusiveStartKey |> Option.map (fun k -> template.ToAttributeValues(k, keyCondition.KeyCondition.Value)))
 
-        match maybeReport with None -> () | Some r -> r Query (Seq.toList consumedCapacity) downloaded.Count
+        emitMetrics ()
 
         return (downloaded, lastEvaluatedKey |> Option.map (fun av -> template.ExtractIndexKey(keyCondition.KeyCondition.Value, av)))
     }
@@ -205,6 +207,10 @@ type TableContext<'TRecord> internal
         let downloaded = new ResizeArray<_>()
         let returnConsumedCapacity, maybeReport = metricsOptions collector
         let consumedCapacity = new ResizeArray<ConsumedCapacity>()
+        let emitMetrics () =
+            match maybeReport with
+            | None -> ()
+            | Some r -> r Scan (Seq.toList consumedCapacity) downloaded.Count
         let mutable lastEvaluatedKey : Dictionary<string,AttributeValue> option = None
         let rec aux last = async {
             let request = ScanRequest(tableName)
@@ -226,7 +232,8 @@ type TableContext<'TRecord> internal
             let! ct = Async.CancellationToken
             let! response = client.ScanAsync(request, ct) |> Async.AwaitTaskCorrect
             if response.HttpStatusCode <> HttpStatusCode.OK then
-                failwithf "Query request returned error %O" response.HttpStatusCode
+                emitMetrics ()
+                failwithf "Scan request returned error %O" response.HttpStatusCode
 
             downloaded.AddRange response.Items
             consumedCapacity.Add response.ConsumedCapacity
@@ -240,7 +247,7 @@ type TableContext<'TRecord> internal
 
         do! aux (exclusiveStartKey |> Option.map template.ToAttributeValues)
 
-        match maybeReport with None -> () | Some r -> r Scan (Seq.toList consumedCapacity) downloaded.Count
+        emitMetrics ()
 
         return (downloaded, lastEvaluatedKey |> Option.map template.ExtractKey)
     }
@@ -298,10 +305,9 @@ type TableContext<'TRecord> internal
 
         let! ct = Async.CancellationToken
         let! response = client.PutItemAsync(request, ct) |> Async.AwaitTaskCorrect
+        match maybeReport with None -> () | Some r -> r PutItem [ response.ConsumedCapacity ] 0
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "PutItem request returned error %O" response.HttpStatusCode
-
-        match maybeReport with None -> () | Some r -> r PutItem [ response.ConsumedCapacity ] 0
 
         return template.ExtractKey item
     }
@@ -338,10 +344,9 @@ type TableContext<'TRecord> internal
         pbr.ReturnConsumedCapacity <- returnConsumedCapacity
         let! ct = Async.CancellationToken
         let! response = client.BatchWriteItemAsync(pbr, ct) |> Async.AwaitTaskCorrect
-        if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf "BatchPutItems request returned error %O" response.HttpStatusCode
-
         match maybeReport with None -> () | Some r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) 0
+        if response.HttpStatusCode <> HttpStatusCode.OK then
+            failwithf "BatchWriteItem put request returned error %O" response.HttpStatusCode
 
         return unprocessedPutAttributeValues tableName response |> Array.map template.OfAttributeValues
     }
@@ -377,10 +382,9 @@ type TableContext<'TRecord> internal
 
         let! ct = Async.CancellationToken
         let! response = client.UpdateItemAsync(request, ct) |> Async.AwaitTaskCorrect
-        if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf ".Value <-  request returned error %O" response.HttpStatusCode
-
         match maybeReport with None -> () | Some r -> r UpdateItem [ response.ConsumedCapacity ] 0
+        if response.HttpStatusCode <> HttpStatusCode.OK then
+            failwithf "UpdateItem request returned error %O" response.HttpStatusCode
 
         return template.OfAttributeValues response.Attributes
     }
@@ -533,10 +537,9 @@ type TableContext<'TRecord> internal
         request.ReturnConsumedCapacity <- returnConsumedCapacity
         let! ct = Async.CancellationToken
         let! response = client.DeleteItemAsync(request, ct) |> Async.AwaitTaskCorrect
+        match maybeReport with None -> () | Some r -> r DeleteItem [ response.ConsumedCapacity ] 0
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "DeleteItem request returned error %O" response.HttpStatusCode
-
-        match maybeReport with None -> () | Some r -> r DeleteItem [ response.ConsumedCapacity ] 0
 
         if response.Attributes.Count = 0 then
             return None
@@ -578,10 +581,9 @@ type TableContext<'TRecord> internal
 
         let! ct = Async.CancellationToken
         let! response = client.BatchWriteItemAsync(request, ct) |> Async.AwaitTaskCorrect
-        if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf "PutItem request returned error %O" response.HttpStatusCode
-
         match maybeReport with None -> () | Some r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) 0
+        if response.HttpStatusCode <> HttpStatusCode.OK then
+            failwithf "BatchWriteItem deletion request returned error %O" response.HttpStatusCode
 
         return unprocessedDeleteAttributeValues tableName response |> Array.map template.ExtractKey
     }
