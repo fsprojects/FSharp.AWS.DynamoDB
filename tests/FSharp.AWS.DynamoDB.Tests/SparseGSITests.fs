@@ -1,11 +1,11 @@
 ﻿namespace FSharp.AWS.DynamoDB.Tests
 
 open System
-open System.Threading
 
 open Expecto
 
 open FSharp.AWS.DynamoDB
+open FSharp.AWS.DynamoDB.Scripting
 
 [<AutoOpen>]
 module SparseGSITests =
@@ -24,9 +24,9 @@ module SparseGSITests =
 type ``Sparse GSI Tests`` (fixture : TableFixture) =
 
     let rand = let r = Random() in fun () -> int64 <| r.Next()
-    let mkItem() = 
-        { 
-            HashKey = guid() ; RangeKey = guid() ; 
+    let mkItem() =
+        {
+            HashKey = guid() ; RangeKey = guid() ;
             SecondaryHashKey = if rand() % 2L = 0L then Some (guid()) else None ;
         }
 
@@ -42,7 +42,7 @@ type ``Sparse GSI Tests`` (fixture : TableFixture) =
         let value = { mkItem() with SecondaryHashKey = Some(guid()) }
         let key = table.PutItem value
         Expect.equal
-            (table.Query(keyCondition = <@ fun (r: GsiRecord) -> r.SecondaryHashKey = value.SecondaryHashKey @>) 
+            (table.Query(keyCondition = <@ fun (r: GsiRecord) -> r.SecondaryHashKey = value.SecondaryHashKey @>)
              |> Array.length)
             1
             ""
@@ -52,7 +52,7 @@ type ``Sparse GSI Tests`` (fixture : TableFixture) =
         let key = table.PutItem value
         table.UpdateItem(key, <@ fun r -> { r with SecondaryHashKey = None } @>) |> ignore
         Expect.equal
-            (table.Query(keyCondition = <@ fun (r: GsiRecord) -> r.SecondaryHashKey = value.SecondaryHashKey @>) 
+            (table.Query(keyCondition = <@ fun (r: GsiRecord) -> r.SecondaryHashKey = value.SecondaryHashKey @>)
              |> Array.length)
             0
             ""

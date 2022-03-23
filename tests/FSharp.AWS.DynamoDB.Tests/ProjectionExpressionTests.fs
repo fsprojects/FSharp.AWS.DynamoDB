@@ -1,13 +1,13 @@
 ﻿namespace FSharp.AWS.DynamoDB.Tests
 
 open System
-open System.Threading
 
 open Microsoft.FSharp.Quotations
 
 open Expecto
 
 open FSharp.AWS.DynamoDB
+open FSharp.AWS.DynamoDB.Scripting
 
 [<AutoOpen>]
 module ProjectionExprTypes =
@@ -78,15 +78,15 @@ type ``Projection Expression Tests`` (fixture : TableFixture) =
     static let rand = let r = Random() in fun () -> int64 <| r.Next()
 
     let bytes() = Guid.NewGuid().ToByteArray()
-    let mkItem() = 
-        { 
+    let mkItem() =
+        {
             HashKey = guid() ; RangeKey = guid() ; String = guid()
             Value = rand() ; Tuple = rand(), rand() ;
             TimeSpan = TimeSpan.FromTicks(rand()) ; DateTimeOffset = DateTimeOffset.Now ; Guid = Guid.NewGuid()
             Bool = false ; Optional = Some (guid()) ; Ref = ref (guid()) ; Bytes = Guid.NewGuid().ToByteArray()
             Nested = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
             NestedList = [{ NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ]
-            Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq 
+            Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq
             IntSet = seq { for i in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
             StringSet = seq { for i in 0L .. rand() % 5L -> guid() } |> Set.ofSeq
             ByteSet = seq { for i in 0L .. rand() % 5L -> bytes() } |> Set.ofSeq
@@ -99,7 +99,7 @@ type ``Projection Expression Tests`` (fixture : TableFixture) =
     let table = TableContext.Create<ProjectionExprRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
     member this.``Should fail on invalid projections`` () =
-        let testProj (p : Expr<R -> 'T>) = 
+        let testProj (p : Expr<R -> 'T>) =
             fun () -> proj p
             |> shouldFailwith<_, ArgumentException>
 
@@ -109,7 +109,7 @@ type ``Projection Expression Tests`` (fixture : TableFixture) =
         testProj <@ fun r -> r.List.[0] + 1L @>
 
     member this.``Should fail on conflicting projections`` () =
-        let testProj (p : Expr<R -> 'T>) = 
+        let testProj (p : Expr<R -> 'T>) =
             fun () -> proj p
             |> shouldFailwith<_, ArgumentException>
 

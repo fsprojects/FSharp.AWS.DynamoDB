@@ -1,3 +1,6 @@
+### 0.9.4-beta
+* Moved Sync-over-Async versions of `TableContext` operations into `namespace FSharp.AWS.DynamoDB.Scripting`
+
 ### 0.9.3-beta
 * Added `RequestMetrics` record type
 * Added an optional `metricsCollector` parameter to `TableContext.Create` to receive operation metrics
