@@ -4,7 +4,13 @@
 * Ensured metrics are reported even for failed requests
 * Added `TryGetItemAsync` (same as `GetItemAsync`, but returns `None`, instead of throwing, if an item is not present)
 * Switched test framework to Xunit, assertions to Unquote, runner to `dotnet test` 
-* Added `TableContext.CreateUnverified` (`TableContext.CreateAsync` without the optional store round-trips) 
+* Clarified Creation/Verification APIs:
+  * Obsoleted `TableContext.Create` (replace with `TableContext.Scripting.Initialize` and/or `TableContext.InitializeTableAsync`)
+  * Added `TableContext` constructor (replaces `TableContext.Create(verifyTable = false)`)
+  * Added `TableContext.Scripting.Initialize` (replaces `TableContext.Create()`)
+  * Added `TableContext.VerifyTableAsync` overload that only performs verification but never creates a Table
+  * Added `TableContext.InitializeTableAsync` (replaces `TableContext.VerifyTableAsync(createIfNotExists = true)`)
+  * Removed `TableContext.CreateAsync` (replace with `TableContext.VerifyTableAsync` or `TableContext.InitializeTableAsync`)
 
 ### 0.9.3-beta
 * Added `RequestMetrics` record type

@@ -6,6 +6,8 @@ open System.IO
 open FsCheck
 open Swensen.Unquote
 
+open FSharp.AWS.DynamoDB
+
 open Amazon.DynamoDBv2
 open Amazon.Runtime
 open Xunit
@@ -42,9 +44,12 @@ module Utils =
         member _.Client = client
         member _.TableName = tableName
 
+        member __.CreateContextAndTableIfNotExists<'TRecord>() =
+            let autoCreate = InitializationMode.CreateIfNotExists (ProvisionedThroughput(10, 10))
+            Scripting.TableContext.Initialize<'TRecord>(__.Client, __.TableName, mode = autoCreate)
+
         interface IAsyncLifetime with
             member _.InitializeAsync() =
                 System.Threading.Tasks.Task.CompletedTask
             member _.DisposeAsync() =
                 client.DeleteTableAsync(tableName)
-

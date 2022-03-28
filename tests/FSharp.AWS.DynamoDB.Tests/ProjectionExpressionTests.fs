@@ -97,7 +97,7 @@ type ``Projection Expression Tests`` (fixture : TableFixture) =
             Serialized = rand(), guid() ; Serialized2 = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
         }
 
-    let table = TableContext.Create<ProjectionExprRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
+    let table = fixture.CreateContextAndTableIfNotExists<ProjectionExprRecord>()
 
     let [<Fact>] ``Should fail on invalid projections`` () =
         let testProj (p : Expr<R -> 'T>) =
