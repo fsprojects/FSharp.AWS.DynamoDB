@@ -868,7 +868,6 @@ type TableContext<'TRecord> internal
         return ()
     }
 
-
     member internal _.InternalDescribe() : Async<TableDescription> =
         let rec wait () = async {
             let! ct = Async.CancellationToken
@@ -883,7 +882,7 @@ type TableContext<'TRecord> internal
         }
         wait ()
 
-    member internal __.CreateOrValidateTableAsync(createThroughput) : Async<TableDescription> =
+    member internal __.InternalProvision(?makeCreateTableRequest) : Async<TableDescription> =
         let (|Conflict|_|) (e : exn) =
             match e with
             | :? AmazonDynamoDBException as e when e.StatusCode = HttpStatusCode.Conflict -> Some()
@@ -900,11 +899,10 @@ type TableContext<'TRecord> internal
                     |> invalidOp
                 return desc
 
-            | Choice2Of2 (:? ResourceNotFoundException) when Option.isSome createThroughput ->
+            | Choice2Of2 (:? ResourceNotFoundException) when Option.isSome makeCreateTableRequest ->
                 let! ct = Async.CancellationToken
-                let ctr = template.Info.Schemata.CreateCreateTableRequest(tableName, Option.get createThroughput)
                 let! response =
-                    client.CreateTableAsync(ctr, ct)
+                    client.CreateTableAsync(makeCreateTableRequest.Value (), ct)
                     |> Async.AwaitTaskCorrect
                     |> Async.Catch
 
@@ -925,26 +923,17 @@ type TableContext<'TRecord> internal
 
         checkOrCreate 9 // up to 9 retries, i.e. 10 attempts before we let exception propagate
 
-    /// <summary>
-    ///     Asynchronously verify that the table exists and is compatible with record key schema.
-    /// </summary>
-    /// <param name="createIfNotExists">Create the table instance now instance if it does not exist. Defaults to false.</param>
-    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Defaults to (10,10).</param>
-    [<System.Obsolete("Please replace with either 1. VerifyTableAsync or 2. InitializeTableAsync")>]
-    member __.VerifyTableAsync(?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) : Async<unit> =
-        let throughputIfCreate =
-            if createIfNotExists = Some true then
-                let throughput = match provisionedThroughput with Some p -> p | None -> ProvisionedThroughput(10L, 10L)
-                Some throughput
-            else None
-        __.CreateOrValidateTableAsync(throughputIfCreate) |> Async.Ignore
+    member internal _.InternalCreateTableRequest(throughput) =
+        template.Info.Schemata.CreateCreateTableRequest(tableName, throughput)
+    member internal t.InternalCreateOrValidateTableAsync(createThroughput) =
+        t.InternalProvision(fun () -> t.InternalCreateTableRequest(createThroughput))
 
     /// <summary>
     /// Asynchronously verify that the table exists and is compatible with record key schema, or throw.<br/>
     /// See also <c>InitializeTableAsync</c>, which performs the same check, but can create or re-provision the Table if required.
     /// </summary>
     member __.VerifyTableAsync() : Async<unit> =
-        __.CreateOrValidateTableAsync(None) |> Async.Ignore
+        __.InternalProvision() |> Async.Ignore
 
     /// <summary>
     /// Asynchronously verifies that the table exists and is compatible with record key schema, throwing if it is incompatible.<br/>
@@ -952,8 +941,8 @@ type TableContext<'TRecord> internal
     /// See also <c>VerifyTableAsync</c>, which only verifies the Table is present and correct.
     /// </summary>
     /// <param name="throughput">Provisioned throughput to use for the table.</param>
-    member __.InitializeTableAsync(throughput : ProvisionedThroughput) : Async<unit> =
-        __.CreateOrValidateTableAsync(Some throughput) |> Async.Ignore
+    member t.InitializeTableAsync(throughput : ProvisionedThroughput) : Async<unit> =
+        t.InternalCreateOrValidateTableAsync(throughput) |> Async.Ignore
 
     /// <summary>
     /// Asynchronously verifies that the table exists and is compatible with record key schema, throwing if it is incompatible.<br/>
@@ -961,12 +950,24 @@ type TableContext<'TRecord> internal
     /// If it is present, and the throughput is not as specified, uses <c>UpdateProvisionedThroughputAsync</c> to update it. <br/>
     /// </summary>
     /// <param name="throughput">Provisioned throughput to use for the table.</param>
-    member __.ProvisionTableAsync(throughput : ProvisionedThroughput) : Async<unit> = async {
-        let! desc = __.CreateOrValidateTableAsync(Some throughput)
-        let provisioned = desc.ProvisionedThroughput
-        if throughput.ReadCapacityUnits <> provisioned.ReadCapacityUnits
-            || throughput.WriteCapacityUnits <> provisioned.WriteCapacityUnits then
-            do! __.UpdateProvisionedThroughputAsync(throughput) }
+    member t.ProvisionTableAsync(throughput : ProvisionedThroughput) : Async<unit> = async {
+        let! tableDescription = t.InternalCreateOrValidateTableAsync(throughput)
+        let provisioned = tableDescription.ProvisionedThroughput
+        if throughput.ReadCapacityUnits <> provisioned.ReadCapacityUnits || throughput.WriteCapacityUnits <> provisioned.WriteCapacityUnits then
+            do! t.UpdateProvisionedThroughputAsync(throughput) }
+
+    /// <summary>
+    ///     Asynchronously verify that the table exists and is compatible with record key schema.
+    /// </summary>
+    /// <param name="createIfNotExists">Create the table instance now instance if it does not exist. Defaults to false.</param>
+    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Defaults to (10,10).</param>
+    [<System.Obsolete("Please replace with either 1. VerifyTableAsync or 2. InitializeTableAsync")>]
+    member t.VerifyTableAsync(?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) : Async<unit> =
+        if createIfNotExists = Some true then
+            let throughput = match provisionedThroughput with Some p -> p | None -> ProvisionedThroughput(10L, 10L)
+            t.InitializeTableAsync(throughput)
+         else
+            t.VerifyTableAsync()
 
 // Deprecated factory method, to be removed. Replaced with
 // 1. TableContext<'T> ctor (synchronous)
