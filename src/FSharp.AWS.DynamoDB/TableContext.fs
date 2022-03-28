@@ -909,8 +909,10 @@ type TableContext<'TRecord> internal
                 match mode with
                 | InitializationMode.VerifyOnly | InitializationMode.CreateIfNotExists _ -> ()
                 | InitializationMode.CreateOrUpdateThroughput t ->
-                    // TODO make this not throw when its a null update
-                    do! __.UpdateProvisionedThroughputAsync(t)
+                    let provisioned = td.Table.ProvisionedThroughput
+                    if t.ReadCapacityUnits <> provisioned.ReadCapacityUnits
+                        || t.WriteCapacityUnits <> provisioned.WriteCapacityUnits then
+                        do! __.UpdateProvisionedThroughputAsync(t)
 
             | Choice2Of2 (:? ResourceNotFoundException) when mode <> InitializationMode.VerifyOnly ->
                 let throughput =
