@@ -126,7 +126,8 @@ type EasyCounters private (table : TableContext<CounterEntry>) =
     static member Create(client : IAmazonDynamoDB, tableName : string) : Async<EasyCounters> = async {
         let table = TableContext<CounterEntry>(client, tableName)
         // Create the table if necessary. Verifies schema is correct if it has already been created
-        do! table.InitializeTableAsync( ProvisionedThroughput(100L, 100L))
+        let throughput = ProvisionedThroughput(readCapacityUnits = 100L, writeCapacityUnits = 100L)
+        do! table.InitializeTableAsync throughput
         return EasyCounters(table)
     }
 
@@ -139,8 +140,8 @@ type SimpleCounters private (table : TableContext<CounterEntry>) =
     static member Provision(client : IAmazonDynamoDB, tableName : string, readCapacityUnits, writeCapacityUnits) : Async<unit> =
         let table = TableContext<CounterEntry>(client, tableName)
         // normally, RCU/WCU provisioning only happens first time the Table is created and is then considered an external concern
-        // here we use `updateThroughputIfExists = true` to reset it each time we start the app
-        table.InitializeTableAsync(ProvisionedThroughput (readCapacityUnits, writeCapacityUnits), updateThroughputIfExists = true)
+        // here we use `ProvisionTableAsync` instead of `InitializeAsync` to reset it each time we start the app
+        table.ProvisionTableAsync(ProvisionedThroughput (readCapacityUnits, writeCapacityUnits))
 
     /// We only want to do the initialization bit once per instance of our application
     /// Similar to EasyCounters.Create in that it ensures the table is provisioned correctly
@@ -168,10 +169,15 @@ e1.Incr() |> Async.RunSynchronously
 e2.Incr() |> Async.RunSynchronously
 
 SimpleCounters.Provision(ddb, "testing-pre-provisioned", 100L, 100L) |> Async.RunSynchronously
+// The consuming code can assume the provisioning has been carried out as part of the deploy
+// that allows the creation to be synchronous (and not impede application startup)
 let s = SimpleCounters.Create(ddb, "testing-pre-provisioned")
 let s1 = s.StartCounter() |> Async.RunSynchronously // Would throw if Provision has not been carried out
 s1.Incr() |> Async.RunSynchronously
 
+// Alternately, we can have the app do an extra call (and have some asynchronous initialization work) to check the table is ready
 let v = SimpleCounters.CreateWithVerify(ddb, "testing-not-present") |> Async.RunSynchronously // Throws, as table not present
 let v2 = v.StartCounter() |> Async.RunSynchronously
 v2.Incr() |> Async.RunSynchronously
+
+// (TOCONSIDER: Illustrate how to use AsyncCacheCell from https://github.com/jet/equinox/blob/master/src/Equinox.Core/AsyncCacheCell.fs to make Verify call lazy)

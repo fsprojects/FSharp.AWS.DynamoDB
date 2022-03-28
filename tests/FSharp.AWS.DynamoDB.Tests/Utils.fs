@@ -44,9 +44,9 @@ module Utils =
         member _.Client = client
         member _.TableName = tableName
 
-        member __.CreateContextAndTableIfNotExists<'TRecord>() =
-            let autoCreate = InitializationMode.CreateIfNotExists (ProvisionedThroughput(10L, 10L))
-            Scripting.TableContext.Initialize<'TRecord>(__.Client, __.TableName, mode = autoCreate)
+        member _.CreateContextAndTableIfNotExists<'TRecord>() =
+            let createThroughput = ProvisionedThroughput(10L, 10L)
+            Scripting.TableContext.Initialize<'TRecord>(client, tableName, createThroughput)
 
         interface IAsyncLifetime with
             member _.InitializeAsync() =

@@ -10,7 +10,8 @@
   * Added `TableContext.Scripting.Initialize` (replaces `TableContext.Create()`)
   * Added `TableContext.VerifyTableAsync` overload that only performs verification but never creates a Table
   * Added `TableContext.InitializeTableAsync` (replaces `TableContext.VerifyTableAsync(createIfNotExists = true)`)
-  * Removed `TableContext.CreateAsync` (replace with `TableContext.VerifyTableAsync` or `TableContext.InitializeTableAsync`)
+  * Added `TableContext.ProvisionTableAsync` (as per `InitializeTableAsync` but does an `UpdateProvisionedThroughputAsync` if throughput has changed)
+  * Removed `TableContext.CreateAsync` (replace with `TableContext.VerifyTableAsync` or `InitializeTableAsync`)
 
 ### 0.9.3-beta
 * Added `RequestMetrics` record type
