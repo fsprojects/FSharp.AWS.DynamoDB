@@ -54,8 +54,8 @@ type Test =
         Bytes : byte[]
     }
 
-
-let table = TableContext.Create<Test>(ddb, "test", createIfNotExists = true)
+let autoCreate = InitializationMode.CreateIfNotExists (ProvisionedThroughput (100L, 100L))
+let table = TableContext.Initialize<Test>(ddb, "test", mode = autoCreate)
 
 let value = { HashKey = Guid.NewGuid() ; List = [] ; RangeKey = "2" ; Value = 3.1415926 ; Date = DateTimeOffset.Now + TimeSpan.FromDays 2. ; Value2 = None ; Values = [|{ A = "foo" ; B = System.Reflection.BindingFlags.Instance }|] ; Map = Map.ofList [("A1",1)] ; Set = [set [1L];set [2L]] ; Bytes = [|1uy..10uy|]; String = ref "1a" ; Unions = [A 42; B("42",3)]}
 
@@ -94,3 +94,84 @@ let uexpr2 = table.Template.PrecomputeUpdateExpr <@ fun v r -> { r with Value2 =
 for i = 1 to 1000 do
     let _ = table.UpdateItem(key, uexpr2 (Some 42))
     ()
+
+(* Expanded version of README sample that illustrates how one can better split Table initialization from application logic *)
+
+type internal CounterEntry = { [<HashKey>] Id : Guid ; Value : int64 }
+
+/// Represents a single Item in a Counters Table
+type Counter internal (table : TableContext<CounterEntry>, key : TableKey) =
+
+    static member internal Start(table : TableContext<CounterEntry>) = async {
+        let initialEntry = { Id = Guid.NewGuid() ; Value = 0L }
+        let! key = table.PutItemAsync(initialEntry)
+        return Counter(table, key)
+    }
+
+    member _.Value = async {
+        let! current = table.GetItemAsync(key)
+        return current.Value
+    }
+
+    member _.Incr() = async {
+        let! updated = table.UpdateItemAsync(key, <@ fun (e : CounterEntry) -> { e with Value = e.Value + 1L } @>)
+        return updated.Value
+    }
+
+/// Wrapper that creates/verifies the table only once per call to Create()
+/// This does assume that your application will be sufficiently privileged to create tables on the fly
+type EasyCounters private (table : TableContext<CounterEntry>) =
+
+    // We only want to do the initialization bit once per instance of our application
+    static member Create(client : IAmazonDynamoDB, tableName : string) : Async<EasyCounters> = async {
+        let table = TableContext<CounterEntry>(client, tableName)
+        // Create the table if necessary. Verifies schema is correct if it has already been created
+        do! table.InitializeTableAsync( ProvisionedThroughput(100L, 100L))
+        return EasyCounters(table)
+    }
+
+    member _.StartCounter() : Async<Counter> =
+        Counter.Start table
+
+/// Variant of EasyCounters that splits the provisioning step from the (optional) validation that the table is present
+type SimpleCounters private (table : TableContext<CounterEntry>) =
+
+    static member Provision(client : IAmazonDynamoDB, tableName : string, readCapacityUnits, writeCapacityUnits) : Async<unit> =
+        let table = TableContext<CounterEntry>(client, tableName)
+        // normally, RCU/WCU provisioning only happens first time the Table is created and is then considered an external concern
+        // here we use `updateThroughputIfExists = true` to reset it each time we start the app
+        table.InitializeTableAsync(ProvisionedThroughput (readCapacityUnits, writeCapacityUnits), updateThroughputIfExists = true)
+
+    /// We only want to do the initialization bit once per instance of our application
+    /// Similar to EasyCounters.Create in that it ensures the table is provisioned correctly
+    /// However it will never actually create the table
+    static member CreateWithVerify(client : IAmazonDynamoDB, tableName : string) : Async<SimpleCounters> = async {
+        let table = TableContext<CounterEntry>(client, tableName)
+        // This validates the Table has been created correctly
+        // (in general this is a good idea, but it is an optional step so it can be skipped, i.e. see Create() below)
+        do! table.VerifyTableAsync()
+        return SimpleCounters(table)
+    }
+
+    /// Assumes the table has been provisioned externally via Provision()
+    static member Create(client : IAmazonDynamoDB, tableName : string) : SimpleCounters =
+        // NOTE we are skipping
+        SimpleCounters(TableContext<CounterEntry>(client, tableName))
+
+    member _.StartCounter() : Async<Counter> =
+        Counter.Start table
+
+let e = EasyCounters.Create(ddb, "testing") |> Async.RunSynchronously
+let e1 = e.StartCounter() |> Async.RunSynchronously
+let e2 = e.StartCounter() |> Async.RunSynchronously
+e1.Incr() |> Async.RunSynchronously
+e2.Incr() |> Async.RunSynchronously
+
+SimpleCounters.Provision(ddb, "testing-pre-provisioned", 100L, 100L) |> Async.RunSynchronously
+let s = SimpleCounters.Create(ddb, "testing-pre-provisioned")
+let s1 = s.StartCounter() |> Async.RunSynchronously // Would throw if Provision has not been carried out
+s1.Incr() |> Async.RunSynchronously
+
+let v = SimpleCounters.CreateWithVerify(ddb, "testing-not-present") |> Async.RunSynchronously // Throws, as table not present
+let v2 = v.StartCounter() |> Async.RunSynchronously
+v2.Incr() |> Async.RunSynchronously

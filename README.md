@@ -34,9 +34,11 @@ We can now perform table operations on DynamoDB like so:
 
 ```fsharp
 open Amazon.DynamoDBv2
+open FSharp.AWS.DynamoDB.Scripting // Expose non-Async methods, e.g. PutItem/GetItem
 
 let client : IAmazonDynamoDB = ``your DynamoDB client instance``
-let table = TableContext.Create<WorkItemInfo>(client, tableName = "workItems", createIfNotExists = true)
+let autoCreate = InitializationMode.CreateIfNotExists (ProvisionedThroughput(10, 10))
+let table = TableContext.Initialize<WorkItemInfo>(client, tableName = "workItems", mode = autoCreate)
 
 let workItem = { ProcessId = 0L ; WorkItemId = 1L ; Name = "Test" ; UUID = guid() ; Dependencies = set ["mscorlib"] ; Started = None }
 
@@ -99,23 +101,33 @@ Update expressions support the following F# value constructors:
 * `Option.Value` and `Option.get`.
 * `fst` and `snd` for tuple records.
 
-## Example: Creating an atomic counter
+## Example: Representing an atomic counter as an Item in a DynamoDB Table 
 
 ```fsharp
 type private CounterEntry = { [<HashKey>] Id : Guid ; Value : int64 }
 
 type Counter private (table : TableContext<CounterEntry>, key : TableKey) =
-    member _.Value = table.GetItem(key).Value
-    member _.Incr() = 
-        let updated = table.UpdateItem(key, <@ fun e -> { e with Value = e.Value + 1L } @>)
-        updated.Value
+    
+    member _.Value = async {
+        let! current = table.GetItemAsync(key)
+        return current.Value
+    }
+    
+    member _.Incr() = async { 
+        let! updated = table.UpdateItemAsync(key, <@ fun e -> { e with Value = e.Value + 1L } @>)
+        return updated.Value
+    }
 
-    static member Create(client : IAmazonDynamoDB, table : string) =
-        let table = TableContext.Create<CounterEntry>(client, table, createIfNotExists = true)
-        let entry = { Id = Guid.NewGuid() ; Value = 0L }
-        let key = table.PutItem entry
-        new Counter(table, key)
+    static member Create(client : IAmazonDynamoDB, tableName : string) = async {
+        let table = TableContext<CounterEntry>(client, tableName)
+        do! table.InitializeTableAsync( ProvisionedThroughput(100L, 100L))
+        let initialEntry = { Id = Guid.NewGuid() ; Value = 0L }
+        let! key = table.PutItemAsync(initialEntry)
+        return Counter(table, key)
+    }
 ```
+
+_NOTE: It's advised to split single time initialization/verification of table creation from the application logic, see [`Script.fsx`](src/FSharp.AWS.DynamoDB/Script.fsx#99) for further details_.
 
 ## Projection Expressions
 
@@ -233,10 +245,10 @@ table.Scan(startedBefore (DateTimeOffset.Now - TimeSpan.FromDays 1.))
 A hook is provided so metrics can be published via your preferred Observability provider. For example, using [Prometheus.NET](https://github.com/prometheus-net/prometheus-net):
 
 ```fsharp
-let dbCounter = Metrics.CreateCounter ("aws_dynamodb_requests_total", "Count of all DynamoDB requests", "table", "operation")
+let dbCounter = Prometheus.Metrics.CreateCounter("aws_dynamodb_requests_total", "Count of all DynamoDB requests", "table", "operation")
 let processMetrics (m : RequestMetrics) =
-    dbCounter.WithLabels(m.TableName, string m.Operation).Inc () |> ignore
-let table = TableContext.Create<WorkItemInfo>(client, tableName = "workItems", metricsCollector = processMetrics)
+    dbCounter.WithLabels(m.TableName, string m.Operation).Inc()
+let table = TableContext<WorkItemInfo>(client, tableName = "workItems", metricsCollector = processMetrics)
 ```
 
 If `metricsCollector` is supplied, the requests will include `ReturnConsumedCapacity = ReturnConsumedCapacity.INDEX` 

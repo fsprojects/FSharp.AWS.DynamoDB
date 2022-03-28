@@ -908,7 +908,9 @@ type TableContext<'TRecord> internal
                     |> invalidOp
                 match mode with
                 | InitializationMode.VerifyOnly | InitializationMode.CreateIfNotExists _ -> ()
-                | InitializationMode.CreateOrUpdateThroughput t -> do! __.UpdateProvisionedThroughputAsync(t)
+                | InitializationMode.CreateOrUpdateThroughput t ->
+                    // TODO make this not throw when its a null update
+                    do! __.UpdateProvisionedThroughputAsync(t)
 
             | Choice2Of2 (:? ResourceNotFoundException) when mode <> InitializationMode.VerifyOnly ->
                 let throughput =
@@ -986,7 +988,7 @@ type TableContext internal () =
     /// <param name="tableName">Table name to target.</param>
     /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
     /// <param name="createIfNotExists">Create the table now if it does not exist. Defaults to false.</param>
-    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
+    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Default: 10 RCU, 10 WCU</param>
     /// <param name="metricsCollector">Function to receive request metrics.</param>
     [<System.Obsolete(@"Creation with synchronous verification has been deprecated. Please use either
                         1. TableContext constructor (optionally followed by VerifyTableAsync or InitializeTableAsync) OR
