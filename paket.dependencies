@@ -15,7 +15,7 @@ github eiriktsarpalis/TypeShape:2.16 src/TypeShape/TypeShape.fs
 group Build
   source https://api.nuget.org/v3/index.json
 
-  framework: netstandard2.0
+  framework: netstandard2.0, net60
   storage: none
   
   nuget Fake.Core.Target
