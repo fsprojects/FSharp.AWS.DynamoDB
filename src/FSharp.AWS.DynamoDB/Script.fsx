@@ -1,7 +1,7 @@
 ﻿#if USE_PUBLISHED_NUGET // If you don't want to do a local build first
 #r "nuget: FSharp.AWS.DynamoDB, *-*" // *-* to white-list the fact that all releases to date have been `-beta` sufficed
 #else
-#I "../../bin/net5.0/"
+#I "../../bin/net6.0/"
 #r "AWSSDK.Core.dll"
 #r "AWSSDK.DynamoDBv2.dll"
 #r "FSharp.AWS.DynamoDB.dll"
