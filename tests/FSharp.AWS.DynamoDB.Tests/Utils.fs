@@ -45,8 +45,8 @@ module Utils =
         member _.TableName = tableName
 
         member _.CreateContextAndTableIfNotExists<'TRecord>() =
-            let createThroughput = ProvisionedThroughput(10L, 10L)
-            Scripting.TableContext.Initialize<'TRecord>(client, tableName, createThroughput)
+            let throughput = Model.ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
+            Scripting.TableContext.Initialize<'TRecord>(client, tableName, Provisioned throughput)
 
         interface IAsyncLifetime with
             member _.InitializeAsync() =

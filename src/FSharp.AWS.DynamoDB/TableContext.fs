@@ -19,6 +19,19 @@ type ResourceNotFoundException = Amazon.DynamoDBv2.Model.ResourceNotFoundExcepti
 /// Represents the provisioned throughput for given table or index
 type ProvisionedThroughput = Amazon.DynamoDBv2.Model.ProvisionedThroughput
 
+/// Represents the throughput configuration for a Table
+type Throughput =
+    | Provisioned of ProvisionedThroughput
+    | OnDemand
+module internal Throughput =
+    let applyToCreateRequest (req : CreateTableRequest) = function
+        | Provisioned t ->
+            req.ProvisionedThroughput <- t
+            for gsi in req.GlobalSecondaryIndexes do
+                gsi.ProvisionedThroughput <- t
+        | OnDemand ->
+            req.BillingMode <- BillingMode.PAY_PER_REQUEST
+
 /// Represents the operation performed on the table, for metrics collection purposes
 type Operation = GetItem | PutItem | UpdateItem | DeleteItem | BatchGetItems | BatchWriteItems | Scan | Query
 
@@ -923,10 +936,13 @@ type TableContext<'TRecord> internal
 
         checkOrCreate 9 // up to 9 retries, i.e. 10 attempts before we let exception propagate
 
-    member internal _.InternalCreateTableRequest(throughput) =
-        template.Info.Schemata.CreateCreateTableRequest(tableName, throughput)
-    member internal t.InternalCreateOrValidateTableAsync(createThroughput) =
-        t.InternalProvision(fun () -> t.InternalCreateTableRequest(createThroughput))
+    member internal _.InternalCreateCreateTableRequest(throughput) =
+        let req = template.Info.Schemata.CreateCreateTableRequest(tableName)
+        Throughput.applyToCreateRequest req throughput
+        req
+
+    member internal t.InternalCreateOrValidateTableAsync(throughput) =
+        t.InternalProvision(fun () -> t.InternalCreateCreateTableRequest throughput)
 
     /// <summary>
     /// Asynchronously verify that the table exists and is compatible with record key schema, or throw.<br/>
@@ -940,8 +956,8 @@ type TableContext<'TRecord> internal
     /// If the table is not present, it is provisioned, with the specified <c>throughput</c>.<br/>
     /// See also <c>VerifyTableAsync</c>, which only verifies the Table is present and correct.
     /// </summary>
-    /// <param name="throughput">Provisioned throughput to use for the table.</param>
-    member t.InitializeTableAsync(throughput : ProvisionedThroughput) : Async<unit> =
+    /// <param name="throughput">Throughput configuration to use for the table.</param>
+    member t.InitializeTableAsync(throughput : Throughput) : Async<unit> =
         t.InternalCreateOrValidateTableAsync(throughput) |> Async.Ignore
 
     /// <summary>
@@ -949,12 +965,15 @@ type TableContext<'TRecord> internal
     /// If the table is not present, it is provisioned, with the specified <c>throughput</c>.<br/>
     /// If it is present, and the throughput is not as specified, uses <c>UpdateProvisionedThroughputAsync</c> to update it. <br/>
     /// </summary>
-    /// <param name="throughput">Provisioned throughput to use for the table.</param>
-    member t.ProvisionTableAsync(throughput : ProvisionedThroughput) : Async<unit> = async {
+    /// <param name="throughput">Throughput configuration to use for the table.</param>
+    member t.ProvisionTableAsync(throughput : Throughput) : Async<unit> = async {
         let! tableDescription = t.InternalCreateOrValidateTableAsync(throughput)
-        let provisioned = tableDescription.ProvisionedThroughput
-        if throughput.ReadCapacityUnits <> provisioned.ReadCapacityUnits || throughput.WriteCapacityUnits <> provisioned.WriteCapacityUnits then
-            do! t.UpdateProvisionedThroughputAsync(throughput) }
+        match throughput with
+        | Provisioned p ->
+            let current = tableDescription.ProvisionedThroughput
+            if p.ReadCapacityUnits <> current.ReadCapacityUnits || p.WriteCapacityUnits <> current.WriteCapacityUnits then
+                do! t.UpdateProvisionedThroughputAsync p
+        | OnDemand -> () }
 
     /// <summary>
     ///     Asynchronously verify that the table exists and is compatible with record key schema.
@@ -965,7 +984,7 @@ type TableContext<'TRecord> internal
     member t.VerifyTableAsync(?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) : Async<unit> =
         if createIfNotExists = Some true then
             let throughput = match provisionedThroughput with Some p -> p | None -> ProvisionedThroughput(10L, 10L)
-            t.InitializeTableAsync(throughput)
+            t.InitializeTableAsync(Provisioned throughput)
          else
             t.VerifyTableAsync()
 
@@ -993,7 +1012,7 @@ type TableContext internal () =
         let context = TableContext<'TRecord>(client, tableName, ?metricsCollector = metricsCollector)
         if createIfNotExists = Some true then
             let throughput = match provisionedThroughput with Some p -> p | None -> ProvisionedThroughput(10L, 10L)
-            do! context.InitializeTableAsync throughput
+            do! context.InitializeTableAsync(Throughput.Provisioned throughput)
         elif verifyTable <> Some false then
             do! context.VerifyTableAsync()
         return context }

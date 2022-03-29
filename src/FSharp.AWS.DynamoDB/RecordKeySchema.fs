@@ -369,11 +369,9 @@ type TableKeySchemata with
                 yield! td.LocalSecondaryIndexes |> Seq.map mkLocalSecondaryIndex |])
 
     /// Create a CreateTableRequest using supplied key schema
-    member schema.CreateCreateTableRequest (tableName : string, provisionedThroughput : ProvisionedThroughput) =
+    member schema.CreateCreateTableRequest(tableName : string) =
         let ctr = CreateTableRequest(TableName = tableName)
         let inline mkKSE n t = KeySchemaElement(n, t)
-
-        ctr.ProvisionedThroughput <- provisionedThroughput
 
         let keyAttrs = new Dictionary<string, KeyAttributeSchema>()
         for tks in schema.Schemata do
@@ -391,7 +389,6 @@ type TableKeySchemata with
                 gsi.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
                 tks.RangeKey |> Option.iter (fun rk -> gsi.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
                 gsi.Projection <- Projection(ProjectionType = ProjectionType.ALL)
-                gsi.ProvisionedThroughput <- provisionedThroughput
                 ctr.GlobalSecondaryIndexes.Add gsi
 
             | LocalSecondaryIndex name ->

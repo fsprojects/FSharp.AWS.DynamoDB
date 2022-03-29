@@ -54,8 +54,8 @@ type Test =
         Bytes : byte[]
     }
 
-let autoCreate = InitializationMode.CreateIfNotExists (ProvisionedThroughput (100L, 100L))
-let table = TableContext.Initialize<Test>(ddb, "test", mode = autoCreate)
+let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
+let table = TableContext.Initialize<Test>(ddb, "test", Provisioned throughput)
 
 let value = { HashKey = Guid.NewGuid() ; List = [] ; RangeKey = "2" ; Value = 3.1415926 ; Date = DateTimeOffset.Now + TimeSpan.FromDays 2. ; Value2 = None ; Values = [|{ A = "foo" ; B = System.Reflection.BindingFlags.Instance }|] ; Map = Map.ofList [("A1",1)] ; Set = [set [1L];set [2L]] ; Bytes = [|1uy..10uy|]; String = ref "1a" ; Unions = [A 42; B("42",3)]}
 
@@ -126,8 +126,9 @@ type EasyCounters private (table : TableContext<CounterEntry>) =
     static member Create(client : IAmazonDynamoDB, tableName : string) : Async<EasyCounters> = async {
         let table = TableContext<CounterEntry>(client, tableName)
         // Create the table if necessary. Verifies schema is correct if it has already been created
-        let throughput = ProvisionedThroughput(readCapacityUnits = 100L, writeCapacityUnits = 100L)
-        do! table.InitializeTableAsync throughput
+        // NOTE the hard coded initial throughput provisioning - arguably this belongs outside of your application logic
+        let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
+        do! table.InitializeTableAsync(Provisioned throughput)
         return EasyCounters(table)
     }
 
@@ -141,7 +142,8 @@ type SimpleCounters private (table : TableContext<CounterEntry>) =
         let table = TableContext<CounterEntry>(client, tableName)
         // normally, RCU/WCU provisioning only happens first time the Table is created and is then considered an external concern
         // here we use `ProvisionTableAsync` instead of `InitializeAsync` to reset it each time we start the app
-        table.ProvisionTableAsync(ProvisionedThroughput (readCapacityUnits, writeCapacityUnits))
+        let provisionedThroughput = ProvisionedThroughput(readCapacityUnits, writeCapacityUnits)
+        table.ProvisionTableAsync(Provisioned provisionedThroughput)
 
     /// We only want to do the initialization bit once per instance of our application
     /// Similar to EasyCounters.Create in that it ensures the table is provisioned correctly
@@ -168,11 +170,11 @@ let e2 = e.StartCounter() |> Async.RunSynchronously
 e1.Incr() |> Async.RunSynchronously
 e2.Incr() |> Async.RunSynchronously
 
-SimpleCounters.Provision(ddb, "testing-pre-provisioned", 100L, 100L) |> Async.RunSynchronously
+SimpleCounters.Provision(ddb, "testing-pre-provisioned", readCapacityUnits = 10L, writeCapacityUnits = 10L) |> Async.RunSynchronously
 // The consuming code can assume the provisioning has been carried out as part of the deploy
 // that allows the creation to be synchronous (and not impede application startup)
 let s = SimpleCounters.Create(ddb, "testing-pre-provisioned")
-let s1 = s.StartCounter() |> Async.RunSynchronously // Would throw if Provision has not been carried out
+let s1 = s.StartCounter() |> Async.RunSynchronously // Throws if Provision step has not been executed
 s1.Incr() |> Async.RunSynchronously
 
 // Alternately, we can have the app do an extra call (and have some asynchronous initialization work) to check the table is ready
