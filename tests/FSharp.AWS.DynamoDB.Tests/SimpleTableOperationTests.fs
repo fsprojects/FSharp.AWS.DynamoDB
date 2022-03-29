@@ -78,6 +78,19 @@ type ``Simple Table Operation Tests`` (fixture : TableFixture) =
         let _ = table.DeleteItem key
         Expect.equal (table.ContainsKey key) false "ContainsKey should be false"
 
+    member this.``TryGet Operation`` () =
+        let value = mkItem()
+        let computedKey = table.Template.ExtractKey value
+        let get k = table.TryGetItemAsync k |> Async.RunSynchronously
+        let initialLoad = get computedKey
+        Expect.equal initialLoad None "TryGetItemAsync should yield None when not present"
+        let key = table.PutItem value
+        Expect.equal computedKey key "Local key computation should be same as Put result"
+        let loaded = get computedKey
+        Expect.equal (Some value) loaded "TryGetItemAsync should yield roundtripped value"
+        let _ = table.DeleteItem key
+        Expect.equal (get key |> Option.isSome) false "TryGetItemAsync should yield None"
+
     member this.``Batch Put Operation`` () =
         let values = set [ for i in 1L .. 20L -> mkItem() ]
         let unprocessed = table.BatchPutItems values

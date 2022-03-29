@@ -62,7 +62,7 @@ type TableContext<'TRecord> internal
         | Some sink -> ReturnConsumedCapacity.INDEXES, Some (reportMetrics sink)
         | None -> ReturnConsumedCapacity.NONE, None
 
-    let getItemAsync (key : TableKey) (proj : ProjectionExpr.ProjectionExpr option) collector = async {
+    let tryGetItemAsync (key : TableKey) (proj : ProjectionExpr.ProjectionExpr option) collector = async {
         let kav = template.ToAttributeValues(key)
         let request = GetItemRequest(tableName, kav)
         match proj with
@@ -80,11 +80,14 @@ type TableContext<'TRecord> internal
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "GetItem request returned error %O" response.HttpStatusCode
 
-        if not response.IsItemSet then
-            let msg = sprintf "could not find item %O" key
-            raise <| ResourceNotFoundException(msg)
+        if response.IsItemSet then return Some response.Item
+        else return None
+    }
 
-        return response
+    let getItemAsync (key : TableKey) (proj : ProjectionExpr.ProjectionExpr option) collector = async {
+        match! tryGetItemAsync key proj collector with
+        | Some item -> return item
+        | None -> return raise <| ResourceNotFoundException(sprintf "could not find item %O" key)
     }
 
     let batchGetItemsAsync (keys : seq<TableKey>) (consistentRead : bool option)
@@ -422,6 +425,17 @@ type TableContext<'TRecord> internal
 
 
     /// <summary>
+    ///     Asynchronously attempts to fetch item with given key from table. Returns None if no item with that key is present.
+    /// </summary>
+    /// <param name="key">Key of item to be fetched.</param>
+    /// <param name="collector">Function to receive request metrics.</param>
+    member __.TryGetItemAsync(key : TableKey, ?collector) : Async<'TRecord option> = async {
+        let! response = tryGetItemAsync key None collector
+        return response |> Option.map template.OfAttributeValues
+    }
+
+
+    /// <summary>
     ///     Asynchronously checks whether item of supplied key exists in table.
     /// </summary>
     /// <param name="key">Key to be checked.</param>
@@ -446,8 +460,8 @@ type TableContext<'TRecord> internal
     /// <param name="key">Key of item to be fetched.</param>
     /// <param name="collector">Function to receive request metrics.</param>
     member __.GetItemAsync(key : TableKey, ?collector) : Async<'TRecord> = async {
-        let! response = getItemAsync key None collector
-        return template.OfAttributeValues response.Item
+        let! item = getItemAsync key None collector
+        return template.OfAttributeValues item
     }
 
 
@@ -460,8 +474,8 @@ type TableContext<'TRecord> internal
     /// <param name="projection">Projection expression to be applied to item.</param>
     /// <param name="collector">Function to receive request metrics.</param>
     member __.GetItemProjectedAsync(key : TableKey, projection : ProjectionExpression<'TRecord, 'TProjection>, ?collector) : Async<'TProjection> = async {
-        let! response = getItemAsync key (Some projection.ProjectionExpr) collector
-        return projection.UnPickle response.Item
+        let! item = getItemAsync key (Some projection.ProjectionExpr) collector
+        return projection.UnPickle item
     }
 
     /// <summary>
