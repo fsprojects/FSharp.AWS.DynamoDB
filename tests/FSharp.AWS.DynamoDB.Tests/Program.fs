@@ -212,17 +212,33 @@ let PaginationTests =
             testCase "Paginated Query with filter" paginationTests.``Paginated Query with filter``
         ]
 
+let metricsCollectorTestsTableFixture = new TableFixture()
+let metricsCollectorTests = ``Metrics Collector Tests``(metricsCollectorTestsTableFixture)
+let MetricsCollectorTests =
+    testList "MetricsCollectorTests"
+        [
+            testCase "Collect Metrics on GetItem" metricsCollectorTests.``Collect Metrics on GetItem``
+            testCase "Collect Metrics on PutItem" metricsCollectorTests.``Collect Metrics on PutItem``
+            testCase "Collect Metrics on UpdateItem" metricsCollectorTests.``Collect Metrics on UpdateItem``
+            testCase "Collect Metrics on Scan" metricsCollectorTests.``Collect Metrics on Scan``
+            testCase "Collect Metrics on Query" metricsCollectorTests.``Collect Metrics on Query``
+            testCase "Collect Metrics on BatchGetItem" metricsCollectorTests.``Collect Metrics on BatchGetItem``
+            testCase "Collect Metrics on BatchPutItem" metricsCollectorTests.``Collect Metrics on BatchPutItem``
+            testCase "Collect Metrics on BatchDeleteItem" metricsCollectorTests.``Collect Metrics on BatchDeleteItem``
+        ]
+
 [<Tests>]
 let tests =
     testList ""
         [
-            RecordGenerationTests
-            SimpleTableOperationTests
-            ConditionalExpressionTests
-            UpdateExpressionTests
-            ProjectionExpressionTests
-            SparseGSITests
-            PaginationTests
+            // RecordGenerationTests
+            // SimpleTableOperationTests
+            // ConditionalExpressionTests
+            // UpdateExpressionTests
+            // ProjectionExpressionTests
+            // SparseGSITests
+            // PaginationTests
+            MetricsCollectorTests
         ]
 
 [<EntryPoint>]
