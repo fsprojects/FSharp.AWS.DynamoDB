@@ -446,7 +446,7 @@ type TableContext<'TRecord> internal
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
     /// <param name="projection">Projection expression to be applied to item.</param>
-    member __.GetItemProjectedAsync(key : TableKey, projection : ProjectionExpression<'TRecord, 'TProjection>, ?collector) : Async<'TProjection> = async {
+    member __.GetItemProjectedAsync(key : TableKey, projection : ProjectionExpression<'TRecord, 'TProjection>) : Async<'TProjection> = async {
         let! item = getItemAsync key (Some projection.ProjectionExpr)
         return projection.UnPickle item
     }
