@@ -1,11 +1,8 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
-    <OutputType>Exe</OutputType>
-    <OutputPath>..\..\bin\</OutputPath>
     <IsPackable>false</IsPackable>
-  </PropertyGroup>
+  </PropertyGroup>  
   <ItemGroup>
     <Compile Include="Utils.fs" />
     <Compile Include="RecordGenerationTests.fs" />
@@ -16,12 +13,15 @@
     <Compile Include="SparseGSITests.fs" />
     <Compile Include="PaginationTests.fs" />
     <Compile Include="MetricsCollectorTests.fs" />
-    <Compile Include="Program.fs" />
-    <None Include="paket.references" />
-    <Content Include="App.config" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\FSharp.AWS.DynamoDB\FSharp.AWS.DynamoDB.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FsCheck" Version="2.16.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.1.0" />
+    <PackageReference Include="xunit" Version="2.4.1" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.3" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

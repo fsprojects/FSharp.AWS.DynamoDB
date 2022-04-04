@@ -2,7 +2,8 @@
 
 open System
 
-open Expecto
+open Swensen.Unquote
+open Xunit
 
 open FSharp.AWS.DynamoDB
 open FSharp.AWS.DynamoDB.Scripting
@@ -71,7 +72,7 @@ module UpdateExprTypes =
 
     type R = UpdateExprRecord
 
-type ``Update Expression Tests`` (fixture : TableFixture) =
+type ``Update Expression Tests``(fixture : TableFixture) =
 
     let rand = let r = Random() in fun () -> int64 <| r.Next()
     let bytes() = Guid.NewGuid().ToByteArray()
@@ -83,251 +84,251 @@ type ``Update Expression Tests`` (fixture : TableFixture) =
             Bool = false ; Optional = Some (guid()) ; Ref = ref (guid()) ; Bytes = Guid.NewGuid().ToByteArray()
             Nested = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
             NestedList = [{ NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ]
-            Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq
-            IntSet = seq { for i in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
-            StringSet = seq { for i in 0L .. rand() % 5L -> guid() } |> Set.ofSeq
-            ByteSet = seq { for i in 0L .. rand() % 5L -> bytes() } |> Set.ofSeq
-            List = [for i in 0L .. rand() % 5L -> rand() ]
+            Map = seq { for _ in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq
+            IntSet = seq { for _ in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
+            StringSet = seq { for _ in 0L .. rand() % 5L -> guid() } |> Set.ofSeq
+            ByteSet = seq { for _ in 0L .. rand() % 5L -> bytes() } |> Set.ofSeq
+            List = [for _ in 0L .. rand() % 5L -> rand() ]
             Union = if rand() % 2L = 0L then UA (rand()) else UB(guid())
-            Unions = [for i in 0L .. rand() % 5L -> if rand() % 2L = 0L then UA (rand()) else UB(guid()) ]
+            Unions = [for _ in 0L .. rand() % 5L -> if rand() % 2L = 0L then UA (rand()) else UB(guid()) ]
             Serialized = rand(), guid() ; Serialized2 = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
         }
 
     let table = TableContext.Create<UpdateExprRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
-    member this.``Attempt to update HashKey`` () =
+    let [<Fact>] ``Attempt to update HashKey`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.UpdateItem(key, <@ fun (r : R) -> { r with HashKey = guid() } @>)
         |> shouldFailwith<_, ArgumentException>
 
-    member this.``Attempt to update RangeKey`` () =
+    let [<Fact>] ``Attempt to update RangeKey`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.UpdateItem(key, <@ fun (r : R) -> { r with RangeKey = guid() } @>)
         |> shouldFailwith<_, ArgumentException>
 
-    member this.``Returning old value`` () =
+    let [<Fact>] ``Returning old value`` () =
         let item = mkItem()
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Value = r.Value + 1L } @>, returnLatest = false)
-        Expect.equal item' item "item should be equal"
+        test <@ item = item' @>
 
-    member this.``Simple update DateTimeOffset`` () =
+    let [<Fact>] ``Simple update DateTimeOffset`` () =
         let item = mkItem()
         let key = table.PutItem item
         let nv = DateTimeOffset.Now + TimeSpan.FromDays 366.
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with DateTimeOffset = nv } @>)
-        Expect.equal item'.DateTimeOffset nv ""
+        test <@ nv = item'.DateTimeOffset @>
 
-    member this.``Simple update TimeSpan`` () =
+    let [<Fact>] ``Simple update TimeSpan`` () =
         let item = mkItem()
         let key = table.PutItem item
         let ts = TimeSpan.FromTicks(rand())
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with TimeSpan = ts } @>)
-        Expect.equal item'.TimeSpan ts ""
+        test <@ ts = item'.TimeSpan @>
 
-    member this.``Simple update Guid`` () =
+    let [<Fact>] ``Simple update Guid`` () =
         let item = mkItem()
         let key = table.PutItem item
         let g = Guid.NewGuid()
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Guid = g } @>)
-        Expect.equal item'.Guid g ""
+        test <@ g = item'.Guid @>
 
-    member this.``Simple increment update`` () =
+    let [<Fact>] ``Simple increment update`` () =
         let item = mkItem()
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Value = r.Value + 1L } @>)
-        Expect.equal item'.Value (item.Value + 1L) ""
+        test <@ item.Value + 1L = item'.Value @>
 
-    member this.``Simple decrement update`` () =
+    let [<Fact>] ``Simple decrement update`` () =
         let item = mkItem()
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Value = r.Value - 10L } @>)
-        Expect.equal item'.Value (item.Value - 10L) ""
+        test <@ item.Value - 10L = item'.Value @>
 
-    member this.``Simple update serialized value`` () =
+    let [<Fact>] ``Simple update serialized value`` () =
         let item = mkItem()
         let key = table.PutItem item
         let value' = rand(), guid()
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Serialized = value' } @>)
-        Expect.equal item'.Serialized value' ""
+        test <@ value' = item'.Serialized @>
 
-    member this.``Update using nested record values`` () =
+    let [<Fact>] ``Update using nested record values`` () =
         let item = mkItem()
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with String = r.Nested.NV } @>)
-        Expect.equal item'.String item.Nested.NV ""
+        test <@ item.Nested.NV = item'.String @>
 
-    member this.``Update using nested union values`` () =
+    let [<Fact>] ``Update using nested union values`` () =
         let item = mkItem()
         let key = table.PutItem item
         let u = UB(guid())
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Union = u } @>)
-        Expect.equal item'.Union u ""
+        test <@ u = item'.Union @>
 
-    member this.``Update using nested list`` () =
+    let [<Fact>] ``Update using nested list`` () =
         let item = mkItem()
         let key = table.PutItem item
-        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Nested = r.NestedList.[0] } @>)
-        Expect.equal item'.Nested item.NestedList.[0] ""
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Nested = r.NestedList[0] } @>)
+        test <@ item.NestedList[0] = item'.Nested @>
 
-    member this.``Update using tuple values`` () =
+    let [<Fact>] ``Update using tuple values`` () =
         let item = mkItem()
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Value = fst r.Tuple + 1L } @>)
-        Expect.equal item'.Value (fst item.Tuple + 1L) ""
+        test <@ fst item.Tuple + 1L = item'.Value @>
 
-    member this.``Update optional field to None`` () =
+    let [<Fact>] ``Update optional field to None`` () =
         let item = { mkItem() with Optional = Some (guid()) }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Optional = None } @>)
-        Expect.equal item'.Optional None ""
+        test <@ None = item'.Optional @>
 
-    member this.``Update optional field to Some`` () =
+    let [<Fact>] ``Update optional field to Some`` () =
         let item = { mkItem() with Optional = None }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Optional = Some(guid()) } @>)
-        Expect.equal item'.Optional.IsSome true ""
+        test <@ None <> item'.Optional @>
 
-    member this.``Update list field to non-empty`` () =
+    let [<Fact>] ``Update list field to non-empty`` () =
         let item = { mkItem() with List = [1L] }
         let key = table.PutItem item
-        let nv = [for i in 1 .. 10 -> rand() ]
+        let nv = [for _ in 1 .. 10 -> rand() ]
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with List = nv } @>)
-        Expect.equal item'.List nv ""
+        test <@ nv = item'.List @>
 
-    member this.``Update list field to empty`` () =
+    let [<Fact>] ``Update list field to empty`` () =
         let item = { mkItem() with List = [1L] }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with List = [] } @>)
-        Expect.equal item'.List.Length 0 ""
+        test <@ 0 = item'.List.Length @>
 
-    member this.``Update list with concatenation`` () =
+    let [<Fact>] ``Update list with concatenation`` () =
         let item = { mkItem() with List = [1L] }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with List = r.List @ r.List } @>)
-        Expect.equal item'.List (item.List @ item.List) ""
+        test <@ item.List @ item.List = item'.List @>
 
-    member this.``Update list with consing`` () =
+    let [<Fact>] ``Update list with consing`` () =
         let item = { mkItem() with List = [2L] }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with List = 1L :: r.List } @>)
-        Expect.equal item'.List [1L ; 2L] ""
+        test <@ [1L ; 2L] = item'.List @>
 
-    member this.``Update using defaultArg combinator (Some)`` () =
+    let [<Fact>] ``Update using defaultArg combinator (Some)`` () =
         let item = { mkItem() with Optional = Some (guid()) }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with String = defaultArg r.Optional "<undefined>" } @>)
-        Expect.equal item'.String item.Optional.Value ""
+        test <@ item.Optional = Some item'.String @>
 
-    member this.``Update using defaultArg combinator (None)`` () =
+    let [<Fact>] ``Update using defaultArg combinator (None)`` () =
         let item = { mkItem() with Optional = None }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with String = defaultArg r.Optional "<undefined>" } @>)
-        Expect.equal item'.String "<undefined>" ""
+        test <@ "<undefined>" = item'.String @>
 
-    member this.``Update int set with add element`` () =
+    let [<Fact>] ``Update int set with add element`` () =
         let item = { mkItem() with IntSet = set [1L;2L] }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with IntSet = r.IntSet |> Set.add 3L } @>)
-        Expect.equal (item'.IntSet.Contains 3L) true ""
+        test <@ item'.IntSet.Contains 3L @>
 
-    member this.``Update int set with remove element`` () =
+    let [<Fact>] ``Update int set with remove element`` () =
         let item = { mkItem() with IntSet = set [1L;2L] }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with IntSet = r.IntSet |> Set.remove 2L } @>)
-        Expect.equal (item'.IntSet.Contains 2L) false ""
+        test <@ not (item'.IntSet.Contains 2L) @>
 
-    member this.``Update int set with append set`` () =
+    let [<Fact>] ``Update int set with append set`` () =
         let item = { mkItem() with IntSet = Set.empty }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with IntSet = r.IntSet + set [3L] } @>)
-        Expect.equal (item'.IntSet.Contains 3L) true ""
+        test <@ item'.IntSet.Contains 3L @>
 
-    member this.``Update int set with remove set`` () =
+    let [<Fact>] ``Update int set with remove set`` () =
         let item = { mkItem() with IntSet = set [1L;2L] }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with IntSet = r.IntSet - set [1L;2L;3L] } @>)
-        Expect.equal item'.IntSet.Count 0 ""
+        test <@ 0 = item'.IntSet.Count @>
 
-    member this.``Update string set with add element`` () =
+    let [<Fact>] ``Update string set with add element`` () =
         let item = { mkItem() with StringSet = set ["1";"2"] }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with StringSet = r.StringSet |> Set.add "3" } @>)
-        Expect.equal (item'.StringSet.Contains "3") true ""
+        test <@ item'.StringSet.Contains "3" @>
 
-    member this.``Update string set with remove element`` () =
+    let [<Fact>] ``Update string set with remove element`` () =
         let item = { mkItem() with StringSet = set ["1";"2"] }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with StringSet = r.StringSet |> Set.remove "2" } @>)
-        Expect.equal (item'.StringSet.Contains "2") false ""
+        test <@ not (item'.StringSet.Contains "2") @>
 
-    member this.``Update string set with append set`` () =
+    let [<Fact>] ``Update string set with append set`` () =
         let item = { mkItem() with StringSet = Set.empty }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with StringSet = r.StringSet + set ["3"] } @>)
-        Expect.equal (item'.StringSet.Contains "3") true ""
+        test <@ item'.StringSet.Contains "3" @>
 
-    member this.``Update byte set with append set`` () =
+    let [<Fact>] ``Update byte set with append set`` () =
         let item = { mkItem() with ByteSet = Set.empty }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with ByteSet = r.ByteSet + set [[|42uy|]] } @>)
-        Expect.equal (item'.ByteSet.Contains [|42uy|]) true ""
+        test <@ item'.ByteSet.Contains [|42uy|] @>
 
-    member this.``Update string set with remove set`` () =
+    let [<Fact>] ``Update string set with remove set`` () =
         let item = { mkItem() with StringSet = set ["1";"2"] }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with StringSet = r.StringSet - set ["1";"2";"3"] } @>)
-        Expect.equal item'.StringSet.Count 0 ""
+        test <@ 0 = item'.StringSet.Count @>
 
-    member this.``Update map with add element`` () =
+    let [<Fact>] ``Update map with add element`` () =
         let item = { mkItem() with Map = Map.ofList [("A", 1L) ; ("B", 2L)] }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Map = r.Map |> Map.add "C" 3L } @>)
-        Expect.equal (item'.Map.TryFind "C") (Some 3L) ""
+        test <@ Some 3L = item'.Map.TryFind "C" @>
 
-    member this.``Update map with remove element`` () =
+    let [<Fact>] ``Update map with remove element`` () =
         let item = { mkItem() with Map = Map.ofList [("A", 1L) ; ("B", 2L)] }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Map = r.Map |> Map.remove "B" } @>)
-        Expect.equal (item'.Map.ContainsKey "B") false ""
+        test <@ not (item'.Map.ContainsKey "B") @>
 
-    member this.``Update map with remove element on existing`` () =
+    let [<Fact>] ``Update map with remove element on existing`` () =
         let item = { mkItem() with Map = Map.ofList [("A", 1L) ; ("B", 2L)] }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Map = r.Map |> Map.remove "C" } @>)
-        Expect.equal item'.Map.Count 2 ""
+        test <@ 2 = item'.Map.Count @>
 
-    member this.``Update map entry with Item access`` () =
+    let [<Fact>] ``Update map entry with Item access`` () =
         let item = { mkItem() with Map = Map.ofList [("A", 1L)] }
         let key = table.PutItem item
-        let item' = table.UpdateItem(key, <@ fun (r : R) -> SET r.Map.["A"] 2L @>)
-        Expect.equal item'.Map.["A"] 2L ""
+        let item' = table.UpdateItem(key, <@ fun (r : R) -> SET r.Map["A"] 2L @>)
+        test <@ 2L = item'.Map["A"] @>
 
-    member this.``Parametric map Item access`` () =
+    let [<Fact>] ``Parametric map Item access`` () =
         let item = { mkItem() with Map = Map.ofList [("A", 1L)] }
         let key = table.PutItem item
-        let uop = table.Template.PrecomputeUpdateExpr <@ fun i v (r : R) -> SET r.Map.[i] v @>
+        let uop = table.Template.PrecomputeUpdateExpr <@ fun i v (r : R) -> SET r.Map[i] v @>
         let item' = table.UpdateItem(key, uop "A" 2L)
-        Expect.equal item'.Map.["A"] 2L ""
+        test <@ 2L = item'.Map["A"] @>
 
-    member this.``Parametric map ContainsKey`` () =
+    let [<Fact>] ``Parametric map ContainsKey`` () =
         let item = { mkItem() with Map = Map.ofList [("A", 1L)] }
-        let key = table.PutItem item
+        let _key = table.PutItem item
         let cond = table.Template.PrecomputeConditionalExpr <@ fun i r -> r.Map |> Map.containsKey i @>
-        let item' = table.PutItem(item, cond "A")
+        let _item' = table.PutItem(item, cond "A")
         ()
 
-    member this.``Combined update with succesful precondition`` () =
+    let [<Fact>] ``Combined update with successful precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Value = r.Value + 1L } @>,
                                                precondition = <@ fun r -> r.Value = item.Value @>)
 
-        Expect.equal item'.Value (item.Value + 1L) ""
+        test <@ item.Value + 1L = item'.Value @>
 
-    member this.``Combined update with failed precondition`` () =
+    let [<Fact>] ``Combined update with failed precondition`` () =
         let item = mkItem()
         let key = table.PutItem item
         fun () -> table.UpdateItem(key, <@ fun (r : R) -> { r with Value = r.Value + 1L } @>,
@@ -336,97 +337,96 @@ type ``Update Expression Tests`` (fixture : TableFixture) =
         |> shouldFailwith<_, ConditionalCheckFailedException>
 
         let item' = table.GetItem key
-        Expect.equal item'.Value item.Value ""
+        test <@ item.Value = item'.Value @>
 
-
-    member this.``SET an attribute`` () =
+    let [<Fact>] ``SET an attribute`` () =
         let item = mkItem()
         let key = table.PutItem item
-        let item' = table.UpdateItem(key, <@ fun r -> SET r.NestedList.[0].NV item.HashKey &&&
-                                                                 SET r.NestedList.[1] { NV = item.HashKey ; NE = Enum.C } @>)
+        let item' = table.UpdateItem(key, <@ fun r -> SET r.NestedList[0].NV item.HashKey &&&
+                                                                 SET r.NestedList[1] { NV = item.HashKey ; NE = Enum.C } @>)
 
-        Expect.equal item'.NestedList.[0].NV item.HashKey "NV sould be equal to HashKey"
-        Expect.equal item'.NestedList.[1].NV item.HashKey "NV sould be equal to HashKey"
+        test <@ item.HashKey = item'.NestedList[0].NV @>
+        test <@ item.HashKey = item'.NestedList[1].NV @>
 
-    member this.``SET a union attribute`` () =
+    let [<Fact>] ``SET a union attribute`` () =
         let item = { mkItem() with Unions = [UB(guid())] }
         let key = table.PutItem item
         let u = UA(rand())
-        let item' = table.UpdateItem(key, <@ fun r -> SET r.Unions.[0] u @>)
+        let item' = table.UpdateItem(key, <@ fun r -> SET r.Unions[0] u @>)
 
-        Expect.equal item'.Unions.Length 1 "Unions length should be equal to 1"
-        Expect.equal item'.Unions.[0] u "Union should be equal"
+        test <@ 1 = item'.Unions.Length @>
+        test <@ u = item'.Unions[0] @>
 
-    member this.``REMOVE an attribute`` () =
+    let [<Fact>] ``REMOVE an attribute`` () =
         let item = { mkItem() with NestedList = [{NV = "foo" ; NE = Enum.A}] }
         let key = table.PutItem item
-        let item' = table.UpdateItem(key, <@ fun r -> REMOVE r.NestedList.[0] @>)
+        let item' = table.UpdateItem(key, <@ fun r -> REMOVE r.NestedList[0] @>)
 
-        Expect.equal item'.NestedList.Length 0 ""
+        test <@ 0 = item'.NestedList.Length @>
 
-    member this.``ADD to set`` () =
+    let [<Fact>] ``ADD to set`` () =
         let item = mkItem()
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun r -> ADD r.IntSet [42L] @>)
 
-        Expect.equal (item'.IntSet.Contains 42L) true ""
+        test <@ item'.IntSet.Contains 42L @>
 
-    member this.``DELETE from set`` () =
+    let [<Fact>]``DELETE from set`` () =
         let item = { mkItem() with IntSet = set [1L ; 42L] }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun r -> DELETE r.IntSet [42L] @>)
 
-        Expect.equal (item'.IntSet.Contains 42L) false "IntSet should not contains 42"
-        Expect.equal item'.IntSet.Count 1 "IntSet count should be 1"
+        test <@ not (item'.IntSet.Contains 42L) @>
+        test <@ 1 = item'.IntSet.Count @>
 
-    member this.``Detect overlapping paths`` () =
+    let [<Fact>] ``Detect overlapping paths`` () =
         let item = mkItem()
         let key = table.PutItem item
-        fun () -> table.UpdateItem(key, <@ fun r -> SET r.NestedList.[0].NV "foo" &&&
+        fun () -> table.UpdateItem(key, <@ fun r -> SET r.NestedList[0].NV "foo" &&&
                                                                REMOVE r.NestedList @>)
 
         |> shouldFailwith<_, ArgumentException>
 
         let item' = table.GetItem key
-        Expect.equal item'.Value item.Value ""
+        test <@ item.Value = item'.Value @>
 
-    member this.``Simple Parametric Updater 1`` () =
+    let [<Fact>] ``Simple Parametric Updater 1`` () =
         let item = mkItem()
         let key = table.PutItem item
         let cond = table.Template.PrecomputeUpdateExpr <@ fun v1 v2 r -> { r with Value = v1 ; String = v2 } @>
         let v1 = rand()
         let v2 = guid()
         let result = table.UpdateItem(key, cond v1 v2)
-        Expect.equal result.Value v1 "Value should be equal to v1"
-        Expect.equal result.String v2 "String should be equal to v2"
+        test <@ v1 = result.Value @>
+        test <@ v2 = result.String @>
 
-    member this.``Simple Parametric Updater 2`` () =
+    let [<Fact>] ``Simple Parametric Updater 2`` () =
         let item = mkItem()
         let key = table.PutItem item
         let cond = table.Template.PrecomputeUpdateExpr <@ fun v1 v2 r -> SET r.Value v1 &&& ADD r.IntSet v2 @>
         let v1 = rand()
-        let v2 = [ for i in 1 .. 10 -> rand()]
+        let v2 = [ for _ in 1 .. 10 -> rand()]
         let result = table.UpdateItem(key, cond v1 v2)
-        Expect.equal result.Value v1 "Value should be equal to v1"
-        for v in v2 do Expect.equal (result.IntSet.Contains v) true "IntSet sould contains v"
+        test <@ v1 = result.Value @>
+        for v in v2 do test <@ result.IntSet.Contains v @>
 
-    member this.``Parametric Updater with optional argument`` () =
+    let [<Fact>] ``Parametric Updater with optional argument`` () =
         let item = { mkItem() with Optional = Some (guid()) }
         let key = table.PutItem item
         let cond = table.Template.PrecomputeUpdateExpr <@ fun opt (r : R) -> { r with Optional = opt } @>
         let result = table.UpdateItem(key, cond None)
-        Expect.equal result.Optional None ""
+        test <@ None = result.Optional @>
 
-    member this.``Parametric Updater with heterogeneous argument consumption`` () =
+    let [<Fact>] ``Parametric Updater with heterogeneous argument consumption`` () =
         let item = mkItem()
         let key = table.PutItem item
-        let values = [ for i in 1 .. 10 -> rand()]
+        let values = [ for _ in 1 .. 10 -> rand()]
         let cond = table.Template.PrecomputeUpdateExpr <@ fun vs r -> SET r.List vs &&& ADD r.IntSet vs @>
         let result = table.UpdateItem(key, cond values)
-        Expect.equal result.List values "List should be equal to values"
-        for v in values do Expect.equal (result.IntSet.Contains v) true "IntSet sould contains v"
+        test <@ values = result.List @>
+        for v in values do test <@ result.IntSet.Contains v @>
 
-    member this.``Parametric Updater with invalid param usage`` () =
+    let [<Fact>] ``Parametric Updater with invalid param usage`` () =
         let template = table.Template
         fun () -> template.PrecomputeUpdateExpr <@ fun v (r : R) -> { r with Value = List.head v } @>
         |> shouldFailwith<_, ArgumentException>
@@ -434,23 +434,25 @@ type ``Update Expression Tests`` (fixture : TableFixture) =
         fun () -> template.PrecomputeUpdateExpr <@ fun v (r : R) -> ADD r.IntSet (1L :: v) @>
         |> shouldFailwith<_, ArgumentException>
 
-    member this.``Parametric Updater with map add element with constant key`` () =
+    let [<Fact>] ``Parametric Updater with map add element with constant key`` () =
         let item = { mkItem() with Map = Map.ofList [("A", 1L) ; ("B", 2L)] }
         let key = table.PutItem item
         let cond = table.Template.PrecomputeUpdateExpr <@ fun v (r : UpdateExprRecord) -> { r with Map = r.Map |> Map.add "C" v } @>
         let result = table.UpdateItem(key, cond 3L)
-        Expect.equal result.Map.Count 3 ""
+        test <@ 3 = result.Map.Count @>
 
-    member this.``Parametric Updater with map add element with parametric key`` () =
+    let [<Fact>] ``Parametric Updater with map add element with parametric key`` () =
         let item = { mkItem() with Map = Map.ofList [("A", 1L) ; ("B", 2L)] }
         let key = table.PutItem item
         let cond = table.Template.PrecomputeUpdateExpr <@ fun k v (r : UpdateExprRecord) -> { r with Map = r.Map |> Map.add k v } @>
         let result = table.UpdateItem(key, cond "C" 3L)
-        Expect.equal result.Map.Count 3 ""
+        test <@ 3 = result.Map.Count @>
 
-    member this.``Parametric Updater with map remove element with parametric key`` () =
+    let [<Fact>] ``Parametric Updater with map remove element with parametric key`` () =
         let item = { mkItem() with Map = Map.ofList [("A", 1L) ; ("B", 2L)] }
         let key = table.PutItem item
         let cond = table.Template.PrecomputeUpdateExpr <@ fun k (r : UpdateExprRecord) -> { r with Map = r.Map |> Map.remove k } @>
         let result = table.UpdateItem(key, cond "A")
-        Expect.equal result.Map.Count 1 ""
+        test <@ 1 = result.Map.Count @>
+
+    interface IClassFixture<TableFixture>
