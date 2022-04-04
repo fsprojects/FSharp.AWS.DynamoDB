@@ -211,8 +211,8 @@ ModelManifest.xml
 
 .fake
 .paket/paket.exe
-temp/*
-paket-files/*
+temp
+paket-files
 xunit.html
 /db
 .DS_Store

@@ -29,11 +29,11 @@ module MetricsCollectorTests =
         }
 
 type TestCollector() =
-    let mutable (metrics : RequestMetrics list) = []
+    let metrics = ResizeArray<RequestMetrics>()
     member _.Collect (m : RequestMetrics) =
-        metrics <- List.append metrics [ m ]
+        metrics.Add m
 
-    member _.Metrics with get() = metrics
+    member _.Metrics with get() = metrics |> Seq.toList
 
 type ``Metrics Collector Tests`` (fixture : TableFixture) =
 
@@ -63,6 +63,19 @@ type ``Metrics Collector Tests`` (fixture : TableFixture) =
         Expect.equal metrics.ItemCount 1 ""
         Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
 
+    member __.``Collect Metrics on ContainsKey`` () =
+        let item = mkItem (guid()) (guid()) 0
+        table.PutItem item |> ignore
+
+        let collector = TestCollector()
+        let _ = table.WithMetricsCollector(collector.Collect).ContainsKey (key = TableKey.Combined (item.HashKey, 0))
+        Expect.equal collector.Metrics.Length 1 ""
+        let metrics = collector.Metrics.Head
+        Expect.equal metrics.Operation GetItem ""
+        Expect.equal metrics.TableName fixture.TableName ""
+        Expect.equal metrics.ItemCount 1 ""
+        Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
+
     member __.``Collect Metrics on PutItem`` () =
         let item = mkItem (guid()) (guid()) 0
         let collector = TestCollector()
@@ -84,6 +97,19 @@ type ``Metrics Collector Tests`` (fixture : TableFixture) =
         Expect.equal collector.Metrics.Length 1 ""
         let metrics = collector.Metrics.Head
         Expect.equal metrics.Operation UpdateItem ""
+        Expect.equal metrics.TableName fixture.TableName ""
+        Expect.equal metrics.ItemCount 1 ""
+        Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
+
+    member __.``Collect Metrics on DeleteItem`` () =
+        let item = mkItem (guid()) (guid()) 0
+        let collector = TestCollector()
+        table.PutItem item |> ignore
+        table.WithMetricsCollector(collector.Collect).DeleteItem(TableKey.Combined (item.HashKey, item.RangeKey)) |> ignore
+
+        Expect.equal collector.Metrics.Length 1 ""
+        let metrics = collector.Metrics.Head
+        Expect.equal metrics.Operation DeleteItem ""
         Expect.equal metrics.TableName fixture.TableName ""
         Expect.equal metrics.ItemCount 1 ""
         Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
