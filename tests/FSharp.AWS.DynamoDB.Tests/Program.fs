@@ -231,13 +231,13 @@ let MetricsCollectorTests =
 let tests =
     testList ""
         [
-            // RecordGenerationTests
-            // SimpleTableOperationTests
-            // ConditionalExpressionTests
-            // UpdateExpressionTests
-            // ProjectionExpressionTests
-            // SparseGSITests
-            // PaginationTests
+            RecordGenerationTests
+            SimpleTableOperationTests
+            ConditionalExpressionTests
+            UpdateExpressionTests
+            ProjectionExpressionTests
+            SparseGSITests
+            PaginationTests
             MetricsCollectorTests
         ]
 
