@@ -38,7 +38,7 @@ open FSharp.AWS.DynamoDB.Scripting // Expose non-Async methods, e.g. PutItem/Get
 
 let client : IAmazonDynamoDB = ``your DynamoDB client instance``
 let throughput = ProvisionedThroughput(readCapacityUnits = 1L, writeCapacityUnits = 10L)
-let table = TableContext.Initialize<WorkItemInfo>(client, tableName = "workItems", Provisioned throughput)
+let table = TableContext.Initialize<WorkItemInfo>(client, tableName = "workItems", Throughput.Provisioned throughput)
 
 let workItem = { ProcessId = 0L ; WorkItemId = 1L ; Name = "Test" ; UUID = guid() ; Dependencies = set ["mscorlib"] ; Started = None }
 
@@ -121,7 +121,7 @@ type Counter private (table : TableContext<CounterEntry>, key : TableKey) =
     static member Create(client : IAmazonDynamoDB, tableName : string) = async {
         let table = TableContext<CounterEntry>(client, tableName)
         let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)        
-        do! table.InitializeTableAsync(Provisioned throughput)
+        do! table.InitializeTableAsync(Throughput.Provisioned throughput)
         let initialEntry = { Id = Guid.NewGuid() ; Value = 0L }
         let! key = table.PutItemAsync(initialEntry)
         return Counter(table, key)

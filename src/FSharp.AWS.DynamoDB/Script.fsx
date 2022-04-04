@@ -55,7 +55,7 @@ type Test =
     }
 
 let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
-let table = TableContext.Initialize<Test>(ddb, "test", Provisioned throughput)
+let table = TableContext.Initialize<Test>(ddb, "test", Throughput.Provisioned throughput)
 
 let value = { HashKey = Guid.NewGuid() ; List = [] ; RangeKey = "2" ; Value = 3.1415926 ; Date = DateTimeOffset.Now + TimeSpan.FromDays 2. ; Value2 = None ; Values = [|{ A = "foo" ; B = System.Reflection.BindingFlags.Instance }|] ; Map = Map.ofList [("A1",1)] ; Set = [set [1L];set [2L]] ; Bytes = [|1uy..10uy|]; String = ref "1a" ; Unions = [A 42; B("42",3)]}
 
@@ -128,7 +128,7 @@ type EasyCounters private (table : TableContext<CounterEntry>) =
         // Create the table if necessary. Verifies schema is correct if it has already been created
         // NOTE the hard coded initial throughput provisioning - arguably this belongs outside of your application logic
         let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
-        do! table.InitializeTableAsync(Provisioned throughput)
+        do! table.InitializeTableAsync(Throughput.Provisioned throughput)
         return EasyCounters(table)
     }
 
@@ -143,7 +143,7 @@ type SimpleCounters private (table : TableContext<CounterEntry>) =
         // normally, RCU/WCU provisioning only happens first time the Table is created and is then considered an external concern
         // here we use `ProvisionTableAsync` instead of `InitializeAsync` to reset it each time we start the app
         let provisionedThroughput = ProvisionedThroughput(readCapacityUnits, writeCapacityUnits)
-        table.ProvisionTableAsync(Provisioned provisionedThroughput)
+        table.ProvisionTableAsync(Throughput.Provisioned provisionedThroughput)
 
     /// We only want to do the initialization bit once per instance of our application
     /// Similar to EasyCounters.Create in that it ensures the table is provisioned correctly
