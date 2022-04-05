@@ -430,7 +430,9 @@ type TableContext<'TRecord> internal
 
 
     /// <summary>
-    ///     Asynchronously fetches item of given key from table.
+    ///     Asynchronously fetches item of given key from table.<br/>
+    ///     Throws <c>ResourceNotFoundException</c> if no item found (NOTE while that specific exception is misleading, fixing it is a breaking change).<br/>
+    ///     See <c>TryGetItemAsync</c> if you need to implement fallback logic in the case where it is not found
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
     member __.GetItemAsync(key : TableKey) : Async<'TRecord> = async {
