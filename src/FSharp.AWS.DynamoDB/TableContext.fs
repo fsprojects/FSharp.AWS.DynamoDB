@@ -326,11 +326,11 @@ type TableContext<'TRecord> internal
         let! response = client.BatchWriteItemAsync(pbr, ct) |> Async.AwaitTaskCorrect
         let unprocessed =
             match response.UnprocessedItems.TryGetValue tableName with
-                | (true, reqs) ->
-                    reqs |> Seq.choose (fun r -> r.PutRequest |> Option.ofObj)
-                         |> Seq.map (fun w -> w.Item)
-                         |> Seq.toArray
-                | (false, _) -> [||]
+            | (true, reqs) ->
+                reqs |> Seq.choose (fun r -> r.PutRequest |> Option.ofObj)
+                        |> Seq.map (fun w -> w.Item)
+                        |> Seq.toArray
+            | (false, _) -> [||]
         maybeReport |> Option.iter (fun r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) (items.Length - unprocessed.Length))
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "BatchWriteItem put request returned error %O" response.HttpStatusCode
@@ -554,11 +554,11 @@ type TableContext<'TRecord> internal
         let! response = client.BatchWriteItemAsync(request, ct) |> Async.AwaitTaskCorrect
         let unprocessed =
             match response.UnprocessedItems.TryGetValue tableName with
-                | (true, reqs) ->
-                    reqs |> Seq.choose (fun r -> r.DeleteRequest |> Option.ofObj)
-                         |> Seq.map (fun d -> d.Key)
-                         |> Seq.toArray
-                | (false, _) -> [||]
+            | (true, reqs) ->
+                reqs |> Seq.choose (fun r -> r.DeleteRequest |> Option.ofObj)
+                        |> Seq.map (fun d -> d.Key)
+                        |> Seq.toArray
+            | (false, _) -> [||]
         maybeReport |> Option.iter (fun r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) (keys.Length - unprocessed.Length))
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "BatchWriteItem deletion request returned error %O" response.HttpStatusCode
