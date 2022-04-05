@@ -44,6 +44,8 @@ module Utils =
         member _.Client = client
         member _.TableName = tableName
 
+        member _.TableName = tableName
+
         member _.CreateContextAndTableIfNotExists<'TRecord>() =
             let throughput = Model.ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
             Scripting.TableContext.Initialize<'TRecord>(client, tableName, Throughput.Provisioned throughput)
