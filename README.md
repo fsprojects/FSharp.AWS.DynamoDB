@@ -37,8 +37,7 @@ open Amazon.DynamoDBv2
 open FSharp.AWS.DynamoDB.Scripting // Expose non-Async methods, e.g. PutItem/GetItem
 
 let client : IAmazonDynamoDB = ``your DynamoDB client instance``
-let throughput = ProvisionedThroughput(readCapacityUnits = 1L, writeCapacityUnits = 10L)
-let table = TableContext.Initialize<WorkItemInfo>(client, tableName = "workItems", Throughput.Provisioned throughput)
+let table = TableContext.Initialize<WorkItemInfo>(client, tableName = "workItems", Throughput.OnDemand)
 
 let workItem = { ProcessId = 0L ; WorkItemId = 1L ; Name = "Test" ; UUID = guid() ; Dependencies = set ["mscorlib"] ; Started = None }
 

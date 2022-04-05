@@ -32,7 +32,7 @@ module internal Throughput =
                 gsi.ProvisionedThroughput <- t
         | Throughput.OnDemand ->
             req.BillingMode <- BillingMode.PAY_PER_REQUEST
-    let hasChanged (desc : TableDescription) = function
+    let requiresUpdate (desc : TableDescription) = function
         | Throughput.Provisioned t ->
             let current = desc.ProvisionedThroughput
             desc.BillingModeSummary.BillingMode <> BillingMode.PROVISIONED
@@ -57,13 +57,119 @@ module internal Streaming =
         | Streaming.Disabled -> StreamSpecification(StreamEnabled = false)
     let applyToCreateRequest (req : CreateTableRequest) (Spec spec) =
         req.StreamSpecification <- spec
-    let hasChanged (desc : TableDescription) = function
+    let requiresUpdate (desc : TableDescription) = function
         | Streaming.Disabled -> desc.StreamSpecification.StreamEnabled
-        | Streaming.Enabled svt ->
-            not desc.StreamSpecification.StreamEnabled
-            || desc.StreamSpecification.StreamViewType <> svt
+        | Streaming.Enabled svt -> not desc.StreamSpecification.StreamEnabled || desc.StreamSpecification.StreamViewType <> svt
     let applyToUpdateRequest (req : UpdateTableRequest) (Spec spec) =
         req.StreamSpecification <- spec
+
+module internal CreateTableRequest =
+
+    let create (tableName, template : RecordTemplate<'TRecord>) throughput streaming customize =
+        let req = template.Info.Schemata.CreateCreateTableRequest(tableName)
+        throughput |> Option.iter (Throughput.applyToCreateRequest req)
+        streaming |> Option.iter (Streaming.applyToCreateRequest req)
+        customize |> Option.iter (fun c -> c req)
+        req
+
+module internal UpdateTableRequest =
+
+    let create tableName =
+        UpdateTableRequest(TableName = tableName)
+
+    let apply throughput streaming request =
+        throughput |> Option.iter (Throughput.applyToUpdateRequest request)
+        streaming |> Option.iter (Streaming.applyToUpdateRequest request)
+
+    // Yields a request only if throughput, streaming or customize determine te update is warranted
+    let createIfRequired (tableName, template : RecordTemplate<'TRecord>) tableDescription throughput streaming customize : UpdateTableRequest option=
+
+        let request = create tableName
+        let tc = throughput |> Option.filter (Throughput.requiresUpdate tableDescription)
+        let sc = streaming |> Option.filter (Streaming.requiresUpdate tableDescription)
+        match tc, sc, customize with
+        | None, None, None -> None
+        | Some _ as tc, sc, None
+        | tc, (Some _ as sc), None ->
+            apply tc sc request
+            Some request
+        | tc, sc, Some customize ->
+            apply tc sc request
+            customize request
+
+    let execute (client : IAmazonDynamoDB) request = async {
+        let! ct = Async.CancellationToken
+        let! _response = client.UpdateTableAsync(request, ct) |> Async.AwaitTaskCorrect in ()
+    }
+
+module Provisioning =
+
+    let private describe (client : IAmazonDynamoDB, tableName : string) : Async<TableDescription> =
+        let rec wait () = async {
+            let! ct = Async.CancellationToken
+            let! td = client.DescribeTableAsync(tableName, ct) |> Async.AwaitTaskCorrect
+            if td.Table.TableStatus = TableStatus.ACTIVE then
+                do! Async.Sleep 2000
+                // wait indefinitely if table is in transition state
+                return! wait ()
+            else
+
+            return td.Table
+        }
+        wait ()
+
+    let (|Conflict|_|) (e : exn) =
+        match e with
+        | :? AmazonDynamoDBException as e when e.StatusCode = HttpStatusCode.Conflict -> Some()
+        | :? ResourceInUseException -> Some ()
+        | _ -> None
+
+    let private checkOrCreate (client, tableName) validateDescription maybeMakeCreateTableRequest : Async<TableDescription> =
+        let rec aux retries = async {
+            match! describe (client, tableName) |> Async.Catch with
+            | Choice1Of2 desc ->
+                validateDescription desc
+                return desc
+
+            | Choice2Of2 (:? ResourceNotFoundException) when Option.isSome maybeMakeCreateTableRequest ->
+                let! ct = Async.CancellationToken
+                let! response =
+                    client.CreateTableAsync(maybeMakeCreateTableRequest.Value (), ct)
+                    |> Async.AwaitTaskCorrect
+                    |> Async.Catch
+
+                match response with
+                | Choice1Of2 _ -> return! aux retries
+                | Choice2Of2 Conflict when retries > 0 ->
+                    do! Async.Sleep 2000
+                    return! aux (retries - 1)
+
+                | Choice2Of2 e -> return! Async.Raise e
+
+            | Choice2Of2 Conflict when retries > 0 ->
+                do! Async.Sleep 2000
+                return! aux (retries - 1)
+
+            | Choice2Of2 e -> return! Async.Raise e
+        }
+        aux 9 // up to 9 retries, i.e. 10 attempts before we let exception propagate
+
+    let private validateDescription (tableName, template : RecordTemplate<'TRecord>) desc =
+        let existingSchema = TableKeySchemata.OfTableDescription desc
+        if existingSchema <> template.Info.Schemata then
+            sprintf "table '%s' exists with key schema %A, which is incompatible with record '%O'."
+                tableName existingSchema typeof<'TRecord>
+            |> invalidOp
+
+    let private run (client, tableName, template) maybeMakeCreateRequest : Async<TableDescription> =
+        let validate = validateDescription (tableName, template)
+        checkOrCreate (client, tableName) validate maybeMakeCreateRequest
+
+    let validateOnly (client, tableName, template) = run (client, tableName, template) None |> Async.Ignore
+
+    let createOrValidate (client, tableName, template) throughput streaming customize : Async<TableDescription> =
+        let generateCreateRequest () = CreateTableRequest.create (tableName, template) throughput streaming customize
+        run (client, tableName, template) (Some generateCreateRequest)
 
 /// Represents the operation performed on the table, for metrics collection purposes
 type Operation = GetItem | PutItem | UpdateItem | DeleteItem | BatchGetItems | BatchWriteItems | Scan | Query
@@ -904,126 +1010,63 @@ type TableContext<'TRecord> internal
 
 
     /// <summary>
-    ///     Asynchronously updates the underlying table with supplied configuration.<br />
-    ///     Will throw if <c>customize</c> does not apply any alterations.
-    /// </summary>
-    /// <param name="customize">Callback to apply any options desired.</param>
-    member _.UpdateTableAsync(customize) : Async<unit> = async {
-        let request = UpdateTableRequest(TableName = tableName)
-        customize request
-        let! ct = Async.CancellationToken
-        let! _response = client.UpdateTableAsync(request, ct) |> Async.AwaitTaskCorrect in ()
-    }
-
-    /// <summary>
-    ///     Asynchronously updates the underlying table with supplied provisioned throughput.
-    /// </summary>
-    /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
-    [<System.Obsolete("Please replace with either 1. UpdateTableAsync or 2. ProvisionTableAsync")>]
-    member t.UpdateProvisionedThroughputAsync(provisionedThroughput : ProvisionedThroughput) : Async<unit> =
-        t.UpdateTableAsync(fun req -> Throughput.applyToUpdateRequest req (Throughput.Provisioned provisionedThroughput))
-
-    member internal _.InternalDescribe() : Async<TableDescription> =
-        let rec wait () = async {
-            let! ct = Async.CancellationToken
-            let! td = client.DescribeTableAsync(tableName, ct) |> Async.AwaitTaskCorrect
-            if td.Table.TableStatus = TableStatus.ACTIVE then
-                do! Async.Sleep 2000
-                // wait indefinitely if table is in transition state
-                return! wait ()
-            else
-
-            return td.Table
-        }
-        wait ()
-
-    member internal __.InternalProvision(?makeCreateTableRequest) : Async<TableDescription> =
-        let (|Conflict|_|) (e : exn) =
-            match e with
-            | :? AmazonDynamoDBException as e when e.StatusCode = HttpStatusCode.Conflict -> Some()
-            | :? ResourceInUseException -> Some ()
-            | _ -> None
-
-        let rec checkOrCreate retries = async {
-            match! __.InternalDescribe() |> Async.Catch with
-            | Choice1Of2 desc ->
-                let existingSchema = TableKeySchemata.OfTableDescription desc
-                if existingSchema <> template.Info.Schemata then
-                    sprintf "table '%s' exists with key schema %A, which is incompatible with record '%O'."
-                        tableName existingSchema typeof<'TRecord>
-                    |> invalidOp
-                return desc
-
-            | Choice2Of2 (:? ResourceNotFoundException) when Option.isSome makeCreateTableRequest ->
-                let! ct = Async.CancellationToken
-                let! response =
-                    client.CreateTableAsync(makeCreateTableRequest.Value (), ct)
-                    |> Async.AwaitTaskCorrect
-                    |> Async.Catch
-
-                match response with
-                | Choice1Of2 _ -> return! checkOrCreate retries
-                | Choice2Of2 Conflict when retries > 0 ->
-                    do! Async.Sleep 2000
-                    return! checkOrCreate (retries - 1)
-
-                | Choice2Of2 e -> return! Async.Raise e
-
-            | Choice2Of2 Conflict when retries > 0 ->
-                do! Async.Sleep 2000
-                return! checkOrCreate (retries - 1)
-
-            | Choice2Of2 e -> return! Async.Raise e
-        }
-
-        checkOrCreate 9 // up to 9 retries, i.e. 10 attempts before we let exception propagate
-
-    member internal _.InternalCreateCreateTableRequest(?throughput, ?streaming) =
-        let req = template.Info.Schemata.CreateCreateTableRequest(tableName)
-        throughput |> Option.iter (Throughput.applyToCreateRequest req)
-        streaming |> Option.iter (Streaming.applyToCreateRequest req)
-        req
-
-    member internal t.InternalCreateOrValidateTableAsync(?throughput, ?streaming) =
-        t.InternalProvision(fun () -> t.InternalCreateCreateTableRequest(?throughput = throughput, ?streaming = streaming))
-
-    /// <summary>
     /// Asynchronously verify that the table exists and is compatible with record key schema, or throw.<br/>
     /// See also <c>InitializeTableAsync</c>, which performs the same check, but can create or re-provision the Table if required.
     /// </summary>
-    member __.VerifyTableAsync() : Async<unit> =
-        __.InternalProvision() |> Async.Ignore
+    member _.VerifyTableAsync() : Async<unit> =
+        Provisioning.validateOnly (client, tableName, template)
+
+    member internal _.InternalCreateOrValidate(?throughput, ?streaming, ?customize) : Async<TableDescription> =
+        Provisioning.createOrValidate (client, tableName, template) throughput streaming customize
 
     /// <summary>
     /// Asynchronously verifies that the table exists and is compatible with record key schema, throwing if it is incompatible.<br/>
     /// If the table is not present, it is provisioned, with the specified <c>throughput</c>.<br/>
-    /// See also <c>VerifyTableAsync</c>, which only verifies the Table is present and correct.
+    /// See also <c>VerifyTableAsync</c>, which only verifies the Table is present and correct.<br/>
+    /// See also <c>ProvisionTableAsync</c>, which will adjust throughput and streaming if they are not as specified.
     /// </summary>
     /// <param name="throughput">Throughput configuration to use for the table.</param>
-    /// <param name="streaming">Optional Streaming configuration to use for the table. Default: Disabled.</param>
-    member t.InitializeTableAsync(throughput : Throughput, ?streaming) : Async<unit> =
-        t.InternalCreateOrValidateTableAsync(throughput, defaultArg streaming Streaming.Disabled) |> Async.Ignore
+    /// <param name="streaming">Optional streaming configuration to apply for the table. Default: Disabled..</param>
+    /// <param name="customize">Callback to post-process the <c>CreateTableRequest</c>.</param>
+    member t.InitializeTableAsync(throughput : Throughput, ?streaming, ?customize) : Async<unit> =
+        t.InternalCreateOrValidate(throughput, ?streaming = streaming, ?customize = customize) |> Async.Ignore
 
     /// <summary>
     /// Asynchronously verifies that the table exists and is compatible with record key schema, throwing if it is incompatible.<br/>
     /// If the table is not present, it is provisioned, with the specified <c>throughput</c> and optionally <c>streaming</c>.<br/>
     /// If it is present, and the <c>throughput</c> or <c>streaming</c> are not as specified, uses <c>UpdateTableAsync</c> to adjust.<br/>
     /// </summary>
-    /// <param name="throughput">Throughput configuration to use for the table.</param>
+    /// <param name="throughput">Throughput configuration to use for the table. Always applied via either <c>CreateTable</c> or <c>UpdateTable</c>.</param>
     /// <param name="streaming">Optional streaming configuration to apply for the table. Default (if creating): Disabled. Default: (if existing) do not change.</param>
-    member t.ProvisionTableAsync(throughput : Throughput, ?streaming) : Async<unit> = async {
-        let! tableDescription = t.InternalCreateOrValidateTableAsync(throughput, defaultArg streaming Streaming.Disabled)
-        let tc = throughput |> Throughput.hasChanged tableDescription
-        let sc = streaming |> Option.exists (Streaming.hasChanged tableDescription)
-        if tc || sc then
-            let apply req =
-                if tc then Throughput.applyToUpdateRequest req throughput
-                if sc then streaming |> Option.iter (Streaming.applyToUpdateRequest req)
-            do! t.UpdateTableAsync(apply) }
+    /// <param name="customizeCreate">Callback to post-process the <c>CreateTableRequest</c> if desired.</param>
+    /// <param name="customizeUpdate">Callback to post-process the <c>UpdateTableRequest</c> if desired. When supplied, <c>UpdateTable</c> is inhibited if it returns <c>None</c>.</param>
+    member t.ProvisionTableAsync(throughput : Throughput, ?streaming, ?customizeCreate, ?customizeUpdate) : Async<unit> = async {
+        let! tableDescription = t.InternalCreateOrValidate(throughput, ?streaming = streaming, ?customize = customizeCreate)
+        let maybeRequest = UpdateTableRequest.createIfRequired (tableName, template) tableDescription (Some throughput) streaming customizeUpdate
+        match maybeRequest with
+        | None -> ()
+        | Some request -> do! UpdateTableRequest.execute client request }
 
     /// <summary>
-    ///     Asynchronously verify that the table exists and is compatible with record key schema.
+    /// Asynchronously updates the underlying table with supplied configuration.<br/>
+    /// Underlying processing will throw if none of the options represent a change.<br/>
     /// </summary>
+    /// <param name="throughput">Optional Throughput configuration to apply.</param>
+    /// <param name="streaming">Optional Streaming configuration to apply.</param>
+    /// <param name="customize">Callback to apply any further options desired.</param>
+    member _.UpdateTableAsync(?throughput, ?streaming, ?customize : UpdateTableRequest -> unit) : Async<unit> =
+        let request = UpdateTableRequest.create tableName
+        UpdateTableRequest.apply throughput streaming request
+        customize |> Option.iter (fun c -> c request)
+        UpdateTableRequest.execute client request
+
+    /// <summary>Asynchronously updates the underlying table with supplied provisioned throughput.</summary>
+    /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
+    [<System.Obsolete("Please replace with either 1. UpdateTableAsync or 2. ProvisionTableAsync")>]
+    member t.UpdateProvisionedThroughputAsync(provisionedThroughput : ProvisionedThroughput) : Async<unit> =
+        t.UpdateTableAsync(Throughput.Provisioned provisionedThroughput)
+
+    /// <summary>Asynchronously verify that the table exists and is compatible with record key schema.</summary>
     /// <param name="createIfNotExists">Create the table instance now instance if it does not exist. Defaults to false.</param>
     /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Defaults to (10,10).</param>
     [<System.Obsolete("Please replace with either 1. VerifyTableAsync or 2. InitializeTableAsync")>]
@@ -1504,4 +1547,4 @@ module Scripting =
         /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
         member t.UpdateProvisionedThroughput(provisionedThroughput : ProvisionedThroughput) =
             let spec = Throughput.Provisioned provisionedThroughput
-            t.UpdateTableAsync(fun req -> Throughput.applyToUpdateRequest req spec) |> Async.RunSynchronously
+            t.UpdateTableAsync(spec) |> Async.RunSynchronously
