@@ -15,10 +15,10 @@ open Xunit
 [<AutoOpen>]
 module Utils =
 
-    let getRandomTableName() =
-        sprintf "fsdynamodb-%s" <| Guid.NewGuid().ToString("N")
+    let guid () = Guid.NewGuid().ToString("N")
 
-    let guid() = Guid.NewGuid().ToString("N")
+    let getRandomTableName() =
+        sprintf "fsdynamodb-%s" <| guid ()
 
     let shouldFailwith<'T, 'Exn when 'Exn :> exn>(f : unit -> 'T) =
         <@ f () |>  ignore @>
@@ -26,8 +26,8 @@ module Utils =
 
     let getDynamoDBAccount () =
         let credentials = BasicAWSCredentials("Fake", "Fake")
-        let config = AmazonDynamoDBConfig()
-        config.ServiceURL <- "http://localhost:8000"
+        let config = AmazonDynamoDBConfig(ServiceURL = "http://localhost:8000")
+
         new AmazonDynamoDBClient(credentials, config) :> IAmazonDynamoDB
 
 
@@ -39,11 +39,11 @@ module Utils =
 
 
     type TableFixture() =
+
         let client = getDynamoDBAccount()
         let tableName = getRandomTableName()
-        member _.Client = client
-        member _.TableName = tableName
 
+        member _.Client = client
         member _.TableName = tableName
 
         member _.CreateContextAndTableIfNotExists<'TRecord>() =

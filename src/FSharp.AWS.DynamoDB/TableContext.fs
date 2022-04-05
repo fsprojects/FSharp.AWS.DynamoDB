@@ -66,11 +66,17 @@ module internal Streaming =
 module internal CreateTableRequest =
 
     let create (tableName, template : RecordTemplate<'TRecord>) throughput streaming customize =
-        let req = template.Info.Schemata.CreateCreateTableRequest(tableName)
+        let req = CreateTableRequest(TableName = tableName)
+        template.Info.Schemata.ApplyToCreateTableRequest req
         throughput |> Option.iter (Throughput.applyToCreateRequest req)
         streaming |> Option.iter (Streaming.applyToCreateRequest req)
         customize |> Option.iter (fun c -> c req)
         req
+
+    let execute (client : IAmazonDynamoDB) request : Async<CreateTableResponse> = async {
+        let! ct = Async.CancellationToken
+        return! client.CreateTableAsync(request, ct) |> Async.AwaitTaskCorrect
+    }
 
 module internal UpdateTableRequest =
 
@@ -81,9 +87,8 @@ module internal UpdateTableRequest =
         throughput |> Option.iter (Throughput.applyToUpdateRequest request)
         streaming |> Option.iter (Streaming.applyToUpdateRequest request)
 
-    // Yields a request only if throughput, streaming or customize determine te update is warranted
-    let createIfRequired (tableName, template : RecordTemplate<'TRecord>) tableDescription throughput streaming customize : UpdateTableRequest option=
-
+    // Yields a request only if throughput, streaming or customize determine the update is warranted
+    let createIfRequired tableName tableDescription throughput streaming customize : UpdateTableRequest option=
         let request = create tableName
         let tc = throughput |> Option.filter (Throughput.requiresUpdate tableDescription)
         let sc = streaming |> Option.filter (Streaming.requiresUpdate tableDescription)
@@ -97,7 +102,7 @@ module internal UpdateTableRequest =
             apply tc sc request
             customize request
 
-    let execute (client : IAmazonDynamoDB) request = async {
+    let execute (client : IAmazonDynamoDB) request : Async<unit> = async {
         let! ct = Async.CancellationToken
         let! _response = client.UpdateTableAsync(request, ct) |> Async.AwaitTaskCorrect in ()
     }
@@ -132,13 +137,8 @@ module Provisioning =
                 return desc
 
             | Choice2Of2 (:? ResourceNotFoundException) when Option.isSome maybeMakeCreateTableRequest ->
-                let! ct = Async.CancellationToken
-                let! response =
-                    client.CreateTableAsync(maybeMakeCreateTableRequest.Value (), ct)
-                    |> Async.AwaitTaskCorrect
-                    |> Async.Catch
-
-                match response with
+                let req = maybeMakeCreateTableRequest.Value ()
+                match! CreateTableRequest.execute client req |> Async.Catch with
                 | Choice1Of2 _ -> return! aux retries
                 | Choice2Of2 Conflict when retries > 0 ->
                     do! Async.Sleep 2000
@@ -165,11 +165,12 @@ module Provisioning =
         let validate = validateDescription (tableName, template)
         checkOrCreate (client, tableName) validate maybeMakeCreateRequest
 
-    let validateOnly (client, tableName, template) = run (client, tableName, template) None |> Async.Ignore
-
     let createOrValidate (client, tableName, template) throughput streaming customize : Async<TableDescription> =
         let generateCreateRequest () = CreateTableRequest.create (tableName, template) throughput streaming customize
         run (client, tableName, template) (Some generateCreateRequest)
+
+    let validateOnly (client, tableName, template) =
+        run (client, tableName, template) None |> Async.Ignore
 
 /// Represents the operation performed on the table, for metrics collection purposes
 type Operation = GetItem | PutItem | UpdateItem | DeleteItem | BatchGetItems | BatchWriteItems | Scan | Query
@@ -1042,8 +1043,7 @@ type TableContext<'TRecord> internal
     /// <param name="customizeUpdate">Callback to post-process the <c>UpdateTableRequest</c> if desired. When supplied, <c>UpdateTable</c> is inhibited if it returns <c>None</c>.</param>
     member t.ProvisionTableAsync(throughput : Throughput, ?streaming, ?customizeCreate, ?customizeUpdate) : Async<unit> = async {
         let! tableDescription = t.InternalCreateOrValidate(throughput, ?streaming = streaming, ?customize = customizeCreate)
-        let maybeRequest = UpdateTableRequest.createIfRequired (tableName, template) tableDescription (Some throughput) streaming customizeUpdate
-        match maybeRequest with
+        match UpdateTableRequest.createIfRequired tableName tableDescription (Some throughput) streaming customizeUpdate with
         | None -> ()
         | Some request -> do! UpdateTableRequest.execute client request }
 

@@ -14,6 +14,7 @@
   * Added Support for `Throughput.OnDemand` mode (sets `BillingMode` to `PAY_PER_REQUEST` rather than attempting to configure a `ProvisionedThroughput`)
   * Added ability to configure DynamoDB streaming (via `Streaming` DU) to `InitializeTableAsync` and `ProvisionTableAsync` 
   * Removed `TableContext.CreateAsync` (replace with `TableContext.VerifyTableAsync` or `InitializeTableAsync`)
+  * Replaced `TableKeySchemata.CreateCreateTableRequest` with `ApplyToCreateTableRequest`
 
 ### 0.9.3-beta
 * Added `RequestMetrics` record type

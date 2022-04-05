@@ -368,9 +368,8 @@ type TableKeySchemata with
                 yield! td.GlobalSecondaryIndexes |> Seq.map mkGlobalSecondaryIndex
                 yield! td.LocalSecondaryIndexes |> Seq.map mkLocalSecondaryIndex |])
 
-    /// Create a CreateTableRequest using supplied key schema
-    member schema.CreateCreateTableRequest(tableName : string) =
-        let ctr = CreateTableRequest(TableName = tableName)
+    /// Applies the settings implied by the schema to the supplied CreateTableRequest
+    member schema.ApplyToCreateTableRequest(ctr : CreateTableRequest) =
         let inline mkKSE n t = KeySchemaElement(n, t)
 
         let keyAttrs = new Dictionary<string, KeyAttributeSchema>()
@@ -402,5 +401,3 @@ type TableKeySchemata with
         for attr in keyAttrs.Values do
             let ad = AttributeDefinition(attr.AttributeName, attr.KeyType)
             ctr.AttributeDefinitions.Add ad
-
-        ctr
