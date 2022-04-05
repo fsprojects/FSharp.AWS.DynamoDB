@@ -129,21 +129,3 @@ let isValidFieldName (name : string) =
 
 let isValidKeyName (name : string) =
     name <> null && name.Length > 0 && utf8Length name <= 255
-
-let unprocessedDeleteAttributeValues tableName (response : BatchWriteItemResponse) =
-    let (ok, reqs) = response.UnprocessedItems.TryGetValue tableName
-    if ok then
-        reqs |> Seq.choose (fun r -> r.DeleteRequest |> Option.ofObj)
-             |> Seq.map (fun d -> d.Key)
-             |> Seq.toArray
-    else
-        [||]
-
-let unprocessedPutAttributeValues tableName (response : BatchWriteItemResponse) =
-    let (ok, reqs) = response.UnprocessedItems.TryGetValue tableName
-    if ok then
-        reqs |> Seq.choose (fun r -> r.PutRequest |> Option.ofObj)
-             |> Seq.map (fun w -> w.Item)
-             |> Seq.toArray
-    else
-        [||]
