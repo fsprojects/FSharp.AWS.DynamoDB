@@ -8,6 +8,7 @@ open Swensen.Unquote
 
 open Amazon.DynamoDBv2
 open Amazon.Runtime
+open Xunit
 
 [<AutoOpen>]
 module Utils =
@@ -41,6 +42,9 @@ module Utils =
         member _.Client = client
         member _.TableName = tableName
 
-        interface IDisposable with
-            member _.Dispose() =
-                client.DeleteTableAsync(tableName) |> Async.AwaitTask |> Async.RunSynchronously |> ignore
+        interface IAsyncLifetime with
+            member _.InitializeAsync() =
+                System.Threading.Tasks.Task.CompletedTask
+            member _.DisposeAsync() =
+                client.DeleteTableAsync(tableName)
+

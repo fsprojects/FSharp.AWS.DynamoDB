@@ -1,4 +1,4 @@
-namespace FSharp.AWS.DynamoDB.Tests
+module FSharp.AWS.DynamoDB.Tests.MetricsCollector
 
 open System
 
@@ -10,26 +10,34 @@ open FSharp.AWS.DynamoDB.Scripting
 
 open Amazon.DynamoDBv2.Model
 
-[<AutoOpen>]
-module MetricsCollectorTests =
+type MetricsRecord =
+    {
+        [<HashKey>]
+        HashKey : string
+        [<RangeKey>]
+        RangeKey : int
 
-    type MetricsRecord =
-        {
-            [<HashKey>]
-            HashKey : string
-            [<RangeKey>]
-            RangeKey : int
+        [<LocalSecondaryIndex>]
+        LocalSecondaryRangeKey : string
 
-            [<LocalSecondaryIndex>]
-            LocalSecondaryRangeKey : string
+        [<GlobalSecondaryHashKey("GSI")>]
+        SecondaryHashKey : string
+        [<GlobalSecondaryRangeKey("GSI")>]
+        SecondaryRangeKey : int
 
-            [<GlobalSecondaryHashKey("GSI")>]
-            SecondaryHashKey : string
-            [<GlobalSecondaryRangeKey("GSI")>]
-            SecondaryRangeKey : int
+        LocalAttribute : int
+    }
 
-            LocalAttribute : int
-        }
+let rand = let r = Random() in fun () -> r.Next() |> int64
+let mkItem (hk : string) (gshk : string) (i : int): MetricsRecord =
+    {
+        HashKey = hk
+        RangeKey = i
+        LocalSecondaryRangeKey = guid()
+        SecondaryHashKey = gshk
+        SecondaryRangeKey = i
+        LocalAttribute = int (rand () % 2L)
+    }
 
 type TestCollector() =
 
@@ -39,23 +47,13 @@ type TestCollector() =
 
     member _.Metrics = metrics |> Seq.toList
 
-type ``Metrics Collector Tests`` (fixture : TableFixture) =
+let (|TotalCu|) : ConsumedCapacity list -> float = Seq.sumBy (fun c -> c.CapacityUnits)
 
-    let rand = let r = Random() in fun () -> r.Next() |> int64
-    let mkItem (hk : string) (gshk : string) (i : int): MetricsRecord =
-        {
-            HashKey = hk
-            RangeKey = i
-            LocalSecondaryRangeKey = guid()
-            SecondaryHashKey = gshk
-            SecondaryRangeKey = i
-            LocalAttribute = int (rand () % 2L)
-        }
+type Tests(fixture : TableFixture) =
 
     let table = TableContext.Create<MetricsRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
     let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some () else None
-    let (|TotalCu|) : ConsumedCapacity list -> float = Seq.sumBy (fun c -> c.CapacityUnits)
 
     let [<Fact>] ``Collect Metrics on TryGetItem`` () = async {
         let collector = TestCollector()
@@ -139,60 +137,6 @@ type ``Metrics Collector Tests`` (fixture : TableFixture) =
                     cu > 0
                 | _ -> false @>
 
-    let [<Fact>] ``Collect Metrics on Scan`` () =
-        let hk = guid()
-        let gsk = guid()
-        let items = [| for i in 0 .. 1000 -> mkItem hk gsk i |]
-        for item in items do
-          table.PutItem item |> ignore
-
-        let collector = TestCollector()
-        let sut = table.WithMetricsCollector(collector.Collect)
-
-        let items = sut.Scan()
-
-        test <@ match collector.Metrics with
-                | [{ ItemCount = c; Operation = Scan; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
-                    c = items.Length
-                    && cu > 0
-                | _ -> false @>
-
-    let [<Fact>] ``Collect Metrics on Query`` () =
-        let hk = guid()
-        let gsk = guid()
-        let items = [| for i in 0 .. 1000 -> mkItem hk gsk i |]
-        for item in items do
-          table.PutItem item |> ignore
-
-        let collector = TestCollector()
-        let sut = table.WithMetricsCollector(collector.Collect)
-
-        let items = sut.Query(<@ fun (r : MetricsRecord) -> r.HashKey = hk @>)
-
-        test <@ match collector.Metrics with
-                | [{ ItemCount = c; Operation = Query; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
-                    c = items.Length
-                    && cu > 0
-                | _ -> false @>
-
-    let [<Fact>] ``Collect Metrics on BatchGetItem`` () =
-        let hk = guid()
-        let gsk = guid()
-        let items = [| for i in 0 .. 99 -> mkItem hk gsk i |]
-        for item in items do
-          table.PutItem item |> ignore
-
-        let collector = TestCollector()
-        let sut = table.WithMetricsCollector(collector.Collect)
-
-        let items = sut.BatchGetItems(seq { for i in 0 .. 99 -> TableKey.Combined (hk, i) })
-
-        test <@ match collector.Metrics with
-                | [{ ItemCount = c; Operation = BatchGetItems; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
-                    c = items.Length
-                    && cu > 0
-                | _ -> false @>
-
     let [<Fact>] ``Collect Metrics on BatchPutItem`` () =
         let hk = guid()
         let gsk = guid()
@@ -230,3 +174,57 @@ type ``Metrics Collector Tests`` (fixture : TableFixture) =
                 | _ -> false @>
 
     interface IClassFixture<TableFixture>
+
+/// TableFixture with 1000 items with a known HashKey pre-inserted
+type ManyItemsFixture() =
+    inherit TableFixture()
+
+    // TOCONSIDER shift this into IAsyncLifetime.InitializeAsync
+    let table = TableContext.Create<MetricsRecord>(base.Client, base.TableName, createIfNotExists = true)
+
+    let hk = guid ()
+    do  let gsk = guid ()
+        let items = [| for i in 0 .. 99 -> mkItem hk gsk i |]
+        for item in items do
+            table.PutItem item |> ignore
+
+    member _.Table = table
+    member _.HashKey = hk
+
+/// NOTE These tests share the prep work of making a Table Containing lots of items to read
+// DO NOT add tests that will delete or mutate those items
+type ``Bulk Read Operations``(fixture : ManyItemsFixture) =
+
+    let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some () else None
+
+    let collector = TestCollector()
+    let sut = fixture.Table.WithMetricsCollector(collector.Collect)
+
+    let [<Fact>] ``Collect Metrics on Scan`` () =
+        let items = sut.Scan()
+
+        test <@ match collector.Metrics with
+                | [{ ItemCount = c; Operation = Scan; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    c = items.Length
+                    && cu > 0
+                | _ -> false @>
+
+    let [<Fact>] ``Collect Metrics on Query`` () =
+        let items = sut.Query(<@ fun (r : MetricsRecord) -> r.HashKey = fixture.HashKey @>)
+
+        test <@ match collector.Metrics with
+                | [{ ItemCount = c; Operation = Query; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    c = items.Length
+                    && cu > 0
+                | _ -> false @>
+
+    let [<Fact>] ``Collect Metrics on BatchGetItem`` () =
+        let items = sut.BatchGetItems(seq { for i in 0 .. 99 -> TableKey.Combined (fixture.HashKey, i) })
+
+        test <@ match collector.Metrics with
+                | [{ ItemCount = c; Operation = BatchGetItems; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    c = items.Length
+                    && cu > 0
+                | _ -> false @>
+
+    interface IClassFixture<ManyItemsFixture>
