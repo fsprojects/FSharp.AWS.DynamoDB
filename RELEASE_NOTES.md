@@ -1,6 +1,6 @@
 ### 0.9.4-beta
 * Moved Sync-over-Async versions of `TableContext` operations into `namespace FSharp.AWS.DynamoDB.Scripting`
-* Added `?collector` parameter to each operation on `TableContext` to enable separated collection for concurrent requests
+* Added `WithMetricsCollector()` copy method to allow separating metrics by context (eg by request)
 * Ensured metrics are reported even for failed requests
 * Added `TryGetItemAsync` (same as `GetItemAsync`, but returns `None`, instead of throwing, if an item is not present)
 
