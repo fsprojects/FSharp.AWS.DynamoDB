@@ -1,200 +1,219 @@
-namespace FSharp.AWS.DynamoDB.Tests
+module FSharp.AWS.DynamoDB.Tests.MetricsCollector
 
 open System
 
-open Expecto
+open Swensen.Unquote
+open Xunit
 
 open FSharp.AWS.DynamoDB
 open FSharp.AWS.DynamoDB.Scripting
 
-[<AutoOpen>]
-module MetricsCollectorTests =
+open Amazon.DynamoDBv2.Model
 
-    type MetricsRecord =
-        {
-            [<HashKey>]
-            HashKey : string
-            [<RangeKey>]
-            RangeKey : int
+type MetricsRecord =
+    {
+        [<HashKey>]
+        HashKey : string
+        [<RangeKey>]
+        RangeKey : int
 
-            [<LocalSecondaryIndex>]
-            LocalSecondaryRangeKey : string
+        [<LocalSecondaryIndex>]
+        LocalSecondaryRangeKey : string
 
-            [<GlobalSecondaryHashKey("GSI")>]
-            SecondaryHashKey : string
-            [<GlobalSecondaryRangeKey("GSI")>]
-            SecondaryRangeKey : int
+        [<GlobalSecondaryHashKey("GSI")>]
+        SecondaryHashKey : string
+        [<GlobalSecondaryRangeKey("GSI")>]
+        SecondaryRangeKey : int
 
-            LocalAttribute : int
-        }
+        LocalAttribute : int
+    }
+
+let rand = let r = Random() in fun () -> r.Next() |> int64
+let mkItem (hk : string) (gshk : string) (i : int): MetricsRecord =
+    {
+        HashKey = hk
+        RangeKey = i
+        LocalSecondaryRangeKey = guid()
+        SecondaryHashKey = gshk
+        SecondaryRangeKey = i
+        LocalAttribute = int (rand () % 2L)
+    }
 
 type TestCollector() =
+
     let metrics = ResizeArray<RequestMetrics>()
-    member _.Collect (m : RequestMetrics) =
-        metrics.Add m
 
-    member _.Metrics with get() = metrics |> Seq.toList
+    member _.Collect(m : RequestMetrics) = metrics.Add m
 
-type ``Metrics Collector Tests`` (fixture : TableFixture) =
+    member _.Metrics = metrics |> Seq.toList
 
-    let rand = let r = Random() in fun () -> int64 <| r.Next()
-    let mkItem (hk : string) (gshk : string) (i : int): MetricsRecord =
-        {
-            HashKey = hk
-            RangeKey = i
-            LocalSecondaryRangeKey = guid()
-            SecondaryHashKey = gshk
-            SecondaryRangeKey = i
-            LocalAttribute = int (rand () % 2L)
-        }
+let (|TotalCu|) : ConsumedCapacity list -> float = Seq.sumBy (fun c -> c.CapacityUnits)
 
-    let table = TableContext.Create<MetricsRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
+/// Tests without common setup
+type Tests(fixture : TableFixture) =
 
-    member __.``Collect Metrics on GetItem`` () =
+    let rawTable = TableContext.Create<MetricsRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
+
+    let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some () else None
+
+    let collector = TestCollector()
+    let sut = rawTable.WithMetricsCollector(collector.Collect)
+
+    let [<Fact>] ``Collect Metrics on TryGetItem`` () = async {
+        let! result =
+            let nonExistentHk = guid()
+            sut.TryGetItemAsync(key = TableKey.Combined (nonExistentHk, 0))
+        None =! result
+
+        test <@ match collector.Metrics with
+                | [{ ItemCount = 0; Operation = GetItem; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    cu > 0
+                | _ -> false @> }
+
+    let [<Fact>] ``Collect Metrics on PutItem`` () =
         let item = mkItem (guid()) (guid()) 0
-        table.PutItem item |> ignore
+        let _ = sut.PutItem item
 
-        let collector = TestCollector()
-        let _ = table.WithMetricsCollector(collector.Collect).GetItem (key = TableKey.Combined (item.HashKey, 0))
-        Expect.equal collector.Metrics.Length 1 ""
-        let metrics = collector.Metrics.Head
-        Expect.equal metrics.Operation GetItem ""
-        Expect.equal metrics.TableName fixture.TableName ""
-        Expect.equal metrics.ItemCount 1 ""
-        Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
+        test <@ match collector.Metrics with
+                | [{ ItemCount = 1; Operation = PutItem; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    cu > 0
+                | _ -> false @>
 
-    member __.``Collect Metrics on ContainsKey`` () =
-        let item = mkItem (guid()) (guid()) 0
-        table.PutItem item |> ignore
+    interface IClassFixture<TableFixture>
 
-        let collector = TestCollector()
-        let _ = table.WithMetricsCollector(collector.Collect).ContainsKey (key = TableKey.Combined (item.HashKey, 0))
-        Expect.equal collector.Metrics.Length 1 ""
-        let metrics = collector.Metrics.Head
-        Expect.equal metrics.Operation GetItem ""
-        Expect.equal metrics.TableName fixture.TableName ""
-        Expect.equal metrics.ItemCount 1 ""
-        Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
+/// Tests that look up a specific item. Each test run gets a fresh individual item
+type ItemTests(fixture : TableFixture) =
 
-    member __.``Collect Metrics on PutItem`` () =
-        let item = mkItem (guid()) (guid()) 0
-        let collector = TestCollector()
-        table.WithMetricsCollector(collector.Collect).PutItem item |> ignore
+    let rawTable = TableContext.Create<MetricsRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
+    let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some () else None
 
-        Expect.equal collector.Metrics.Length 1 ""
-        let metrics = collector.Metrics.Head
-        Expect.equal metrics.Operation PutItem ""
-        Expect.equal metrics.TableName fixture.TableName ""
-        Expect.equal metrics.ItemCount 1 ""
-        Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
+    let item = mkItem (guid()) (guid()) 0
+    do  rawTable.PutItem item |> ignore
 
-    member __.``Collect Metrics on UpdateItem`` () =
-        let item = mkItem (guid()) (guid()) 0
-        let collector = TestCollector()
-        table.PutItem item |> ignore
-        table.WithMetricsCollector(collector.Collect).UpdateItem(TableKey.Combined (item.HashKey, item.RangeKey), <@ fun (i : MetricsRecord) -> { i with LocalAttribute = 1000 } @>) |> ignore
 
-        Expect.equal collector.Metrics.Length 1 ""
-        let metrics = collector.Metrics.Head
-        Expect.equal metrics.Operation UpdateItem ""
-        Expect.equal metrics.TableName fixture.TableName ""
-        Expect.equal metrics.ItemCount 1 ""
-        Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
+    let collector = TestCollector()
+    let sut = rawTable.WithMetricsCollector(collector.Collect)
 
-    member __.``Collect Metrics on DeleteItem`` () =
-        let item = mkItem (guid()) (guid()) 0
-        let collector = TestCollector()
-        table.PutItem item |> ignore
-        table.WithMetricsCollector(collector.Collect).DeleteItem(TableKey.Combined (item.HashKey, item.RangeKey)) |> ignore
+    let [<Fact>] ``Collect Metrics on GetItem`` () =
+        let _ = sut.GetItem(key = TableKey.Combined (item.HashKey, 0))
 
-        Expect.equal collector.Metrics.Length 1 ""
-        let metrics = collector.Metrics.Head
-        Expect.equal metrics.Operation DeleteItem ""
-        Expect.equal metrics.TableName fixture.TableName ""
-        Expect.equal metrics.ItemCount 1 ""
-        Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
+        test <@ match collector.Metrics with
+                | [{ ItemCount = 1; Operation = GetItem; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    cu > 0
+                | _ -> false @>
 
-    member __.``Collect Metrics on Scan`` () =
-        let hk = guid()
-        let gsk = guid()
-        let items = seq { for i in 0 .. 1000 -> mkItem hk gsk i } |> Seq.toArray |> Array.sortBy (fun r -> r.RangeKey)
+    let [<Fact>] ``Collect Metrics on ContainsKey`` () =
+        let _ = sut.ContainsKey(key = TableKey.Combined (item.HashKey, 0))
+
+        test <@ match collector.Metrics with
+                | [{ ItemCount = 1; Operation = GetItem; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    cu > 0
+                | _ -> false @>
+
+    let [<Fact>] ``Collect Metrics on UpdateItem`` () =
+        let _ = sut.UpdateItem(TableKey.Combined (item.HashKey, item.RangeKey), <@ fun (i : MetricsRecord) -> { i with LocalAttribute = 1000 } @>)
+
+        test <@ match collector.Metrics with
+                | [{ ItemCount = 1; Operation = UpdateItem; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    cu > 0
+                | _ -> false @>
+
+    let [<Fact>] ``Collect Metrics on DeleteItem`` () =
+        let _ = sut.DeleteItem(TableKey.Combined (item.HashKey, item.RangeKey))
+
+        test <@ match collector.Metrics with
+                | [{ ItemCount = 1; Operation = DeleteItem; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    cu > 0
+                | _ -> false @>
+
+    interface IClassFixture<TableFixture>
+
+/// Heavy tests reliant on establishing (and mutating) multiple items. Separate Test Class so Xunit will run thme in parallel with others
+type BulkMutationTests(fixture : TableFixture) =
+
+    let rawTable = TableContext.Create<MetricsRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
+    let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some () else None
+
+    // NOTE we mutate the items so they need to be established each time
+    let items =
+        let hk, gsk = guid (), guid ()
+        [| for i in 0 .. 24 -> mkItem hk gsk i |]
+    do  for item in items do
+            rawTable.PutItem item |> ignore
+
+    let collector = TestCollector()
+    let sut = rawTable.WithMetricsCollector(collector.Collect)
+
+    let [<Fact>] ``Collect Metrics on BatchPutItem`` () =
+        let _results = sut.BatchPutItems(items |> Seq.map (fun i -> { i with LocalAttribute = 1000 }))
+
+        test <@ match collector.Metrics with
+                | [{ ItemCount = c; Operation = BatchWriteItems; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    c = items.Length
+                    && cu > 0
+                | _ -> false @>
+
+    let [<Fact>] ``Collect Metrics on BatchDeleteItem`` () =
+        let _keys = sut.BatchDeleteItems(items |> Seq.map (fun i -> TableKey.Combined (i.HashKey, i.RangeKey)))
+
+        test <@ match collector.Metrics with
+                | [{ ItemCount = c; Operation = BatchWriteItems; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    c = items.Length
+                    && cu > 0
+                | _ -> false @>
+
+    interface IClassFixture<TableFixture>
+
+/// TableFixture with 1000 items with a known HashKey pre-inserted
+type ManyReadOnlyItemsFixture() =
+    inherit TableFixture()
+
+    // TOCONSIDER shift this into IAsyncLifetime.InitializeAsync
+    let table = TableContext.Create<MetricsRecord>(base.Client, base.TableName, createIfNotExists = true)
+
+    let hk = guid ()
+    do  let gsk = guid ()
+        let items = [| for i in 0 .. 99 -> mkItem hk gsk i |]
         for item in items do
-          table.PutItem item |> ignore
+            table.PutItem item |> ignore
 
-        let collector = TestCollector()
-        let items = table.WithMetricsCollector(collector.Collect).Scan()
+    member _.Table = table
+    member _.HashKey = hk
 
-        Expect.equal collector.Metrics.Length 1 ""
-        let metrics = collector.Metrics.Head
-        Expect.equal metrics.Operation Scan ""
-        Expect.equal metrics.TableName fixture.TableName ""
-        Expect.equal metrics.ItemCount items.Length ""
-        Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
+/// NOTE These tests share the prep work of making a Table Containing lots of items to read
+// DO NOT add tests that will delete or mutate those items
+type ``Bulk Read Operations``(fixture : ManyReadOnlyItemsFixture) =
 
-    member __.``Collect Metrics on Query`` () =
-        let hk = guid()
-        let gsk = guid()
-        let items = seq { for i in 0 .. 1000 -> mkItem hk gsk i } |> Seq.toArray |> Array.sortBy (fun r -> r.RangeKey)
-        for item in items do
-          table.PutItem item |> ignore
+    let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some () else None
 
-        let collector = TestCollector()
-        let items = table.WithMetricsCollector(collector.Collect).Query(<@ fun (r : MetricsRecord) -> r.HashKey = hk @>)
+    let collector = TestCollector()
+    let sut = fixture.Table.WithMetricsCollector(collector.Collect)
 
-        Expect.equal collector.Metrics.Length 1 ""
-        let metrics = collector.Metrics.Head
-        Expect.equal metrics.Operation Query ""
-        Expect.equal metrics.TableName fixture.TableName ""
-        Expect.equal metrics.ItemCount items.Length ""
-        Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
+    let [<Fact>] ``Collect Metrics on Scan`` () =
+        let items = sut.Scan()
 
-    member __.``Collect Metrics on BatchGetItem`` () =
-        let hk = guid()
-        let gsk = guid()
-        let items = seq { for i in 0 .. 99 -> mkItem hk gsk i } |> Seq.toArray |> Array.sortBy (fun r -> r.RangeKey)
-        for item in items do
-          table.PutItem item |> ignore
+        test <@ match collector.Metrics with
+                | [{ ItemCount = c; Operation = Scan; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    c = items.Length
+                    && cu > 0
+                | _ -> false @>
 
-        let collector = TestCollector()
-        let items = table.WithMetricsCollector(collector.Collect).BatchGetItems (seq { for i in 0 .. 99 -> TableKey.Combined (hk, i) })
+    let [<Fact>] ``Collect Metrics on Query`` () =
+        let items = sut.Query(<@ fun (r : MetricsRecord) -> r.HashKey = fixture.HashKey @>)
 
-        Expect.equal collector.Metrics.Length 1 ""
-        let metrics = collector.Metrics.Head
-        Expect.equal metrics.Operation BatchGetItems ""
-        Expect.equal metrics.TableName fixture.TableName ""
-        Expect.equal metrics.ItemCount items.Length ""
-        Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
+        test <@ match collector.Metrics with
+                | [{ ItemCount = c; Operation = Query; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    c = items.Length
+                    && cu > 0
+                | _ -> false @>
 
-    member __.``Collect Metrics on BatchPutItem`` () =
-        let hk = guid()
-        let gsk = guid()
-        let items = seq { for i in 0 .. 24 -> mkItem hk gsk i } |> Seq.toArray |> Array.sortBy (fun r -> r.RangeKey)
-        for item in items do
-          table.PutItem item |> ignore
+    let [<Fact>] ``Collect Metrics on BatchGetItem`` () =
+        let items = sut.BatchGetItems(seq { for i in 0 .. 99 -> TableKey.Combined (fixture.HashKey, i) })
 
-        let collector = TestCollector()
-        table.WithMetricsCollector(collector.Collect).BatchPutItems (items |> Seq.map (fun i -> { i with LocalAttribute = 1000 })) |> ignore
+        test <@ match collector.Metrics with
+                | [{ ItemCount = c; Operation = BatchGetItems; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                    c = items.Length
+                    && cu > 0
+                | _ -> false @>
 
-        Expect.equal collector.Metrics.Length 1 ""
-        let metrics = collector.Metrics.Head
-        Expect.equal metrics.Operation BatchWriteItems ""
-        Expect.equal metrics.TableName fixture.TableName ""
-        Expect.equal metrics.ItemCount items.Length ""
-        Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
-
-    member __.``Collect Metrics on BatchDeleteItem`` () =
-        let hk = guid()
-        let gsk = guid()
-        let items = seq { for i in 0 .. 24 -> mkItem hk gsk i } |> Seq.toArray |> Array.sortBy (fun r -> r.RangeKey)
-        for item in items do
-          table.PutItem item |> ignore
-
-        let collector = TestCollector()
-        table.WithMetricsCollector(collector.Collect).BatchDeleteItems (items |> Seq.map (fun i -> TableKey.Combined (i.HashKey, i.RangeKey))) |> ignore
-
-        Expect.equal collector.Metrics.Length 1 ""
-        let metrics = collector.Metrics.Head
-        Expect.equal metrics.Operation BatchWriteItems ""
-        Expect.equal metrics.TableName fixture.TableName ""
-        Expect.equal metrics.ItemCount items.Length ""
-        Expect.isGreaterThan (metrics.ConsumedCapacity |> Seq.sumBy (fun c -> c.CapacityUnits)) 0. ""
+    interface IClassFixture<ManyReadOnlyItemsFixture>

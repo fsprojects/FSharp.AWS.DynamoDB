@@ -2,7 +2,8 @@ namespace FSharp.AWS.DynamoDB.Tests
 
 open System
 
-open Expecto
+open Swensen.Unquote
+open Xunit
 
 open FSharp.AWS.DynamoDB
 open FSharp.AWS.DynamoDB.Scripting
@@ -44,56 +45,58 @@ type ``Pagination Tests`` (fixture : TableFixture) =
 
     let table = TableContext.Create<PaginationRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
-    member __.``Paginated Query on Primary Key`` () =
+    let [<Fact>] ``Paginated Query on Primary Key`` () =
         let hk = guid()
         let gsk = guid()
         let items = seq { for _ in 0 .. 9 -> mkItem hk gsk } |> Seq.toArray |> Array.sortBy (fun r -> r.RangeKey)
         for item in items do
-          table.PutItem item |> ignore
+            table.PutItem item |> ignore
         let res1 = table.QueryPaginated (<@ fun r -> r.HashKey = hk @>, limit = 5)
         let res2 = table.QueryPaginated (<@ fun r -> r.HashKey = hk @>, limit = 5, ?exclusiveStartKey = res1.LastEvaluatedKey)
         let res3 = table.QueryPaginated (<@ fun r -> r.HashKey = hk @>, limit = 5, ?exclusiveStartKey = res2.LastEvaluatedKey)
-        Expect.isSome res1.LastEvaluatedKey ""
-        Expect.isSome res2.LastEvaluatedKey ""
-        Expect.isNone res3.LastEvaluatedKey ""
-        Expect.sequenceEqual (Array.append res1.Records res2.Records) items ""
-        Expect.isEmpty res3.Records ""
+        test <@ None <> res1.LastEvaluatedKey
+                && None <> res2.LastEvaluatedKey
+                && None = res3.LastEvaluatedKey @>
+        test <@ items = Array.append res1.Records res2.Records
+                && Array.isEmpty res3.Records @>
 
-    member __.``Paginated Query on LSI`` () =
+    let [<Fact>] ``Paginated Query on LSI`` () =
         let hk = guid()
         let gsk = guid()
         let items = seq { for _ in 0 .. 9 -> mkItem hk gsk } |> Seq.toArray |> Array.sortBy (fun r -> r.LocalSecondaryRangeKey)
         for item in items do
-          table.PutItem item |> ignore
+            table.PutItem item |> ignore
         let res1 = table.QueryPaginated (<@ fun r -> r.HashKey = hk && r.LocalSecondaryRangeKey > "0" @>, limit = 5)
         let res2 = table.QueryPaginated (<@ fun r -> r.HashKey = hk && r.LocalSecondaryRangeKey > "0" @>, limit = 5, ?exclusiveStartKey = res1.LastEvaluatedKey)
         let res3 = table.QueryPaginated (<@ fun r -> r.HashKey = hk && r.LocalSecondaryRangeKey > "0" @>, limit = 5, ?exclusiveStartKey = res2.LastEvaluatedKey)
-        Expect.isSome res1.LastEvaluatedKey ""
-        Expect.isSome res2.LastEvaluatedKey ""
-        Expect.isNone res3.LastEvaluatedKey ""
-        Expect.sequenceEqual (Array.append res1.Records res2.Records) items ""
-        Expect.isEmpty res3.Records ""
+        test <@ None <> res1.LastEvaluatedKey
+                && None <> res2.LastEvaluatedKey
+                && None = res3.LastEvaluatedKey @>
+        test <@ items = Array.append res1.Records res2.Records
+                && Array.isEmpty res3.Records @>
 
-    member __.``Paginated Query on GSI`` () =
+    let [<Fact>] ``Paginated Query on GSI`` () =
         let hk = guid()
         let gsk = guid()
         let items = seq { for _ in 0 .. 9 -> mkItem hk gsk } |> Seq.toArray |> Array.sortBy (fun r -> r.SecondaryRangeKey)
         for item in items do
-          table.PutItem item |> ignore
+            table.PutItem item |> ignore
         let res1 = table.QueryPaginated (<@ fun r -> r.SecondaryHashKey = gsk @>, limit = 5)
         let res2 = table.QueryPaginated (<@ fun r -> r.SecondaryHashKey = gsk @>, limit = 5, ?exclusiveStartKey = res1.LastEvaluatedKey)
         let res3 = table.QueryPaginated (<@ fun r -> r.SecondaryHashKey = gsk @>, limit = 5, ?exclusiveStartKey = res2.LastEvaluatedKey)
-        Expect.isSome res1.LastEvaluatedKey ""
-        Expect.isSome res2.LastEvaluatedKey ""
-        Expect.isNone res3.LastEvaluatedKey ""
-        Expect.sequenceEqual (Array.append res1.Records res2.Records) items ""
-        Expect.isEmpty res3.Records ""
+        test <@ None <> res1.LastEvaluatedKey
+                && None <> res2.LastEvaluatedKey
+                && None = res3.LastEvaluatedKey @>
+        test <@ items = Array.append res1.Records res2.Records
+                && Array.isEmpty res3.Records @>
 
-    member __.``Paginated Query with filter`` () =
+    let [<Fact>] ``Paginated Query with filter`` () =
         let hk = guid()
         let gsk = guid()
         let items = seq { for _ in 0 .. 49 -> mkItem hk gsk } |> Seq.toArray |> Array.sortBy (fun r -> r.RangeKey)
         for item in items do
-          table.PutItem item |> ignore
+            table.PutItem item |> ignore
         let res = table.QueryPaginated (<@ fun r -> r.HashKey = hk @>, filterCondition = <@ fun r -> r.LocalAttribute = 0 @>, limit = 5)
-        Expect.sequenceEqual res.Records (items |> Array.filter (fun r -> r.LocalAttribute = 0) |> Array.take 5) ""
+        test <@ items |> Array.filter (fun r -> r.LocalAttribute = 0) |> Array.take 5 = res.Records @>
+
+    interface IClassFixture<TableFixture>

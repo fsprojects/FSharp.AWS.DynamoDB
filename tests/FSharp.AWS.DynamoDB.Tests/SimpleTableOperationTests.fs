@@ -2,7 +2,8 @@
 
 open System
 
-open Expecto
+open Swensen.Unquote
+open Xunit
 
 open FSharp.AWS.DynamoDB
 open FSharp.AWS.DynamoDB.Scripting // These tests lean on the Synchronous wrappers
@@ -26,7 +27,7 @@ module SimpleTableTypes =
             Unions : Choice<string, int64, byte[]> list
         }
 
-    [<ConstantHashKeyAttribute("HashKey", "compatible")>]
+    [<ConstantHashKey("HashKey", "compatible")>]
     type CompatibleRecord =
         {
             [<RangeKey; CustomName("RangeKey")>]
@@ -35,7 +36,7 @@ module SimpleTableTypes =
             Values : Set<int>
         }
 
-    [<ConstantRangeKeyAttribute("RangeKey", "compatible")>]
+    [<ConstantRangeKey("RangeKey", "compatible")>]
     type CompatibleRecord2 =
         {
             [<HashKey; CustomName("HashKey")>]
@@ -51,76 +52,77 @@ type ``Simple Table Operation Tests`` (fixture : TableFixture) =
         {
             HashKey = guid() ; RangeKey = guid() ;
             Value = rand() ; Tuple = rand(), rand() ;
-            Map = seq { for i in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq
+            Map = seq { for _ in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq
             Unions = [Choice1Of3 (guid()) ; Choice2Of3(rand()) ; Choice3Of3(Guid.NewGuid().ToByteArray())]
         }
 
     let table = TableContext.Create<SimpleRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
 
-    member this.``Convert to compatible table`` () =
+    let [<Fact>] ``Convert to compatible table`` () =
         let table' = table.WithRecordType<CompatibleRecord> ()
-        Expect.equal table'.PrimaryKey table.PrimaryKey "PrimaryKey should be equal"
+        test <@ table.PrimaryKey = table'.PrimaryKey @>
 
-    member this.``Convert to compatible table 2`` () =
+    let [<Fact>] ``Convert to compatible table 2`` () =
         let table' = table.WithRecordType<CompatibleRecord2> ()
-        Expect.equal table'.PrimaryKey table.PrimaryKey "PrimaryKey should be equal"
+        test <@ table.PrimaryKey = table'.PrimaryKey @>
 
-    member this.``Simple Put Operation`` () =
+    let [<Fact>] ``Simple Put Operation`` () =
         let value = mkItem()
         let key = table.PutItem value
         let value' = table.GetItem key
-        Expect.equal value' value "value should be equal"
+        test <@ value = value' @>
 
-    member this.``ContainsKey Operation`` () =
+    let [<Fact>] ``ContainsKey Operation`` () =
         let value = mkItem()
         let key = table.PutItem value
-        Expect.equal (table.ContainsKey key) true "ContainsKey should be true"
+        test <@ table.ContainsKey key @>
         let _ = table.DeleteItem key
-        Expect.equal (table.ContainsKey key) false "ContainsKey should be false"
+        test <@ not (table.ContainsKey key) @>
 
-    member this.``TryGet Operation`` () =
+    let [<Fact>] ``TryGet Operation`` () =
         let value = mkItem()
         let computedKey = table.Template.ExtractKey value
         let get k = table.TryGetItemAsync k |> Async.RunSynchronously
         let initialLoad = get computedKey
-        Expect.equal initialLoad None "TryGetItemAsync should yield None when not present"
+        test <@ None = initialLoad @>
         let key = table.PutItem value
-        Expect.equal computedKey key "Local key computation should be same as Put result"
+        test <@ computedKey = key @> // "Local key computation should be same as Put result"
         let loaded = get computedKey
-        Expect.equal (Some value) loaded "TryGetItemAsync should yield roundtripped value"
+        test <@ Some value = loaded @>
         let _ = table.DeleteItem key
-        Expect.equal (get key |> Option.isSome) false "TryGetItemAsync should yield None"
+        test <@ None = get key @>
 
-    member this.``Batch Put Operation`` () =
-        let values = set [ for i in 1L .. 20L -> mkItem() ]
+    let [<Fact>] ``Batch Put Operation`` () =
+        let values = set [ for _ in 1L .. 20L -> mkItem() ]
         let unprocessed = table.BatchPutItems values
         let values' = table.BatchGetItems (values |> Seq.map (fun r -> TableKey.Combined (r.HashKey, r.RangeKey))) |> Set.ofArray
-        Expect.isEmpty unprocessed "Batch Put operations should have all succeeded"
-        Expect.equal values' values "values should be equal"
+        test <@ Array.isEmpty unprocessed @>
+        test <@ values = values' @>
 
-    member this.``Batch Delete Operation`` () =
-        let values = set [ for i in 1L .. 20L -> mkItem() ]
+    let [<Fact>] ``Batch Delete Operation`` () =
+        let values = set [ for _ in 1L .. 20L -> mkItem() ]
         table.BatchPutItems values |> ignore
         let unprocessed = table.BatchDeleteItems (values |> Seq.map (fun r -> TableKey.Combined (r.HashKey, r.RangeKey)))
-        Expect.isEmpty unprocessed "Batch Delete operations should have all succeeded"
-        let values' = table.BatchGetItems (values |> Seq.map (fun r -> TableKey.Combined (r.HashKey, r.RangeKey))) |> Set.ofArray
-        Expect.isEmpty values' "values should be empty"
+        test <@ Array.isEmpty unprocessed @>
+        let values' = table.BatchGetItems (values |> Seq.map (fun r -> TableKey.Combined (r.HashKey, r.RangeKey)))
+        test <@ Array.isEmpty values' @>
 
-    member this.``Simple Delete Operation`` () =
+    let [<Fact>] ``Simple Delete Operation`` () =
         let item = mkItem()
         let key = table.PutItem item
-        Expect.equal (table.ContainsKey key) true "ContainsKey should be true"
+        test <@ table.ContainsKey key @>
         let item' = table.DeleteItem key
-        Expect.isSome item' "deleted item should be returned"
-        Expect.equal item' (Some item) "item should be equal"
-        Expect.equal (table.ContainsKey key) false "ContainsKey should be false"
+        test <@ Some item = item' @>
+        test <@ not (table.ContainsKey key) @>
 
-    member this.``Idempotent Delete Operation`` () =
+    let [<Fact>] ``Idempotent Delete Operation`` () =
         let item = mkItem()
         let key = table.PutItem item
-        Expect.equal (table.ContainsKey key) true "ContainsKey should be true"
+        test <@ table.ContainsKey key @>
         let item' = table.DeleteItem key
-        Expect.isSome item' "deleted item should be returned"
+        test <@ Option.isSome item' @>
         let deletedItem = table.DeleteItem key
-        Expect.isNone deletedItem "delete nonexistent item should return None"
-        Expect.isFalse (table.ContainsKey key) "ContainsKey should be false"
+        test <@ None = deletedItem @>
+        test <@ not (table.ContainsKey key) @>
+
+    interface IClassFixture<TableFixture>

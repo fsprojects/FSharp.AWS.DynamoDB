@@ -5,9 +5,6 @@ framework: net60, netstandard20, netstandard21
 
 nuget Unquote ~> 6.1.0
 nuget FSharp.Core >= 4.7.2 lowest_matching: true
-nuget Expecto
-nuget FsCheck 2.14.3
-nuget Expecto.FsCheck
 
 nuget AWSSDK.DynamoDBv2 ~> 3.7.0
 github eiriktsarpalis/TypeShape:2.16 src/TypeShape/TypeShape.fs

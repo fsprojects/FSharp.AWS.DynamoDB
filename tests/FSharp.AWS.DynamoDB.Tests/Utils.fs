@@ -3,36 +3,34 @@
 open System
 open System.IO
 
-open Expecto
 open FsCheck
+open Swensen.Unquote
 
-open Amazon
-open Amazon.Util
 open Amazon.DynamoDBv2
 open Amazon.Runtime
-
-open FSharp.AWS.DynamoDB
+open Xunit
 
 [<AutoOpen>]
 module Utils =
 
     let getRandomTableName() =
-        sprintf "fsdynamodb-%s" <| System.Guid.NewGuid().ToString("N")
+        sprintf "fsdynamodb-%s" <| Guid.NewGuid().ToString("N")
 
     let guid() = Guid.NewGuid().ToString("N")
 
     let shouldFailwith<'T, 'Exn when 'Exn :> exn>(f : unit -> 'T) =
-        ignore <| Expect.throws (f >> ignore) typeof<'Exn>.Name
+        <@ f () |>  ignore @>
+        |> raises<'Exn>
 
     let getDynamoDBAccount () =
-        let credentials = new BasicAWSCredentials("Fake", "Fake")
+        let credentials = BasicAWSCredentials("Fake", "Fake")
         let config = AmazonDynamoDBConfig()
         config.ServiceURL <- "http://localhost:8000"
         new AmazonDynamoDBClient(credentials, config) :> IAmazonDynamoDB
 
 
     type FsCheckGenerators =
-        static member MemoryStream = 
+        static member MemoryStream =
             Arb.generate<byte[] option>
             |> Gen.map (function None -> null | Some bs -> new MemoryStream(bs))
             |> Arb.fromGen
@@ -41,9 +39,12 @@ module Utils =
     type TableFixture() =
         let client = getDynamoDBAccount()
         let tableName = getRandomTableName()
-        member __.Client = client
-        member __.TableName = tableName
+        member _.Client = client
+        member _.TableName = tableName
 
-        interface IDisposable with
-            member __.Dispose() =
-                client.DeleteTableAsync(tableName) |> Async.AwaitTask |> Async.RunSynchronously |> ignore
+        interface IAsyncLifetime with
+            member _.InitializeAsync() =
+                System.Threading.Tasks.Task.CompletedTask
+            member _.DisposeAsync() =
+                client.DeleteTableAsync(tableName)
+

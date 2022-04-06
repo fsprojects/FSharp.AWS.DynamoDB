@@ -31,7 +31,7 @@ let gitHome = "https://github.com/" + gitOwner
 
 let buildDir  = "./build/"
 let nugetDir  = "./out/"
- 
+
 
 System.Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 let release = ReleaseNotes.parse (System.IO.File.ReadAllLines "RELEASE_NOTES.md")
@@ -42,10 +42,10 @@ let release = ReleaseNotes.parse (System.IO.File.ReadAllLines "RELEASE_NOTES.md"
 let isNullOrWhiteSpace = System.String.IsNullOrWhiteSpace
 
 let exec cmd args dir =
-    let proc = 
+    let proc =
         CreateProcess.fromRawCommandLine cmd args
         |> CreateProcess.ensureExitCodeWithMessage (sprintf "Error while running '%s' with args: %s" cmd args)
-    (if isNullOrWhiteSpace dir then proc 
+    (if isNullOrWhiteSpace dir then proc
     else proc |> CreateProcess.withWorkingDirectory dir)
     |> Proc.run
     |> ignore
@@ -66,7 +66,7 @@ Target.create "AssemblyInfo" (fun _ ->
           AssemblyInfo.Product project
           AssemblyInfo.Description summary
           AssemblyInfo.Version release.AssemblyVersion
-          AssemblyInfo.FileVersion release.AssemblyVersion 
+          AssemblyInfo.FileVersion release.AssemblyVersion
           AssemblyInfo.InternalsVisibleTo (projectName + ".Tests")
         ]
 
@@ -99,7 +99,7 @@ Target.create "Build" (fun _ ->
 )
 
 Target.create "Test" (fun _ ->
-    exec "dotnet"  @"run --project .\tests\FSharp.AWS.DynamoDB.Tests\FSharp.AWS.DynamoDB.Tests.fsproj" "."
+    exec "dotnet" @"test --configuration Release tests/FSharp.AWS.DynamoDB.Tests" "."
 )
 
 // TODO: FSharp.Formatting docs
@@ -124,8 +124,8 @@ Target.create "Pack" (fun _ ->
         { p with
             Configuration = DotNet.BuildConfiguration.Release
             OutputPath = Some nugetDir
-            MSBuildParams = { p.MSBuildParams with 
-                                Properties = 
+            MSBuildParams = { p.MSBuildParams with
+                                Properties =
                                     [
                                         ("Version", release.NugetVersion)
                                         ("PackageReleaseNotes", String.concat "\n" release.Notes)

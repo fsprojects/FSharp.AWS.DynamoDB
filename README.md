@@ -255,7 +255,7 @@ Tests are run using dynamodb-local on port 8000. Using the docker image is recom
 
 then
 
-`dotnet run --project tests/FSharp.AWS.DynamoDB.Tests/FSharp.AWS.DynamoDB.Tests.fsproj`
+`dotnet test -c Release`
 
 ## Maintainer(s)
 

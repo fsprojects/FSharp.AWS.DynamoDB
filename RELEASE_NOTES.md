@@ -3,6 +3,7 @@
 * Added `WithMetricsCollector()` copy method to allow separating metrics by context (eg by request)
 * Ensured metrics are reported even for failed requests
 * Added `TryGetItemAsync` (same as `GetItemAsync`, but returns `None`, instead of throwing, if an item is not present)
+* Switched test framework to Xunit, assertions to Unquote, runner to `dotnet test` 
 
 ### 0.9.3-beta
 * Added `RequestMetrics` record type
