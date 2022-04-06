@@ -9,6 +9,7 @@
     <Company />
     <Copyright>Copyright 2016</Copyright>
     <Product />
+    <PackageLicense>MIT</PackageLicense>
     <PackageLicenseUrl>https://github.com/fsprojects/FSharp.AWS.DynamoDB/blob/master/License.md</PackageLicenseUrl>
     <PackageProjectUrl>https://github.com/fsprojects/FSharp.AWS.DynamoDB</PackageProjectUrl>
     <PackageIconUrl>https://avatars0.githubusercontent.com/u/6001315</PackageIconUrl>

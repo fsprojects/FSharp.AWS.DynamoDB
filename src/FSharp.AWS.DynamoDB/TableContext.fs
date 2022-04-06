@@ -35,11 +35,15 @@ module internal Throughput =
     let requiresUpdate (desc : TableDescription) = function
         | Throughput.Provisioned t ->
             let current = desc.ProvisionedThroughput
-            desc.BillingModeSummary.BillingMode <> BillingMode.PROVISIONED
+            match desc.BillingModeSummary with
+            | null -> false
+            | bms -> bms.BillingMode <> BillingMode.PROVISIONED
             || t.ReadCapacityUnits <> current.ReadCapacityUnits
             || t.WriteCapacityUnits <> current.WriteCapacityUnits
         | Throughput.OnDemand ->
-            desc.BillingModeSummary.BillingMode <> BillingMode.PAY_PER_REQUEST
+            match desc.BillingModeSummary with
+            | null -> false
+            | bms -> bms.BillingMode <> BillingMode.PAY_PER_REQUEST
     let applyToUpdateRequest (req : UpdateTableRequest) = function
         | Throughput.Provisioned t ->
             req.BillingMode <- BillingMode.PROVISIONED
@@ -113,13 +117,12 @@ module Provisioning =
         let rec wait () = async {
             let! ct = Async.CancellationToken
             let! td = client.DescribeTableAsync(tableName, ct) |> Async.AwaitTaskCorrect
-            if td.Table.TableStatus = TableStatus.ACTIVE then
+            if td.Table.TableStatus <> TableStatus.ACTIVE then
                 do! Async.Sleep 2000
                 // wait indefinitely if table is in transition state
                 return! wait ()
             else
-
-            return td.Table
+                return td.Table
         }
         wait ()
 

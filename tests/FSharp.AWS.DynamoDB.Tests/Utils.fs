@@ -5,12 +5,12 @@ open System.IO
 
 open FsCheck
 open Swensen.Unquote
+open Xunit
 
 open FSharp.AWS.DynamoDB
 
 open Amazon.DynamoDBv2
 open Amazon.Runtime
-open Xunit
 
 [<AutoOpen>]
 module Utils =
@@ -47,7 +47,7 @@ module Utils =
         member _.TableName = tableName
 
         member _.CreateContextAndTableIfNotExists<'TRecord>() =
-            let throughput = Model.ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
+            let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
             Scripting.TableContext.Initialize<'TRecord>(client, tableName, Throughput.Provisioned throughput)
 
         interface IAsyncLifetime with
