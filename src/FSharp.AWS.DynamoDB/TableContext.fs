@@ -27,7 +27,7 @@ type Throughput =
 module internal Throughput =
     let applyToCreateRequest (req : CreateTableRequest) = function
         | Throughput.Provisioned t ->
-            req.ProvisionedThroughput <- t
+            req.ProvisionedThroughput <- t // TOCONSIDER also do req.BillingMode <- BillingMode.PROVISIONED or DescribeTableResponse does not include a BillingModeSummary on dynamodb-local
             for gsi in req.GlobalSecondaryIndexes do
                 gsi.ProvisionedThroughput <- t
         | Throughput.OnDemand ->
@@ -36,13 +36,13 @@ module internal Throughput =
         | Throughput.Provisioned t ->
             let current = desc.ProvisionedThroughput
             match desc.BillingModeSummary with
-            | null -> false
+            | null -> false // can happen if initial create did not explicitly specify a BillingMode when creating
             | bms -> bms.BillingMode <> BillingMode.PROVISIONED
             || t.ReadCapacityUnits <> current.ReadCapacityUnits
             || t.WriteCapacityUnits <> current.WriteCapacityUnits
         | Throughput.OnDemand ->
             match desc.BillingModeSummary with
-            | null -> false
+            | null -> false // // can happen if initial create did not explicitly specify a BillingMode when creating, i.e. Table was initially created in Provisioned mode
             | bms -> bms.BillingMode <> BillingMode.PAY_PER_REQUEST
     let applyToUpdateRequest (req : UpdateTableRequest) = function
         | Throughput.Provisioned t ->
@@ -71,8 +71,8 @@ module internal CreateTableRequest =
 
     let create (tableName, template : RecordTemplate<'TRecord>) throughput streaming customize =
         let req = CreateTableRequest(TableName = tableName)
-        template.Info.Schemata.ApplyToCreateTableRequest req
-        throughput |> Option.iter (Throughput.applyToCreateRequest req)
+        template.Info.Schemata.ApplyToCreateTableRequest req // NOTE needs to precede the throughput application as that walks the GSIs list
+        throughput |> Option.iter (Throughput.applyToCreateRequest req) // NOTE needs to succeed Schemata.ApplyToCreateTableRequest
         streaming |> Option.iter (Streaming.applyToCreateRequest req)
         customize |> Option.iter (fun c -> c req)
         req
