@@ -141,7 +141,7 @@ type SimpleCounters private (table : TableContext<CounterEntry>) =
     static member Provision(client : IAmazonDynamoDB, tableName : string, readCapacityUnits, writeCapacityUnits) : Async<unit> =
         let table = TableContext<CounterEntry>(client, tableName)
         // normally, RCU/WCU provisioning only happens first time the Table is created and is then considered an external concern
-        // here we use `ProvisionTableAsync` instead of `InitializeAsync` to reset it each time we start the app
+        // here we use `ProvisionTableAsync` instead of `InitializeTableAsync` to reset it each time we deploy the app
         let provisionedThroughput = ProvisionedThroughput(readCapacityUnits, writeCapacityUnits)
         table.ProvisionTableAsync(Throughput.Provisioned provisionedThroughput)
 

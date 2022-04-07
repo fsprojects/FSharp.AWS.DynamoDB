@@ -16,7 +16,7 @@ type ConditionalCheckFailedException = Amazon.DynamoDBv2.Model.ConditionalCheckF
 /// Exception raised by DynamoDB in case where resources are not found
 type ResourceNotFoundException = Amazon.DynamoDBv2.Model.ResourceNotFoundException
 
-/// Represents the provisioned throughput for given table or index
+/// Represents the provisioned throughput for a Table or Global Secondary Index
 type ProvisionedThroughput = Amazon.DynamoDBv2.Model.ProvisionedThroughput
 
 /// Represents the throughput configuration for a Table
@@ -27,7 +27,8 @@ type Throughput =
 module internal Throughput =
     let applyToCreateRequest (req : CreateTableRequest) = function
         | Throughput.Provisioned t ->
-            req.ProvisionedThroughput <- t // TOCONSIDER also do req.BillingMode <- BillingMode.PROVISIONED or DescribeTableResponse does not include a BillingModeSummary on dynamodb-local
+            req.BillingMode <- BillingMode.PROVISIONED
+            req.ProvisionedThroughput <- t
             for gsi in req.GlobalSecondaryIndexes do
                 gsi.ProvisionedThroughput <- t
         | Throughput.OnDemand ->
@@ -42,7 +43,7 @@ module internal Throughput =
             || t.WriteCapacityUnits <> current.WriteCapacityUnits
         | Throughput.OnDemand ->
             match desc.BillingModeSummary with
-            | null -> false // // can happen if initial create did not explicitly specify a BillingMode when creating, i.e. Table was initially created in Provisioned mode
+            | null -> true // CreateTable without setting BillingMode is equivalent to it being BullingMode.PROVISIONED
             | bms -> bms.BillingMode <> BillingMode.PAY_PER_REQUEST
     let applyToUpdateRequest (req : UpdateTableRequest) = function
         | Throughput.Provisioned t ->
@@ -52,6 +53,7 @@ module internal Throughput =
             req.BillingMode <- BillingMode.PAY_PER_REQUEST
 
 /// Represents the streaming configuration for a Table
+[<RequireQualifiedAccess>]
 type Streaming =
     | Enabled of StreamViewType
     | Disabled
@@ -111,7 +113,7 @@ module internal UpdateTableRequest =
         let! _response = client.UpdateTableAsync(request, ct) |> Async.AwaitTaskCorrect in ()
     }
 
-module Provisioning =
+module internal Provisioning =
 
     let private describe (client : IAmazonDynamoDB, tableName : string) : Async<TableDescription> =
         let rec wait () = async {
