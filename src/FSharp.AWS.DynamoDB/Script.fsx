@@ -128,7 +128,7 @@ type EasyCounters private (table : TableContext<CounterEntry>) =
         // Create the table if necessary. Verifies schema is correct if it has already been created
         // NOTE the hard coded initial throughput provisioning - arguably this belongs outside of your application logic
         let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
-        do! table.InitializeTableAsync(Throughput.Provisioned throughput)
+        do! table.CreateTableIfNotExistsAsync(Throughput.Provisioned throughput)
         return EasyCounters(table)
     }
 
@@ -141,7 +141,7 @@ type SimpleCounters private (table : TableContext<CounterEntry>) =
     static member Provision(client : IAmazonDynamoDB, tableName : string, readCapacityUnits, writeCapacityUnits) : Async<unit> =
         let table = TableContext<CounterEntry>(client, tableName)
         // normally, RCU/WCU provisioning only happens first time the Table is created and is then considered an external concern
-        // here we use `ProvisionTableAsync` instead of `InitializeTableAsync` to reset it each time we deploy the app
+        // here we use `ProvisionTableAsync` instead of `CreateTableIfNotExistsAsync` to reset it each time we deploy the app
         let provisionedThroughput = ProvisionedThroughput(readCapacityUnits, writeCapacityUnits)
         table.ProvisionTableAsync(Throughput.Provisioned provisionedThroughput)
 
