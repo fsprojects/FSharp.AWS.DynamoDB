@@ -5,15 +5,15 @@
 * Added `TryGetItemAsync` (same as `GetItemAsync`, but returns `None`, instead of throwing, if an item is not present)
 * Switched test framework to Xunit, assertions to Unquote, runner to `dotnet test` 
 * Clarified Creation/Verification APIs:
-  * Obsoleted `TableContext.Create` (replace with `TableContext.Scripting.Initialize`, `TableContext.CreateTableIfNotExistsAsync`, `TableContext.VerifyTableAsync`)
+  * Obsoleted `TableContext.Create` (replace with `TableContext.Scripting.Initialize`, `TableContext.VerifyOrCreateTableAsync`, `TableContext.VerifyTableAsync`)
   * Added `TableContext` constructor (replaces `TableContext.Create(verifyTable = false)`)
   * Added `TableContext.Scripting.Initialize` (replaces `TableContext.Create()`)
   * Added `TableContext.VerifyTableAsync` overload that only performs verification but never creates a Table
-  * Added `TableContext.CreateTableIfNotExistsAsync` (replaces `TableContext.VerifyTableAsync(createIfNotExists = true)`)
-  * Added `TableContext.ProvisionTableAsync` (as per `CreateTableIfNotExistsAsync` but does an `UpdateTableAsync` if `throughput` or `streaming` has changed)
-  * Added Support for `Throughput.OnDemand` mode (sets `BillingMode` to `PAY_PER_REQUEST` rather than attempting to configure a `ProvisionedThroughput`)
-  * Added ability to configure DynamoDB streaming (via `Streaming` DU) to `CreateTableIfNotExistsAsync` and `ProvisionTableAsync` 
-  * Removed `TableContext.CreateAsync` (replace with `TableContext.VerifyTableAsync` or `CreateTableIfNotExistsAsync`)
+  * Added `TableContext.VerifyOrCreateTableAsync` (replaces `TableContext.VerifyTableAsync(createIfNotExists = true)`)
+  * Added `TableContext.UpdateTableIfRequiredAsync` (conditional `UpdateTableAsync` to establish specified `throughput` or `streaming` only if required)
+  * Added `Throughput.OnDemand` mode (sets `BillingMode` to `PAY_PER_REQUEST` rather than attempting to configure a `ProvisionedThroughput`)
+  * Added ability to configure DynamoDB streaming (via `Streaming` DU) to `VerifyOrCreateTableAsync` and `UpdateTableIfRequiredAsync` 
+  * Removed `TableContext.CreateAsync` (replace with `TableContext.VerifyTableAsync` or `VerifyOrCreateTableAsync`)
   * Replaced `TableKeySchemata.CreateCreateTableRequest` with `ApplyToCreateTableRequest`
 
 ### 0.9.3-beta

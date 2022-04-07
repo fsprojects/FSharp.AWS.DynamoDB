@@ -120,7 +120,7 @@ type Counter private (table : TableContext<CounterEntry>, key : TableKey) =
     static member Create(client : IAmazonDynamoDB, tableName : string) = async {
         let table = TableContext<CounterEntry>(client, tableName)
         let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)        
-        do! table.CreateTableIfNotExistsAsync(Throughput.Provisioned throughput)
+        do! table.VerifyOrCreateTableAsync(Throughput.Provisioned throughput)
         let initialEntry = { Id = Guid.NewGuid() ; Value = 0L }
         let! key = table.PutItemAsync(initialEntry)
         return Counter(table, key)
