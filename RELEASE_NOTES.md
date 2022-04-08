@@ -1,10 +1,10 @@
 ### 0.10.0-beta
 * Added `TableContext` constructor (replaces `TableContext.Create(verifyTable = false)`)
-* Added `TableContext.Scripting.Initialize` (replaces `TableContext.Create()`)
 * Added `TableContext.VerifyOrCreateTableAsync` (replaces `TableContext.VerifyTableAsync(createIfNotExists = true)`)
 * Added `TableContext.UpdateTableIfRequiredAsync` (conditional `UpdateTableAsync` to establish specified `throughput` or `streaming` only if required. Replaces `UpdateProvisionedThroughputAsync`)
-* Added `Throughput.OnDemand` mode (sets `BillingMode` to `PAY_PER_REQUEST` rather than attempting to configure a `ProvisionedThroughput`)
-* Added ability to configure DynamoDB streaming (via `Streaming` DU) to `VerifyOrCreateTableAsync` and `UpdateTableIfRequiredAsync` 
+* Added `TableContext.Scripting.Initialize` (two overloads, replacing `TableContext.Create()` and `TableContext.Create(createIfNotExists = true)`)
+* Added `Throughput.OnDemand` mode (sets `BillingMode` to `PAY_PER_REQUEST`, to go with the existing support for configuring `PROVISIONED` and a `ProvisionedThroughput`)
+* Added ability to configure DynamoDB streaming (via a `Streaming` DU) to `VerifyOrCreateTableAsync` and `UpdateTableIfRequiredAsync` 
 * Obsoleted `TableContext.Create` (replace with `TableContext.Scripting.Initialize`, `TableContext.VerifyOrCreateTableAsync`, `TableContext.VerifyTableAsync`)
 * Obsoleted `TableContext.UpdateProvisionedThroughputAsync` (replace with `TableContext.UpdateTableIfRequiredAsync`)
 * (breaking) Obsoleted `TableContext.VerifyTableAsync` optional argument to create a Table (replace with `VerifyOrCreateTableAsync`)

@@ -1113,18 +1113,30 @@ type TableContext internal () =
 /// </summary>
 module Scripting =
 
-    /// Factory method that allows one to include auto-initialization easily for scripting scenarios
+    /// Factory methods for scripting scenarios
     type TableContext internal () =
 
-        /// <summary>Creates a DynamoDB client instance for the specified F# record type, client and table name.</summary>
+        /// <summary>
+        /// Creates a DynamoDB client instance for the specified F# record type, client and table name.<br/>
+        /// Validates the table exists, and has the correct schema as per <c>VerifyTableAsync</c>.<br/>
+        /// See other overload for <c>VerifyOrCreateTableAsync</c> semantics.
+        /// </summary>
         /// <param name="client">DynamoDB client instance.</param>
         /// <param name="tableName">Table name to target.</param>
-        /// <param name="throughput">Optional throughput to configure if the Table does not yet exist.</param>
-        static member Initialize<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?throughput) : TableContext<'TRecord> =
+        static member Initialize<'TRecord>(client : IAmazonDynamoDB, tableName : string) : TableContext<'TRecord> =
             let context = TableContext<'TRecord>(client, tableName)
-            match throughput with
-            | None -> context.VerifyTableAsync() |> Async.RunSynchronously
-            | Some t -> context.VerifyOrCreateTableAsync(t) |> Async.RunSynchronously
+            context.VerifyTableAsync() |> Async.RunSynchronously
+            context
+
+        /// Creates a DynamoDB client instance for the specified F# record type, client and table name.<br/>
+        /// Either validates the table exists and has the correct schema, or creates a fresh one, as per <c>VerifyOrCreateTableAsync</c>.<br/>
+        /// See other overload for <c>VerifyTableAsync</c> semantics.
+        /// <param name="client">DynamoDB client instance.</param>
+        /// <param name="tableName">Table name to target.</param>
+        /// <param name="throughput">Throughput to configure if the Table does not yet exist.</param>
+        static member Initialize<'TRecord>(client : IAmazonDynamoDB, tableName : string, throughput) : TableContext<'TRecord> =
+            let context = TableContext<'TRecord>(client, tableName)
+            context.VerifyOrCreateTableAsync(throughput) |> Async.RunSynchronously
             context
 
     type TableContext<'TRecord> with
