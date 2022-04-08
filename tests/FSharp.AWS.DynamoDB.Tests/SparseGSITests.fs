@@ -31,7 +31,7 @@ type ``Sparse GSI Tests`` (fixture : TableFixture) =
             SecondaryHashKey = if rand() % 2L = 0L then Some (guid()) else None ;
         }
 
-    let table = fixture.CreateContextAndTableIfNotExists<GsiRecord>()
+    let table = fixture.CreateEmpty<GsiRecord>()
 
     let [<Fact>] ``GSI Put Operation`` () =
         let value = mkItem()

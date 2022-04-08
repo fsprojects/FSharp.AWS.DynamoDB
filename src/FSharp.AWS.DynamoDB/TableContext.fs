@@ -1133,11 +1133,8 @@ module Scripting =
         /// <param name="client">DynamoDB client instance.</param>
         /// <param name="tableName">Table name to target.</param>
         /// <param name="throughput">Optional throughput to configure if the Table does not yet exist.</param>
-        /// <param name="metricsCollector">Function to receive request metrics.</param>
-        static member Initialize<'TRecord>
-            (   client : IAmazonDynamoDB, tableName : string, ?throughput,
-                ?metricsCollector : RequestMetrics -> unit) : TableContext<'TRecord> =
-            let context = TableContext<'TRecord>(client, tableName, ?metricsCollector = metricsCollector)
+        static member Initialize<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?throughput) : TableContext<'TRecord> =
+            let context = TableContext<'TRecord>(client, tableName)
             match throughput with
             | None -> context.VerifyTableAsync() |> Async.RunSynchronously
             | Some t -> context.VerifyOrCreateTableAsync(t) |> Async.RunSynchronously

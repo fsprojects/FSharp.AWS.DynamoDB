@@ -43,7 +43,7 @@ type ``Pagination Tests`` (fixture : TableFixture) =
             LocalAttribute = int (rand () % 2L)
         }
 
-    let table = fixture.CreateContextAndTableIfNotExists<PaginationRecord>()
+    let table = fixture.CreateEmpty<PaginationRecord>()
 
     let [<Fact>] ``Paginated Query on Primary Key`` () =
         let hk = guid()

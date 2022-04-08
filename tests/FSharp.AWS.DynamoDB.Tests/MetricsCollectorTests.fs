@@ -52,7 +52,7 @@ let (|TotalCu|) : ConsumedCapacity list -> float = Seq.sumBy (fun c -> c.Capacit
 /// Tests without common setup
 type Tests(fixture : TableFixture) =
 
-    let rawTable = fixture.CreateContextAndTableIfNotExists<MetricsRecord>()
+    let rawTable = fixture.CreateEmpty<MetricsRecord>()
 
     let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some () else None
 
@@ -84,7 +84,7 @@ type Tests(fixture : TableFixture) =
 /// Tests that look up a specific item. Each test run gets a fresh individual item
 type ItemTests(fixture : TableFixture) =
 
-    let rawTable = fixture.CreateContextAndTableIfNotExists<MetricsRecord>()
+    let rawTable = fixture.CreateEmpty<MetricsRecord>()
     let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some () else None
 
     let item = mkItem (guid()) (guid()) 0
@@ -131,7 +131,7 @@ type ItemTests(fixture : TableFixture) =
 /// Heavy tests reliant on establishing (and mutating) multiple items. Separate Test Class so Xunit will run them in parallel with others
 type BulkMutationTests(fixture : TableFixture) =
 
-    let rawTable = fixture.CreateContextAndTableIfNotExists<MetricsRecord>()
+    let rawTable = fixture.CreateEmpty<MetricsRecord>()
     let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some () else None
 
     // NOTE we mutate the items so they need to be established each time
@@ -169,7 +169,7 @@ type ManyReadOnlyItemsFixture() =
     inherit TableFixture()
 
     // TOCONSIDER shift this into IAsyncLifetime.InitializeAsync
-    let table = base.CreateContextAndTableIfNotExists<MetricsRecord>()
+    let table = base.CreateEmpty<MetricsRecord>()
 
     let hk = guid ()
     do  let gsk = guid ()

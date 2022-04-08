@@ -17,17 +17,17 @@ Table items can be represented using F# records:
 open FSharp.AWS.DynamoDB
 
 type WorkItemInfo =
-	{
-		[<HashKey>]
-		ProcessId : int64
-		[<RangeKey>]
-		WorkItemId : int64
+    {
+        [<HashKey>]
+        ProcessId : int64
+        [<RangeKey>]
+        WorkItemId : int64
 
-		Name : string
-		UUID : Guid
-		Dependencies : Set<string>
-		Started : DateTimeOffset option
-	}
+        Name : string
+        UUID : Guid
+        Dependencies : Set<string>
+        Started : DateTimeOffset option
+    }
 ```
 
 We can now perform table operations on DynamoDB like so:
@@ -49,7 +49,7 @@ Queries and scans can be performed using quoted predicates:
 
 ```fsharp
 let qResults = table.Query(keyCondition = <@ fun r -> r.ProcessId = 0 @>, 
-                            filterCondition = <@ fun r -> r.Name = "test" @>)
+                           filterCondition = <@ fun r -> r.Name = "test" @>)
                             
 let sResults = table.Scan <@ fun r -> r.Started.Value >= DateTimeOffset.Now - TimeSpan.FromMinutes 1.  @>
 ```
@@ -58,7 +58,7 @@ Values can be updated using quoted update expressions:
 
 ```fsharp
 let updated = table.UpdateItem(<@ fun r -> { r with Started = Some DateTimeOffset.Now } @>, 
-                                preCondition = <@ fun r -> r.DateTimeOffset = None @>)
+                               preCondition = <@ fun r -> r.DateTimeOffset = None @>)
 ```
 
 Or they can be updated using [the `SET`, `ADD`, `REMOVE` and `DELETE` operations of the UpdateOp` DSL](./src/FSharp.AWS.DynamoDB/Types.fs#263),
@@ -251,9 +251,8 @@ let processMetrics (m : RequestMetrics) =
 let table = TableContext<WorkItemInfo>(client, tableName = "workItems", metricsCollector = processMetrics)
 ```
 
-If `metricsCollector` is supplied, the requests will include `ReturnConsumedCapacity = ReturnConsumedCapacity.INDEX` 
+If `metricsCollector` is supplied, the requests will set `ReturnConsumedCapacity` to `ReturnConsumedCapacity.INDEX` 
 and the `RequestMetrics` parameter will contain a list of `ConsumedCapacity` objects returned from the DynamoDB operations.
-
 
 ### Building & Running Tests
 

@@ -86,7 +86,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
             Serialized = rand(), guid()
         }
 
-    let table = fixture.CreateContextAndTableIfNotExists<CondExprRecord>()
+    let table = fixture.CreateEmpty<CondExprRecord>()
 
     let [<Fact>] ``Item exists precondition`` () =
         let item = mkItem()
