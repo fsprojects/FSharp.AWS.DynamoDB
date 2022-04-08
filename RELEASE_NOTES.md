@@ -1,14 +1,15 @@
 ### 0.10.0-beta
-* Obsoleted `TableContext.Create` (replace with `TableContext.Scripting.Initialize`, `TableContext.VerifyOrCreateTableAsync`, `TableContext.VerifyTableAsync`)
 * Added `TableContext` constructor (replaces `TableContext.Create(verifyTable = false)`)
 * Added `TableContext.Scripting.Initialize` (replaces `TableContext.Create()`)
-* Added `TableContext.VerifyTableAsync` overload that only performs verification but never creates a Table
 * Added `TableContext.VerifyOrCreateTableAsync` (replaces `TableContext.VerifyTableAsync(createIfNotExists = true)`)
-* Added `TableContext.UpdateTableIfRequiredAsync` (conditional `UpdateTableAsync` to establish specified `throughput` or `streaming` only if required)
+* Added `TableContext.UpdateTableIfRequiredAsync` (conditional `UpdateTableAsync` to establish specified `throughput` or `streaming` only if required. Replaces `UpdateProvisionedThroughputAsync`)
 * Added `Throughput.OnDemand` mode (sets `BillingMode` to `PAY_PER_REQUEST` rather than attempting to configure a `ProvisionedThroughput`)
 * Added ability to configure DynamoDB streaming (via `Streaming` DU) to `VerifyOrCreateTableAsync` and `UpdateTableIfRequiredAsync` 
-* Removed `TableContext.CreateAsync` (replace with `TableContext.VerifyTableAsync` or `VerifyOrCreateTableAsync`)
-* Replaced `TableKeySchemata.CreateCreateTableRequest` with `ApplyToCreateTableRequest`
+* Obsoleted `TableContext.Create` (replace with `TableContext.Scripting.Initialize`, `TableContext.VerifyOrCreateTableAsync`, `TableContext.VerifyTableAsync`)
+* Obsoleted `TableContext.UpdateProvisionedThroughputAsync` (replace with `TableContext.UpdateTableIfRequiredAsync`)
+* (breaking) Obsoleted `TableContext.VerifyTableAsync` optional argument to create a Table (replace with `VerifyOrCreateTableAsync`)
+* (breaking) Changed `TableKeySchemata.CreateCreateTableRequest` to `ApplyToCreateTableRequest` (with minor signature change)
+* (breaking) Removed `TableContext.CreateAsync` (replace with `TableContext.VerifyTableAsync` or `VerifyOrCreateTableAsync`)
 
 ### 0.9.4-beta
 * Moved Sync-over-Async versions of `TableContext` operations into `namespace FSharp.AWS.DynamoDB.Scripting`

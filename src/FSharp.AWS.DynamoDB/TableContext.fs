@@ -1060,24 +1060,11 @@ type TableContext<'TRecord> internal
         | None -> ()
         | Some request -> do! UpdateTableRequest.execute client request }
 
-    /// <summary>
-    /// Asynchronously updates the underlying table with supplied configuration.<br/>
-    /// NOTE: The underlying API can throw if none the options represent a change or a change is in currently progress; see the DynamoDB <a href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTable.html"><c>UpdateTable</c> API documentation</a>.
-    /// </summary>
-    /// <param name="throughput">Optional Throughput configuration to apply.</param>
-    /// <param name="streaming">Optional Streaming configuration to apply.</param>
-    /// <param name="customize">Callback to apply any further options desired.</param>
-    member _.UpdateTableAsync(?throughput, ?streaming, ?customize : UpdateTableRequest -> unit) : Async<unit> =
-        let request = UpdateTableRequest.create tableName
-        UpdateTableRequest.apply throughput streaming request
-        customize |> Option.iter (fun c -> c request)
-        UpdateTableRequest.execute client request
-
     /// <summary>Asynchronously updates the underlying table with supplied provisioned throughput.</summary>
     /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
-    [<System.Obsolete("Please replace with either 1. UpdateTableAsync or 2. UpdateTableIfRequiredAsync")>]
+    [<System.Obsolete("Please replace with UpdateTableIfRequiredAsync")>]
     member t.UpdateProvisionedThroughputAsync(provisionedThroughput : ProvisionedThroughput) : Async<unit> =
-        t.UpdateTableAsync(Throughput.Provisioned provisionedThroughput)
+        t.UpdateTableIfRequiredAsync(Throughput.Provisioned provisionedThroughput)
 
     /// <summary>Asynchronously verify that the table exists and is compatible with record key schema.</summary>
     /// <param name="createIfNotExists">Create the table instance now instance if it does not exist. Defaults to false.</param>
@@ -1551,10 +1538,8 @@ module Scripting =
             |> Async.RunSynchronously
 
 
-        /// <summary>
-        ///     Updates the underlying table with supplied provisioned throughput.
-        /// </summary>
+        /// <summary>Updates the underlying table with supplied provisioned throughput.</summary>
         /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
         member t.UpdateProvisionedThroughput(provisionedThroughput : ProvisionedThroughput) =
             let spec = Throughput.Provisioned provisionedThroughput
-            t.UpdateTableAsync(spec) |> Async.RunSynchronously
+            t.UpdateTableIfRequiredAsync(spec) |> Async.RunSynchronously
