@@ -15,10 +15,9 @@ open FSharp.AWS.DynamoDB
 open FSharp.AWS.DynamoDB.Scripting // non-Async overloads
 
 #if USE_CLOUD
-open Amazon
-open Amazon.Util
-let account = AWSCredentialsProfile.LoadFrom("default").Credentials
-let ddb = new AmazonDynamoDBClient(account, RegionEndpoint.EUCentral1) :> IAmazonDynamoDB
+open Amazon.DynamoDBv2
+let ok, creds = CredentialProfileStoreChain().TryGetAWSCredentials("default")
+let ddb = if ok then new AmazonDynamoDBClient(creds) :> IAmazonDynamoDB else failwith "Unable to load default credentials"
 #else // Use Docker-hosted dynamodb-local instance
 // See https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.DownloadingAndRunning.html#docker for details of how to deploy a simulator instance
 #if USE_CREDS_FROM_ENV_VARS // 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' must be set for this to work
