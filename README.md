@@ -17,26 +17,27 @@ Table items can be represented using F# records:
 open FSharp.AWS.DynamoDB
 
 type WorkItemInfo =
-	{
-		[<HashKey>]
-		ProcessId : int64
-		[<RangeKey>]
-		WorkItemId : int64
+    {
+        [<HashKey>]
+        ProcessId : int64
+        [<RangeKey>]
+        WorkItemId : int64
 
-		Name : string
-		UUID : Guid
-		Dependencies : Set<string>
-		Started : DateTimeOffset option
-	}
+        Name : string
+        UUID : Guid
+        Dependencies : Set<string>
+        Started : DateTimeOffset option
+    }
 ```
 
 We can now perform table operations on DynamoDB like so:
 
 ```fsharp
 open Amazon.DynamoDBv2
+open FSharp.AWS.DynamoDB.Scripting // Expose non-Async methods, e.g. PutItem/GetItem
 
 let client : IAmazonDynamoDB = ``your DynamoDB client instance``
-let table = TableContext.Create<WorkItemInfo>(client, tableName = "workItems", createIfNotExists = true)
+let table = TableContext.Initialize<WorkItemInfo>(client, tableName = "workItems", Throughput.OnDemand)
 
 let workItem = { ProcessId = 0L ; WorkItemId = 1L ; Name = "Test" ; UUID = guid() ; Dependencies = set ["mscorlib"] ; Started = None }
 
@@ -48,7 +49,7 @@ Queries and scans can be performed using quoted predicates:
 
 ```fsharp
 let qResults = table.Query(keyCondition = <@ fun r -> r.ProcessId = 0 @>, 
-                            filterCondition = <@ fun r -> r.Name = "test" @>)
+                           filterCondition = <@ fun r -> r.Name = "test" @>)
                             
 let sResults = table.Scan <@ fun r -> r.Started.Value >= DateTimeOffset.Now - TimeSpan.FromMinutes 1.  @>
 ```
@@ -57,10 +58,10 @@ Values can be updated using quoted update expressions:
 
 ```fsharp
 let updated = table.UpdateItem(<@ fun r -> { r with Started = Some DateTimeOffset.Now } @>, 
-                                preCondition = <@ fun r -> r.DateTimeOffset = None @>)
+                               preCondition = <@ fun r -> r.DateTimeOffset = None @>)
 ```
 
-Or they can be updated using the `UpdateOp` DSL,
+Or they can be updated using [the `SET`, `ADD`, `REMOVE` and `DELETE` operations of the UpdateOp` DSL](./src/FSharp.AWS.DynamoDB/Types.fs#263),
 which is closer to the underlying DynamoDB API:
 
 ```fsharp
@@ -99,23 +100,34 @@ Update expressions support the following F# value constructors:
 * `Option.Value` and `Option.get`.
 * `fst` and `snd` for tuple records.
 
-## Example: Creating an atomic counter
+## Example: Representing an atomic counter as an Item in a DynamoDB Table 
 
 ```fsharp
 type private CounterEntry = { [<HashKey>] Id : Guid ; Value : int64 }
 
 type Counter private (table : TableContext<CounterEntry>, key : TableKey) =
-    member _.Value = table.GetItem(key).Value
-    member _.Incr() = 
-        let updated = table.UpdateItem(key, <@ fun e -> { e with Value = e.Value + 1L } @>)
-        updated.Value
+    
+    member _.Value = async {
+        let! current = table.GetItemAsync(key)
+        return current.Value
+    }
+    
+    member _.Incr() = async { 
+        let! updated = table.UpdateItemAsync(key, <@ fun e -> { e with Value = e.Value + 1L } @>)
+        return updated.Value
+    }
 
-    static member Create(client : IAmazonDynamoDB, table : string) =
-        let table = TableContext.Create<CounterEntry>(client, table, createIfNotExists = true)
-        let entry = { Id = Guid.NewGuid() ; Value = 0L }
-        let key = table.PutItem entry
-        new Counter(table, key)
+    static member Create(client : IAmazonDynamoDB, tableName : string) = async {
+        let table = TableContext<CounterEntry>(client, tableName)
+        let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)        
+        do! table.VerifyOrCreateTableAsync(Throughput.Provisioned throughput)
+        let initialEntry = { Id = Guid.NewGuid() ; Value = 0L }
+        let! key = table.PutItemAsync(initialEntry)
+        return Counter(table, key)
+    }
 ```
+
+_NOTE: It's advised to split single time initialization/verification of table creation from the application logic, see [`Script.fsx`](src/FSharp.AWS.DynamoDB/Script.fsx#99) for further details_.
 
 ## Projection Expressions
 
@@ -125,7 +137,7 @@ Projection expressions can be used to fetch a subset of table attributes, which 
 table.QueryProjected(<@ fun r -> r.HashKey = "Foo" @>, <@ fun r -> r.HashKey, r.Values.Nested.[0] @>)
 ```
 
-which returns a tuple of the specified attributes. Tuples can be of any arity and must contain non-conflicting document paths.
+the resulting value is a tuple of the specified attributes. Tuples can be of any arity but must contain non-conflicting document paths.
 
 ## Secondary Indices
 
@@ -141,7 +153,8 @@ type Record =
 ```
 
 Queries can now be performed on the `GSIH` and `GSIR` fields as if they were regular hashkey and rangekey attributes.
-Global secondary indices are created using the same provisioned throughput as the primary keys.
+
+_NOTE: Global secondary indices are created using the same provisioned throughput as for the primary keys_.
 
 [Local Secondary Indices](http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LSI.html) can be defined using the `LocalSecondaryIndex` attribute:
 ```fsharp
@@ -212,13 +225,13 @@ It is possible to precompute a DynamoDB expression as follows:
 let precomputedConditional = table.Template.PrecomputeConditionalExpr <@ fun w -> w.Name <> "test" && w.Dependencies.Contains "mscorlib" @>
 ```
 
-This precomputed conditional can now be used in place of the original expression in the FSharp.AWS.DynamoDB API:
+This precomputed conditional can now be used in place of the original expression in the `FSharp.AWS.DynamoDB` API:
 
 ```fsharp
 let results = table.Scan precomputedConditional
 ```
 
-FSharp.AWS.DynamoDB also supports precomputation of parametric expressions:
+`FSharp.AWS.DynamoDB` also supports precomputation of parametric expressions:
 
 ```fsharp
 let startedBefore = table.Template.PrecomputeConditionalExpr <@ fun time w -> w.StartTime.Value <= time @>
@@ -232,15 +245,14 @@ table.Scan(startedBefore (DateTimeOffset.Now - TimeSpan.FromDays 1.))
 A hook is provided so metrics can be published via your preferred Observability provider. For example, using [Prometheus.NET](https://github.com/prometheus-net/prometheus-net):
 
 ```fsharp
-let dbCounter = Metrics.CreateCounter ("aws_dynamodb_requests_total", "Count of all DynamoDB requests", "table", "operation")
+let dbCounter = Prometheus.Metrics.CreateCounter("aws_dynamodb_requests_total", "Count of all DynamoDB requests", "table", "operation")
 let processMetrics (m : RequestMetrics) =
-    dbCounter.WithLabels(m.TableName, string m.Operation).Inc () |> ignore
-let table = TableContext.Create<WorkItemInfo>(client, tableName = "workItems", metricsCollector = processMetrics)
+    dbCounter.WithLabels(m.TableName, string m.Operation).Inc()
+let table = TableContext<WorkItemInfo>(client, tableName = "workItems", metricsCollector = processMetrics)
 ```
 
-If `metricsCollector` is supplied, the requests will include `ReturnConsumedCapacity = ReturnConsumedCapacity.INDEX` 
+If `metricsCollector` is supplied, the requests will set `ReturnConsumedCapacity` to `ReturnConsumedCapacity.INDEX` 
 and the `RequestMetrics` parameter will contain a list of `ConsumedCapacity` objects returned from the DynamoDB operations.
-
 
 ### Building & Running Tests
 

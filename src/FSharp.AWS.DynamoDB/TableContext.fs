@@ -8,7 +8,6 @@ open Microsoft.FSharp.Quotations
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
-open FSharp.AWS.DynamoDB.KeySchema
 open FSharp.AWS.DynamoDB.ExprCommon
 
 /// Exception raised by DynamoDB in case where write preconditions are not satisfied
@@ -17,8 +16,171 @@ type ConditionalCheckFailedException = Amazon.DynamoDBv2.Model.ConditionalCheckF
 /// Exception raised by DynamoDB in case where resources are not found
 type ResourceNotFoundException = Amazon.DynamoDBv2.Model.ResourceNotFoundException
 
-/// Represents the provisioned throughput for given table or index
+/// Represents the provisioned throughput for a Table or Global Secondary Index
 type ProvisionedThroughput = Amazon.DynamoDBv2.Model.ProvisionedThroughput
+
+/// Represents the throughput configuration for a Table
+[<RequireQualifiedAccess>]
+type Throughput =
+    | Provisioned of ProvisionedThroughput
+    | OnDemand
+module internal Throughput =
+    let applyToCreateRequest (req : CreateTableRequest) = function
+        | Throughput.Provisioned t ->
+            req.BillingMode <- BillingMode.PROVISIONED
+            req.ProvisionedThroughput <- t
+            for gsi in req.GlobalSecondaryIndexes do
+                gsi.ProvisionedThroughput <- t
+        | Throughput.OnDemand ->
+            req.BillingMode <- BillingMode.PAY_PER_REQUEST
+    let requiresUpdate (desc : TableDescription) = function
+        | Throughput.Provisioned t ->
+            let current = desc.ProvisionedThroughput
+            match desc.BillingModeSummary with
+            | null -> false // can happen if initial create did not explicitly specify a BillingMode when creating
+            | bms -> bms.BillingMode <> BillingMode.PROVISIONED
+            || t.ReadCapacityUnits <> current.ReadCapacityUnits
+            || t.WriteCapacityUnits <> current.WriteCapacityUnits
+        | Throughput.OnDemand ->
+            match desc.BillingModeSummary with
+            | null -> true // CreateTable without setting BillingMode is equivalent to it being BullingMode.PROVISIONED
+            | bms -> bms.BillingMode <> BillingMode.PAY_PER_REQUEST
+    let applyToUpdateRequest (req : UpdateTableRequest) = function
+        | Throughput.Provisioned t ->
+            req.BillingMode <- BillingMode.PROVISIONED
+            req.ProvisionedThroughput <- t
+        | Throughput.OnDemand ->
+            req.BillingMode <- BillingMode.PAY_PER_REQUEST
+
+/// Represents the streaming configuration for a Table
+[<RequireQualifiedAccess>]
+type Streaming =
+    | Enabled of StreamViewType
+    | Disabled
+module internal Streaming =
+    let private (|Spec|) = function
+        | Streaming.Enabled svt -> StreamSpecification(StreamEnabled = true, StreamViewType = svt)
+        | Streaming.Disabled -> StreamSpecification(StreamEnabled = false)
+    let applyToCreateRequest (req : CreateTableRequest) (Spec spec) =
+        req.StreamSpecification <- spec
+    let requiresUpdate (desc : TableDescription) = function
+        | Streaming.Disabled -> desc.StreamSpecification.StreamEnabled
+        | Streaming.Enabled svt -> not desc.StreamSpecification.StreamEnabled || desc.StreamSpecification.StreamViewType <> svt
+    let applyToUpdateRequest (req : UpdateTableRequest) (Spec spec) =
+        req.StreamSpecification <- spec
+
+module internal CreateTableRequest =
+
+    let create (tableName, template : RecordTemplate<'TRecord>) throughput streaming customize =
+        let req = CreateTableRequest(TableName = tableName)
+        template.Info.Schemata.ApplyToCreateTableRequest req // NOTE needs to precede the throughput application as that walks the GSIs list
+        throughput |> Option.iter (Throughput.applyToCreateRequest req) // NOTE needs to succeed Schemata.ApplyToCreateTableRequest
+        streaming |> Option.iter (Streaming.applyToCreateRequest req)
+        customize |> Option.iter (fun c -> c req)
+        req
+
+    let execute (client : IAmazonDynamoDB) request : Async<CreateTableResponse> = async {
+        let! ct = Async.CancellationToken
+        return! client.CreateTableAsync(request, ct) |> Async.AwaitTaskCorrect
+    }
+
+module internal UpdateTableRequest =
+
+    let create tableName =
+        UpdateTableRequest(TableName = tableName)
+
+    let apply throughput streaming request =
+        throughput |> Option.iter (Throughput.applyToUpdateRequest request)
+        streaming |> Option.iter (Streaming.applyToUpdateRequest request)
+
+    // Yields a request only if throughput, streaming or customize determine the update is warranted
+    let createIfRequired tableName tableDescription throughput streaming customize : UpdateTableRequest option=
+        let request = create tableName
+        let tc = throughput |> Option.filter (Throughput.requiresUpdate tableDescription)
+        let sc = streaming |> Option.filter (Streaming.requiresUpdate tableDescription)
+        match tc, sc, customize with
+        | None, None, None -> None
+        | Some _ as tc, sc, None
+        | tc, (Some _ as sc), None ->
+            apply tc sc request
+            Some request
+        | tc, sc, Some customize ->
+            apply tc sc request
+            if customize request then Some request
+            else None
+
+    let execute (client : IAmazonDynamoDB) request : Async<unit> = async {
+        let! ct = Async.CancellationToken
+        let! _response = client.UpdateTableAsync(request, ct) |> Async.AwaitTaskCorrect in ()
+    }
+
+module internal Provisioning =
+
+    let tryDescribe (client : IAmazonDynamoDB, tableName : string) : Async<TableDescription option> = async {
+        let! ct = Async.CancellationToken
+        let! td = client.DescribeTableAsync(tableName, ct) |> Async.AwaitTaskCorrect
+        return match td.Table with t when t.TableStatus = TableStatus.ACTIVE -> Some t | _ -> None
+    }
+
+    let private waitForActive (client : IAmazonDynamoDB, tableName : string) : Async<TableDescription> =
+        let rec wait () = async {
+            match! tryDescribe (client, tableName) with
+            | Some t -> return t
+            | None ->
+                do! Async.Sleep 1000
+                // wait indefinitely if table is in transition state
+                return! wait ()
+        }
+        wait ()
+
+    let (|Conflict|_|) (e : exn) =
+        match e with
+        | :? AmazonDynamoDBException as e when e.StatusCode = HttpStatusCode.Conflict -> Some()
+        | :? ResourceInUseException -> Some ()
+        | _ -> None
+
+    let private checkOrCreate (client, tableName) validateDescription maybeMakeCreateTableRequest : Async<TableDescription> =
+        let rec aux retries = async {
+            match! waitForActive (client, tableName) |> Async.Catch with
+            | Choice1Of2 desc ->
+                validateDescription desc
+                return desc
+
+            | Choice2Of2 (:? ResourceNotFoundException) when Option.isSome maybeMakeCreateTableRequest ->
+                let req = maybeMakeCreateTableRequest.Value ()
+                match! CreateTableRequest.execute client req |> Async.Catch with
+                | Choice1Of2 _ -> return! aux retries
+                | Choice2Of2 Conflict when retries > 0 ->
+                    do! Async.Sleep 2000
+                    return! aux (retries - 1)
+
+                | Choice2Of2 e -> return! Async.Raise e
+
+            | Choice2Of2 Conflict when retries > 0 ->
+                do! Async.Sleep 2000
+                return! aux (retries - 1)
+
+            | Choice2Of2 e -> return! Async.Raise e
+        }
+        aux 9 // up to 9 retries, i.e. 10 attempts before we let exception propagate
+
+    let private validateDescription (tableName, template : RecordTemplate<'TRecord>) desc =
+        let existingSchema = TableKeySchemata.OfTableDescription desc
+        if existingSchema <> template.Info.Schemata then
+            sprintf "table '%s' exists with key schema %A, which is incompatible with record '%O'."
+                tableName existingSchema typeof<'TRecord>
+            |> invalidOp
+
+    let private run (client, tableName, template) maybeMakeCreateRequest : Async<unit> =
+        let validate = validateDescription (tableName, template)
+        checkOrCreate (client, tableName) validate maybeMakeCreateRequest |> Async.Ignore
+
+    let verifyOrCreate (client, tableName, template) throughput streaming customize : Async<unit> =
+        let generateCreateRequest () = CreateTableRequest.create (tableName, template) throughput streaming customize
+        run (client, tableName, template) (Some generateCreateRequest)
+
+    let validateOnly (client, tableName, template) : Async<unit> =
+        run (client, tableName, template) None
 
 /// Represents the operation performed on the table, for metrics collection purposes
 type Operation = GetItem | PutItem | UpdateItem | DeleteItem | BatchGetItems | BatchWriteItems | Scan | Query
@@ -259,6 +421,19 @@ type TableContext<'TRecord> internal
     member __.LocalSecondaryIndices = template.LocalSecondaryIndices
     /// Record-induced table template
     member __.Template = template
+
+
+    /// <summary>
+    ///     Creates a DynamoDB client instance for given F# record and table name.<br/>
+    ///     For creating, provisioning or verification, see <c>VerifyOrCreateTableAsync</c> and <c>VerifyTableAsync</c>.
+    /// </summary>
+    /// <param name="client">DynamoDB client instance.</param>
+    /// <param name="tableName">Table name to target.</param>
+    /// <param name="metricsCollector">Function to receive request metrics.</param>
+    new (client : IAmazonDynamoDB, tableName : string, ?metricsCollector : RequestMetrics -> unit) =
+        if not <| isValidTableName tableName then invalidArg "tableName" "unsupported DynamoDB table name."
+        TableContext<'TRecord>(client, tableName, RecordTemplate.Define<'TRecord>(), metricsCollector)
+
 
     /// Creates a new table context instance that uses
     /// a new F# record type. The new F# record type
@@ -846,88 +1021,66 @@ type TableContext<'TRecord> internal
 
 
     /// <summary>
-    ///     Asynchronously updates the underlying table with supplied provisioned throughput.
+    /// Asynchronously verifies that the table exists and is compatible with record key schema, throwing if it is incompatible.<br/>
+    /// If the table is not present, it is created, with the specified <c>throughput</c> (and optionally <c>streaming</c>) configuration.<br/>
+    /// See also <c>VerifyTableAsync</c>, which only verifies the Table is present and correct.<br/>
+    /// See also <c>UpdateTableIfRequiredAsync</c>, which will adjust throughput and streaming if they are not as specified.
     /// </summary>
-    /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
-    member __.UpdateProvisionedThroughputAsync(provisionedThroughput : ProvisionedThroughput) : Async<unit> = async {
-        let request = UpdateTableRequest(tableName, provisionedThroughput)
-        let! ct = Async.CancellationToken
-        let! _response = client.UpdateTableAsync(request, ct) |> Async.AwaitTaskCorrect
-        return ()
-    }
-
+    /// <param name="throughput">Throughput configuration to use for the table.</param>
+    /// <param name="streaming">Optional streaming configuration to apply for the table. Default: Disabled..</param>
+    /// <param name="customize">Callback to post-process the <c>CreateTableRequest</c>.</param>
+    member t.VerifyOrCreateTableAsync(throughput : Throughput, ?streaming, ?customize) : Async<unit> =
+        Provisioning.verifyOrCreate (client, tableName, template) (Some throughput) streaming customize
 
     /// <summary>
-    ///     Asynchronously verify that the table exists and is compatible with record key schema.
+    /// Asynchronously verify that the table exists and is compatible with record key schema, or throw.<br/>
+    /// See also <c>VerifyOrCreateTableAsync</c>, which performs the same check, but can create or re-provision the Table if required.
     /// </summary>
+    member _.VerifyTableAsync() : Async<unit> =
+        Provisioning.validateOnly (client, tableName, template)
+
+    /// <summary>
+    /// Adjusts the Table's configuration via <c>UpdateTable</c> if the <c>throughput</c> or <c>streaming</c> are not as specified.<br/>
+    /// NOTE: The underlying API can throw if a change is currently in progress; see the DynamoDB <a href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTable.html"><c>UpdateTable</c> API documentation</a>.<br/>
+    /// NOTE: Throws <c>InvalidOperationException</c> if the table is not yet <c>Active</c>. It is recommended to ensure the Table is prepared via <c>VerifyTableAsync</c> or <c>VerifyOrCreateTableAsync</c> to guard against the potential for this state.
+    /// </summary>
+    /// <param name="throughput">Throughput configuration to use for the table. Always applied via either <c>CreateTable</c> or <c>UpdateTable</c>.</param>
+    /// <param name="streaming">Optional streaming configuration to apply for the table. Default (if creating): Disabled. Default: (if existing) do not change.</param>
+    /// <param name="custom">Callback to post-process the <c>UpdateTableRequest</c>. <c>UpdateTable</c> is inhibited if it returns <c>false</c> and no other configuration requires a change.</param>
+    /// <param name="currentTableDescription">Current table configuration, if known. Retrieved via <c>DescribeTable</c> if not supplied.</param>
+    member t.UpdateTableIfRequiredAsync(?throughput : Throughput, ?streaming, ?custom, ?currentTableDescription : TableDescription) : Async<unit> = async {
+        let! tableDescription = async {
+            match currentTableDescription with
+            | Some d -> return d
+            | None ->
+                match! Provisioning.tryDescribe (client, tableName) with
+                | Some d -> return d
+                | None -> return invalidOp "Table is not currently Active. Please use VerifyTableAsync or VerifyOrCreateTableAsync to guard against this state." }
+        match UpdateTableRequest.createIfRequired tableName tableDescription throughput streaming custom with
+        | None -> ()
+        | Some request -> do! UpdateTableRequest.execute client request }
+
+    /// <summary>Asynchronously updates the underlying table with supplied provisioned throughput.</summary>
+    /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
+    [<System.Obsolete("Please replace with UpdateTableIfRequiredAsync")>]
+    member t.UpdateProvisionedThroughputAsync(provisionedThroughput : ProvisionedThroughput) : Async<unit> =
+        t.UpdateTableIfRequiredAsync(Throughput.Provisioned provisionedThroughput)
+
+    /// <summary>Asynchronously verify that the table exists and is compatible with record key schema.</summary>
     /// <param name="createIfNotExists">Create the table instance now instance if it does not exist. Defaults to false.</param>
     /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Defaults to (10,10).</param>
-    member __.VerifyTableAsync(?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) : Async<unit> = async {
-        let createIfNotExists = defaultArg createIfNotExists false
-        let (|Conflict|_|) (e : exn) =
-            match e with
-            | :? AmazonDynamoDBException as e when e.StatusCode = HttpStatusCode.Conflict -> Some()
-            | :? ResourceInUseException -> Some ()
-            | _ -> None
+    [<System.Obsolete("Please replace with either 1. VerifyTableAsync or 2. VerifyOrCreateTableAsync")>]
+    member t.VerifyTableAsync(?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) : Async<unit> =
+        if createIfNotExists = Some true then
+            let throughput = match provisionedThroughput with Some p -> p | None -> ProvisionedThroughput(10L, 10L)
+            t.VerifyOrCreateTableAsync(Throughput.Provisioned throughput)
+         else
+            t.VerifyTableAsync()
 
-        let rec verify lastExn retries = async {
-            match lastExn with
-            | Some e when retries = 0 -> do! Async.Raise e
-            | _ -> ()
-
-            let! ct = Async.CancellationToken
-            let! response =
-                client.DescribeTableAsync(tableName, ct)
-                |> Async.AwaitTaskCorrect
-                |> Async.Catch
-
-            match response with
-            | Choice1Of2 td ->
-                if td.Table.TableStatus <> TableStatus.ACTIVE then
-                    do! Async.Sleep 2000
-                    // wait indefinitely if table is in transition state
-                    return! verify None retries
-                else
-
-                let existingSchema = TableKeySchemata.OfTableDescription td.Table
-                if existingSchema <> template.Info.Schemata then
-                    sprintf "table '%s' exists with key schema %A, which is incompatible with record '%O'."
-                        tableName existingSchema typeof<'TRecord>
-                    |> invalidOp
-
-            | Choice2Of2 (:? ResourceNotFoundException) when createIfNotExists ->
-                let provisionedThroughput =
-                    match provisionedThroughput with
-                    | None -> ProvisionedThroughput(10L,10L)
-                    | Some pt -> pt
-
-                let ctr = template.Info.Schemata.CreateCreateTableRequest (tableName, provisionedThroughput)
-                let! ct = Async.CancellationToken
-                let! response =
-                    client.CreateTableAsync(ctr, ct)
-                    |> Async.AwaitTaskCorrect
-                    |> Async.Catch
-
-                match response with
-                | Choice1Of2 _ -> return! verify None retries
-                | Choice2Of2 (Conflict as e) ->
-                    do! Async.Sleep 2000
-                    return! verify (Some e) (retries - 1)
-
-                | Choice2Of2 e -> do! Async.Raise e
-
-            | Choice2Of2 (Conflict as e) ->
-                do! Async.Sleep 2000
-                return! verify (Some e) (retries - 1)
-
-            | Choice2Of2 e -> do! Async.Raise e
-        }
-
-        do! verify None 10
-    }
-
-/// Table context factory methods
-type TableContext =
+// Deprecated factory method, to be removed. Replaced with
+// 1. TableContext<'T> ctor (synchronous)
+// 2. VerifyOrCreateTableAsync OR VerifyTableAsync (explicitly async to signify that verification/creation is a costly and/or privileged operation)
+type TableContext internal () =
 
     /// <summary>
     ///     Creates a DynamoDB client instance for given F# record and table name.
@@ -935,21 +1088,23 @@ type TableContext =
     /// <param name="client">DynamoDB client instance.</param>
     /// <param name="tableName">Table name to target.</param>
     /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
-    /// <param name="createIfNotExists">Create the table now instance if it does not exist. Defaults to false.</param>
-    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Defaults to (10,10).</param>
+    /// <param name="createIfNotExists">Create the table now if it does not exist. Defaults to false.</param>
+    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Default: 10 RCU, 10 WCU</param>
     /// <param name="metricsCollector">Function to receive request metrics.</param>
-    static member CreateAsync<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool,
-                                                                    ?provisionedThroughput : ProvisionedThroughput, ?metricsCollector : RequestMetrics -> unit) : Async<TableContext<'TRecord>> = async {
-
-        if not <| isValidTableName tableName then invalidArg "tableName" "unsupported DynamoDB table name."
-        let verifyTable = defaultArg verifyTable true
-        let createIfNotExists = defaultArg createIfNotExists false
-        let context = new TableContext<'TRecord>(client, tableName, RecordTemplate.Define<'TRecord>(), metricsCollector)
-        if verifyTable || createIfNotExists then
-            do! context.VerifyTableAsync(createIfNotExists = createIfNotExists, ?provisionedThroughput = provisionedThroughput)
-
-        return context
-    }
+    [<System.Obsolete(@"Creation with synchronous verification has been deprecated. Please use either
+                        1. TableContext constructor (optionally followed by VerifyTableAsync or VerifyOrCreateTableAsync) OR
+                        2. (for scripting scenarios) Scripting.TableContext.Initialize")>]
+    static member Create<'TRecord>
+        (   client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool,
+            ?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput,
+            ?metricsCollector : RequestMetrics -> unit) = async {
+        let context = TableContext<'TRecord>(client, tableName, ?metricsCollector = metricsCollector)
+        if createIfNotExists = Some true then
+            let throughput = match provisionedThroughput with Some p -> p | None -> ProvisionedThroughput(10L, 10L)
+            do! context.VerifyOrCreateTableAsync(Throughput.Provisioned throughput)
+        elif verifyTable <> Some false then
+            do! context.VerifyTableAsync()
+        return context }
 
 /// <summary>
 /// Sync-over-Async helpers that can be opted-into when working in scripting scenarios.
@@ -957,6 +1112,32 @@ type TableContext =
 /// implements correct handling of the intrinsic asynchronous nature of the underlying interface
 /// </summary>
 module Scripting =
+
+    /// Factory methods for scripting scenarios
+    type TableContext internal () =
+
+        /// <summary>
+        /// Creates a DynamoDB client instance for the specified F# record type, client and table name.<br/>
+        /// Validates the table exists, and has the correct schema as per <c>VerifyTableAsync</c>.<br/>
+        /// See other overload for <c>VerifyOrCreateTableAsync</c> semantics.
+        /// </summary>
+        /// <param name="client">DynamoDB client instance.</param>
+        /// <param name="tableName">Table name to target.</param>
+        static member Initialize<'TRecord>(client : IAmazonDynamoDB, tableName : string) : TableContext<'TRecord> =
+            let context = TableContext<'TRecord>(client, tableName)
+            context.VerifyTableAsync() |> Async.RunSynchronously
+            context
+
+        /// Creates a DynamoDB client instance for the specified F# record type, client and table name.<br/>
+        /// Either validates the table exists and has the correct schema, or creates a fresh one, as per <c>VerifyOrCreateTableAsync</c>.<br/>
+        /// See other overload for <c>VerifyTableAsync</c> semantics.
+        /// <param name="client">DynamoDB client instance.</param>
+        /// <param name="tableName">Table name to target.</param>
+        /// <param name="throughput">Throughput to configure if the Table does not yet exist.</param>
+        static member Initialize<'TRecord>(client : IAmazonDynamoDB, tableName : string, throughput) : TableContext<'TRecord> =
+            let context = TableContext<'TRecord>(client, tableName)
+            context.VerifyOrCreateTableAsync(throughput) |> Async.RunSynchronously
+            context
 
     type TableContext<'TRecord> with
 
@@ -1369,36 +1550,8 @@ module Scripting =
             |> Async.RunSynchronously
 
 
-        /// <summary>
-        ///     Updates the underlying table with supplied provisioned throughput.
-        /// </summary>
+        /// <summary>Updates the underlying table with supplied provisioned throughput.</summary>
         /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
-        member __.UpdateProvisionedThroughput(provisionedThroughput : ProvisionedThroughput) =
-            __.UpdateProvisionedThroughputAsync(provisionedThroughput) |> Async.RunSynchronously
-
-
-        /// <summary>
-        ///     Asynchronously verify that the table exists and is compatible with record key schema.
-        /// </summary>
-        /// <param name="createIfNotExists">Create the table instance now if it does not exist. Defaults to false.</param>
-        /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
-        member __.VerifyTable(?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput) =
-            __.VerifyTableAsync(?createIfNotExists = createIfNotExists, ?provisionedThroughput = provisionedThroughput)
-            |> Async.RunSynchronously
-
-  type TableContext with
-
-        /// <summary>
-        ///     Creates a DynamoDB client instance for given F# record and table name.
-        /// </summary>
-        /// <param name="client">DynamoDB client instance.</param>
-        /// <param name="tableName">Table name to target.</param>
-        /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
-        /// <param name="createIfNotExists">Create the table now instance if it does not exist. Defaults to false.</param>
-        /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
-        /// <param name="metricsCollector">Function to receive request metrics.</param>
-        static member Create<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool,
-                                            ?provisionedThroughput : ProvisionedThroughput, ?metricsCollector : RequestMetrics -> unit) =
-            TableContext.CreateAsync<'TRecord>(client, tableName, ?verifyTable = verifyTable, ?createIfNotExists = createIfNotExists,
-                                                    ?provisionedThroughput = provisionedThroughput, ?metricsCollector = metricsCollector)
-            |> Async.RunSynchronously
+        member t.UpdateProvisionedThroughput(provisionedThroughput : ProvisionedThroughput) =
+            let spec = Throughput.Provisioned provisionedThroughput
+            t.UpdateTableIfRequiredAsync(spec) |> Async.RunSynchronously

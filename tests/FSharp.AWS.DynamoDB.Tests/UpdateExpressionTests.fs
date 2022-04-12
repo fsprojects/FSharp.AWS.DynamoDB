@@ -94,7 +94,7 @@ type ``Update Expression Tests``(fixture : TableFixture) =
             Serialized = rand(), guid() ; Serialized2 = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
         }
 
-    let table = TableContext.Create<UpdateExprRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
+    let table = fixture.CreateEmpty<UpdateExprRecord>()
 
     let [<Fact>] ``Attempt to update HashKey`` () =
         let item = mkItem()

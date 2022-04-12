@@ -56,7 +56,7 @@ type ``Simple Table Operation Tests`` (fixture : TableFixture) =
             Unions = [Choice1Of3 (guid()) ; Choice2Of3(rand()) ; Choice3Of3(Guid.NewGuid().ToByteArray())]
         }
 
-    let table = TableContext.Create<SimpleRecord>(fixture.Client, fixture.TableName, createIfNotExists = true)
+    let table = fixture.CreateEmpty<SimpleRecord>()
 
     let [<Fact>] ``Convert to compatible table`` () =
         let table' = table.WithRecordType<CompatibleRecord> ()
