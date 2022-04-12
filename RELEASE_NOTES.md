@@ -1,3 +1,6 @@
+### 0.10.1-beta
+* Fixed accidentally removed/renamed legacy factory methods (`TableContext.Create`/`TableContext.CreateAsync`) 
+
 ### 0.10.0-beta
 * Added `TableContext` constructor (replaces `TableContext.Create(verifyTable = false)`)
 * Added `TableContext.VerifyOrCreateTableAsync` (replaces `TableContext.VerifyTableAsync(createIfNotExists = true)`)
