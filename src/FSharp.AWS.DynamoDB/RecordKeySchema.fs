@@ -196,7 +196,7 @@ type RecordTableInfo with
 
                 | Some hkca, None, [|(KeyType.Range, rk)|] ->
                     if not <| isValidKeyName hkca.Name then
-                        invalidArg hkca.Name "invalid hashkey name; must be 1 to 255 bytes long (as utf8)."
+                        invalidArg hkca.Name "invalid HashKey name; must be 1 to 255 bytes long (as utf8)."
 
                     if pickler.Properties |> Array.exists(fun p -> p.Name = hkca.Name) then
                         invalidArg (string typeof<'T>) "Default HashKey attribute contains conflicting name."

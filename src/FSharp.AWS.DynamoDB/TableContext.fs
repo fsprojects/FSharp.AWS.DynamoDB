@@ -269,7 +269,6 @@ type TableContext<'TRecord> internal
         let! ct = Async.CancellationToken
         let! response = client.BatchGetItemAsync(request, ct) |> Async.AwaitTaskCorrect
         maybeReport |> Option.iter (fun r -> r BatchGetItems (List.ofSeq response.ConsumedCapacity) response.Responses.[tableName].Count)
-
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "BatchGetItem request returned error %O" response.HttpStatusCode
 
@@ -320,12 +319,12 @@ type TableContext<'TRecord> internal
 
             let! ct = Async.CancellationToken
             let! response = client.QueryAsync(request, ct) |> Async.AwaitTaskCorrect
+            consumedCapacity.Add response.ConsumedCapacity
             if response.HttpStatusCode <> HttpStatusCode.OK then
                 emitMetrics ()
                 failwithf "Query request returned error %O" response.HttpStatusCode
 
             downloaded.AddRange response.Items
-            consumedCapacity.Add response.ConsumedCapacity
             if response.LastEvaluatedKey.Count > 0 then
                 lastEvaluatedKey <- Some response.LastEvaluatedKey
                 if limit.IsDownloadIncomplete downloaded.Count then
