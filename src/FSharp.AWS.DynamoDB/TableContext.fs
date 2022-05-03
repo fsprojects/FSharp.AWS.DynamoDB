@@ -260,6 +260,13 @@ module TransactWriteItemsRequest =
         | :? TransactionCanceledException as e when e.CancellationReasons.Exists(fun x -> x.Code = "ConditionalCheckFailed") -> Some ()
         | _ -> None
 
+/// Helpers for identifying Failed Precondition check outcomes emanating from <c>PutItem</c>, <c>UpdateItem</c> or <c>DeleteItem</c>
+module Precondition =
+    /// <summary>Exception filter to identify whether an individual (non-transactional) <c>PutItem</c>, <c>UpdateItem</c> or <c>DeleteItem</c> call's <c>precondition</c> check failing.</summary>
+    let (|CheckFailed|_|) : exn -> unit option = function
+        | :? ConditionalCheckFailedException -> Some ()
+        | _ -> None
+
 /// DynamoDB client object for performing table operations in the context of given F# record representations
 [<Sealed; AutoSerializable(false)>]
 type TableContext<'TRecord> internal
@@ -501,7 +508,7 @@ type TableContext<'TRecord> internal
 
     /// <summary>Asynchronously puts a record item in the table.</summary>
     /// <param name="item">Item to be written.</param>
-    /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
+    /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     member _.PutItemAsync(item : 'TRecord, ?precondition : ConditionExpression<'TRecord>) : Async<TableKey> = async {
         let attrValues = template.ToAttributeValues(item)
         let request = PutItemRequest(tableName, attrValues, ReturnValues = ReturnValue.NONE, ReturnConsumedCapacity = returnConsumedCapacity)
@@ -522,7 +529,7 @@ type TableContext<'TRecord> internal
 
     /// <summary>Asynchronously puts a record item in the table.</summary>
     /// <param name="item">Item to be written.</param>
-    /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
+    /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     member t.PutItemAsync(item : 'TRecord, precondition : Expr<'TRecord -> bool>) =
         t.PutItemAsync(item, template.PrecomputeConditionalExpr precondition)
 
@@ -563,7 +570,7 @@ type TableContext<'TRecord> internal
     /// <summary>Asynchronously updates item with supplied key using provided update expression.</summary>
     /// <param name="key">Key of item to be updated.</param>
     /// <param name="updater">Table update expression.</param>
-    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+    /// <param name="precondition">Specifies a precondition expression that any existing item should satisfy. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
     member _.UpdateItemAsync(key : TableKey, updater : UpdateExpression<'TRecord>,
                                 ?precondition : ConditionExpression<'TRecord>,
@@ -594,7 +601,7 @@ type TableContext<'TRecord> internal
     /// <summary>Asynchronously updates item with supplied key using provided record update expression.</summary>
     /// <param name="key">Key of item to be updated.</param>
     /// <param name="updateExpr">Table update expression.</param>
-    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+    /// <param name="precondition">Specifies a precondition expression that any existing item should satisfy. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
     member t.UpdateItemAsync(key : TableKey, updateExpr : Expr<'TRecord -> 'TRecord>, ?precondition : Expr<'TRecord -> bool>, ?returnLatest : bool) =
         let updater = template.PrecomputeUpdateExpr updateExpr
@@ -604,7 +611,7 @@ type TableContext<'TRecord> internal
     /// <summary>Asynchronously updates item with supplied key using provided update operation expression.</summary>
     /// <param name="key">Key of item to be updated.</param>
     /// <param name="updateExpr">Table update expression.</param>
-    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+    /// <param name="precondition">Specifies a precondition expression that any existing item should satisfy. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
     member t.UpdateItemAsync(key : TableKey, updateExpr : Expr<'TRecord -> UpdateOp>, ?precondition : Expr<'TRecord -> bool>, ?returnLatest : bool) =
         let updater = template.PrecomputeUpdateExpr updateExpr
@@ -710,7 +717,7 @@ type TableContext<'TRecord> internal
     /// <summary>Asynchronously deletes item of given key from table.</summary>
     /// <returns>The deleted item, or None if the item didn’t exist.</returns>
     /// <param name="key">Key of item to be deleted.</param>
-    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     member _.DeleteItemAsync(key : TableKey, ?precondition : ConditionExpression<'TRecord>) : Async<'TRecord option> = async {
         let kav = template.ToAttributeValues key
         let request = DeleteItemRequest(tableName, kav, ReturnValues = ReturnValue.ALL_OLD, ReturnConsumedCapacity = returnConsumedCapacity)
@@ -735,7 +742,7 @@ type TableContext<'TRecord> internal
     /// <summary>Asynchronously deletes item of given key from table.</summary>
     /// <returns>The deleted item, or None if the item didn’t exist.</returns>
     /// <param name="key">Key of item to be deleted.</param>
-    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+    /// <param name="precondition">Specifies a precondition expression that existing item should satisfy. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     member t.DeleteItemAsync(key : TableKey, precondition : Expr<'TRecord -> bool>) : Async<'TRecord option> =
         t.DeleteItemAsync(key, template.PrecomputeConditionalExpr precondition)
 
@@ -1218,7 +1225,7 @@ module Scripting =
         ///     Puts a record item in the table.
         /// </summary>
         /// <param name="item">Item to be written.</param>
-        /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
+        /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         member t.PutItem(item : 'TRecord, ?precondition : ConditionExpression<'TRecord>) =
             t.PutItemAsync(item, ?precondition = precondition) |> Async.RunSynchronously
 
@@ -1226,7 +1233,7 @@ module Scripting =
         ///     Puts a record item in the table.
         /// </summary>
         /// <param name="item">Item to be written.</param>
-        /// <param name="precondition">Precondition to satisfy in case item already exists.</param>
+        /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         member t.PutItem(item : 'TRecord, precondition : Expr<'TRecord -> bool>) =
             t.PutItemAsync(item, precondition) |> Async.RunSynchronously
 
@@ -1246,7 +1253,7 @@ module Scripting =
         /// </summary>
         /// <param name="key">Key of item to be updated.</param>
         /// <param name="updater">Table update expression.</param>
-        /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+        /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
         member t.UpdateItem(key : TableKey, updater : UpdateExpression<'TRecord>, ?precondition : ConditionExpression<'TRecord>, ?returnLatest : bool) =
             t.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
@@ -1257,7 +1264,7 @@ module Scripting =
         /// </summary>
         /// <param name="key">Key of item to be updated.</param>
         /// <param name="updater">Table update expression.</param>
-        /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+        /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
         member t.UpdateItem(key : TableKey, updater : Expr<'TRecord -> 'TRecord>, ?precondition : Expr<'TRecord -> bool>, ?returnLatest : bool) =
             t.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
@@ -1268,7 +1275,7 @@ module Scripting =
         /// </summary>
         /// <param name="key">Key of item to be updated.</param>
         /// <param name="updater">Table update expression.</param>
-        /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+        /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
         member t.UpdateItem(key : TableKey, updater : Expr<'TRecord -> UpdateOp>, ?precondition : Expr<'TRecord -> bool>, ?returnLatest : bool) =
             t.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
@@ -1345,7 +1352,7 @@ module Scripting =
 
         /// <summary>Deletes item of given key from table.</summary>
         /// <param name="key">Key of item to be deleted.</param>
-        /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+        /// <param name="precondition">Precondition to satisfy where item exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         member t.DeleteItem(key : TableKey, ?precondition : ConditionExpression<'TRecord>) =
             t.DeleteItemAsync(key, ?precondition = precondition) |> Async.RunSynchronously
 
@@ -1353,7 +1360,7 @@ module Scripting =
         ///     Deletes item of given key from table.
         /// </summary>
         /// <param name="key">Key of item to be deleted.</param>
-        /// <param name="precondition">Specifies a precondition expression that existing item should satisfy.</param>
+        /// <param name="precondition">Precondition to satisfy where item exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         member t.DeleteItem(key : TableKey, precondition : Expr<'TRecord -> bool>) =
             t.DeleteItemAsync(key, precondition) |> Async.RunSynchronously
 
