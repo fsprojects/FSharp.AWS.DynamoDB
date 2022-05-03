@@ -1058,18 +1058,7 @@ type TableContext<'TRecord> internal
 // 2. VerifyOrCreateTableAsync OR VerifyTableAsync (explicitly async to signify that verification/creation is a costly and/or privileged operation)
 type TableContext internal () =
 
-    /// <summary>
-    ///     Creates a DynamoDB client instance for given F# record and table name.
-    /// </summary>
-    /// <param name="client">DynamoDB client instance.</param>
-    /// <param name="tableName">Table name to target.</param>
-    /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
-    /// <param name="createIfNotExists">Create the table now if it does not exist. Defaults to false.</param>
-    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Default: 10 RCU, 10 WCU</param>
-    /// <param name="metricsCollector">Function to receive request metrics.</param>
-    [<System.Obsolete(@"This method has been deprecated. Please use TableContext constructor
-                        (optionally followed by VerifyTableAsync or VerifyOrCreateTableAsync)")>]
-    static member CreateAsync<'TRecord>
+    static member private CreateAsyncImpl<'TRecord>
         (   client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool,
             ?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput,
             ?metricsCollector : RequestMetrics -> unit) = async {
@@ -1087,16 +1076,34 @@ type TableContext internal () =
     /// <param name="client">DynamoDB client instance.</param>
     /// <param name="tableName">Table name to target.</param>
     /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
+    /// <param name="createIfNotExists">Create the table now if it does not exist. Defaults to false.</param>
+    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Default: 10 RCU, 10 WCU</param>
+    /// <param name="metricsCollector">Function to receive request metrics.</param>
+    [<System.Obsolete(@"This method has been deprecated. Please use TableContext constructor
+                        (optionally followed by VerifyTableAsync or VerifyOrCreateTableAsync)")>]
+    static member CreateAsync<'TRecord>
+        (   client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool,
+            ?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput, ?metricsCollector : RequestMetrics -> unit) =
+        TableContext.CreateAsyncImpl<'TRecord>(client, tableName, ?verifyTable = verifyTable, ?createIfNotExists = createIfNotExists,
+                                               ?provisionedThroughput = provisionedThroughput, ?metricsCollector = metricsCollector)
+
+    /// <summary>
+    ///     Creates a DynamoDB client instance for given F# record and table name.
+    /// </summary>
+    /// <param name="client">DynamoDB client instance.</param>
+    /// <param name="tableName">Table name to target.</param>
+    /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
     /// <param name="createIfNotExists">Create the table now instance if it does not exist. Defaults to false.</param>
     /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
     /// <param name="metricsCollector">Function to receive request metrics.</param>
     [<System.Obsolete(@"Creation with synchronous verification has been deprecated. Please use either
                         1. TableContext constructor (optionally followed by VerifyTableAsync or VerifyOrCreateTableAsync) OR
                         2. (for scripting scenarios) Scripting.TableContext.Initialize")>]
-    static member Create<'TRecord>(client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool, ?createIfNotExists : bool,
-                                        ?provisionedThroughput : ProvisionedThroughput, ?metricsCollector : (RequestMetrics -> unit)) =
-        TableContext.CreateAsync<'TRecord>(client, tableName, ?verifyTable = verifyTable, ?createIfNotExists = createIfNotExists,
-                                                ?provisionedThroughput = provisionedThroughput, ?metricsCollector = metricsCollector)
+    static member Create<'TRecord>
+        (   client : IAmazonDynamoDB, tableName : string, ?verifyTable : bool,
+            ?createIfNotExists : bool, ?provisionedThroughput : ProvisionedThroughput, ?metricsCollector : RequestMetrics -> unit) =
+        TableContext.CreateAsyncImpl<'TRecord>(client, tableName, ?verifyTable = verifyTable, ?createIfNotExists = createIfNotExists,
+                                               ?provisionedThroughput = provisionedThroughput, ?metricsCollector = metricsCollector)
         |> Async.RunSynchronously
 
 /// <summary>
