@@ -125,4 +125,22 @@ type ``Simple Table Operation Tests`` (fixture : TableFixture) =
         test <@ None = deletedItem @>
         test <@ not (table.ContainsKey key) @>
 
+    let [<Theory; InlineData true; InlineData false>]
+        ``Condition Check outcome should affect sibling TransactWrite`` shouldFail = async {
+        let item, item2 = mkItem (), mkItem ()
+        let key = table.PutItem item
+
+        let requests = [
+            if shouldFail then  TransactWrite.Check (key, table.Template.PrecomputeConditionalExpr <@ fun t -> NOT_EXISTS t.Value @>)
+            else                TransactWrite.Check (key, table.Template.PrecomputeConditionalExpr <@ fun t -> EXISTS t.Value @>)
+                                TransactWrite.Put   (item2, None) ]
+        let mutable failed = false
+        try do! table.TransactWriteItems requests
+        with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed -> failed <- true
+
+        let failed = failed
+        test <@ failed = shouldFail @>
+        let item2Found = table.ContainsKey (table.Template.ExtractKey item2)
+        test <@ not shouldFail = item2Found @> }
+
     interface IClassFixture<TableFixture>
