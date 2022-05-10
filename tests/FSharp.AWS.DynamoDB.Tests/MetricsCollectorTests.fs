@@ -47,6 +47,8 @@ type TestCollector() =
 
     member _.Metrics = metrics |> Seq.toList
 
+    member _.Clear() = metrics.Clear()
+
 let (|TotalCu|) : ConsumedCapacity list -> float = Seq.sumBy (fun c -> c.CapacityUnits)
 
 /// Tests without common setup
@@ -79,6 +81,42 @@ type Tests(fixture : TableFixture) =
                     cu > 0
                 | _ -> false @>
 
+    let compile = rawTable.Template.PrecomputeConditionalExpr
+
+    let [<Fact>] ``Collect Metrics on Transactional PutItem`` () = async {
+        let item = mkItem (guid()) (guid()) 0
+        let _ = sut.PutItem item
+        let simpleCu = trap <@ match collector.Metrics with [{ ConsumedCapacity = TotalCu cu }] -> cu | x -> failwithf "Unexpected %A" x @>
+        collector.Clear()
+
+        let item = mkItem (guid()) (guid()) 0
+        let requests = [TransactWrite.Put (item, Some (compile <@ fun t -> NOT_EXISTS t.RangeKey @>)) ]
+
+        do! sut.TransactWriteItems requests
+
+        test <@ match collector.Metrics with
+                | [{ ItemCount = 1; Operation = TransactWriteItems; TableName = ExpectedTableName; ConsumedCapacity = TotalCu cu }] ->
+                            cu >= simpleCu * 2. // doing it transactionally costs at least double
+                | _ -> false @>
+
+        let! itemFound = sut.ContainsKeyAsync(sut.Template.ExtractKey item)
+        test <@ itemFound @> }
+
+    let [<Fact>] ``No Metrics on Canceled PutItem`` () = async {
+        let collector = TestCollector()
+        let sut = rawTable.WithMetricsCollector(collector.Collect)
+
+        let item = mkItem (guid()) (guid()) 0
+
+        // The check will fail, which triggers a throw from the underlying AWS SDK; there's no way to extract the consumption info in that case
+        let requests = [TransactWrite.Put (item, Some (compile <@ fun t -> EXISTS t.RangeKey @>)) ]
+
+        let mutable failed = false
+        try do! sut.TransactWriteItems requests
+        with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed -> failed <- true
+        true =! failed
+        [] =! collector.Metrics }
+
     interface IClassFixture<TableFixture>
 
 /// Tests that look up a specific item. Each test run gets a fresh individual item
@@ -89,7 +127,6 @@ type ItemTests(fixture : TableFixture) =
 
     let item = mkItem (guid()) (guid()) 0
     do  rawTable.PutItem item |> ignore
-
 
     let collector = TestCollector()
     let sut = rawTable.WithMetricsCollector(collector.Collect)

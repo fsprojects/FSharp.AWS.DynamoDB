@@ -780,10 +780,12 @@ type TableContext<'TRecord> internal
     ///     See the DynamoDB <a href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_TransactWriteItems.html"><c>TransactWriteItems</c> API documentation</a> for full details of semantics and charges.<br/>
     /// </summary>
     /// <param name="items">Operations to be performed.<br/>
+    /// Throws <c>ArgumentOutOfRangeException</c> if item count is not between 1 and 25 as required by underlying API.<br/>
     /// Use <c>TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed</c> to identify any Precondition Check failures.</param>
     /// <param name="clientRequestToken">The <c>ClientRequestToken</c> to supply as an idempotency key (10 minute window).</param>
     member _.TransactWriteItems(items : seq<TransactWrite<'TRecord>>, ?clientRequestToken) : Async<unit> = async {
         let reqs = TransactWriteItemsRequest.toTransactItems tableName template items
+        if reqs.Count = 0 || reqs.Count > 25 then raise <| System.ArgumentOutOfRangeException(nameof items, "must be between 1 and 25 items.")
         let req = TransactWriteItemsRequest(ReturnConsumedCapacity = returnConsumedCapacity, TransactItems = reqs)
         clientRequestToken |> Option.iter (fun x -> req.ClientRequestToken <- x)
         let! ct = Async.CancellationToken
