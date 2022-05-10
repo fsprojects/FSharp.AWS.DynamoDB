@@ -68,6 +68,16 @@ which is closer to the underlying DynamoDB API:
 let updated = table.UpdateItem <@ fun r -> SET r.Name "newName" &&& ADD r.Dependencies ["MBrace.Core.dll"] @>
 ```
 
+Preconditions that are not upheld are signalled via an `Exception` by the underlying AWS SDK. These can be trapped using the supplied exception filter:
+
+```fsharp
+try let! updated = table.UpdateItemAsync(<@ fun r -> { r with Started = Some DateTimeOffset.Now } @>,
+                                         preCondition = <@ fun r -> r.DateTimeOffset = None @>)
+    return Some updated
+with Precondition.CheckFailed ->
+    return None 
+```
+
 ## Supported Field Types
 
 `FSharp.AWS.DynamoDB` supports the following field types:
@@ -240,7 +250,61 @@ table.Scan(startedBefore (DateTimeOffset.Now - TimeSpan.FromDays 1.))
 
 (See [`Script.fsx`](src/FSharp.AWS.DynamoDB/Script.fsx) for example timings showing the relative efficiency.)
 
+## `TransactWriteItems`
+
+[`TransactWriteItems`](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_TransactWriteItems.html) lets you (at a high level; there are [some key differences](https://stackoverflow.com/a/71706015/11635) in how the APIs are structured)
+compose multiple write transactions into an aggregate request that will succeed or fail atomically. See this [excellent overview article](https://www.alexdebrie.com/posts/dynamodb-transactions) by [@alexdebrie](https://github.com/alexdebrie) and
+[the `TransactWriteItems` API documentation](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_TransactWriteItems.html) for full semantics
+(e.g., the full API lets you compose transactions across tables - the present implementation does not attempt to expose that facility,
+and there are diverse constraints such as the fact that no item may have more than one operation applied to it within the overall transaction).
+
+Conditions and update expressions are taken in the [precompiled](#Precomputing-DynamoDB-Expressions) form.
+
+The supported operations are:
+- `Check` - a `ConditionCheck` operation on a specified `key` supplied as a (compiled) `condition`
+- `Put` - a `PutItem`-equivalent operation that upserts a supplied `item` (with an `option`al `precondition`)
+- `Update` - an `UpdateItem`-equivalent operation that applies a specified `updater` expression to an item with a specified `key` (with an `option`al `precondition`)
+- `Delete` - a `DeleteItem`-equivalent operation that deletes the item with a specified `key` (with an `option`al `precondition`)
+
+```fsharp
+let compile = table.Template.PrecomputeConditionalExpr
+let doesntExistCondition = compile <@ fun t -> NOT_EXISTS t.Value @>
+let existsCondition = compile <@ fun t -> EXISTS t.Value @>
+
+let key = TableKey.Combined(hashKey, rangeKey)
+let requests = [
+    TransactWrite.Check  (key, doesntExistCondition)
+    TransactWrite.Put    (item2, None)
+    TransactWrite.Put    (item3, Some existaCondition)
+    TransactWrite.Delete (table.Template.ExtractKey item5, None) ]
+do! table.TransactWriteItems requests
+```
+
+Failed preconditions (or `TransactWrite.Check` requests) are signalled as per the underlying API, via a `TransactionCanceledException`.
+Use `TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed` to trap such conditions:
+
+```fsharp
+try do! table.TransactWriteItems writes
+        return Some result
+with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed -> return None 
+```
+
+See the [`TransactWriteItems tests`](./tests/FSharp.AWS.DynamoDB.Tests/SimpleTableOperationTests.fs#130) for more details and examples.
+
+It should be noted that the [request charging structures](#request-charging-structures) are such that you'll pay double
+or more the Write Capacity Units in charges per constituent `TransactItem` of which the transaction is composed when compared to
+expressing equivalent semantics as precondition expressions, so they should only be used where absolutely required.
+
+## Request Charging Structures
+
+The key to using DynamoDB (really, any rate-limited store) is to invest time before, during and after you design your table structure,
+updates and queries to understand the charging structure and how its affecting the efficiency of your application inside out.
+Here's a [good overview article](https://zaccharles.medium.com/calculating-a-dynamodb-items-size-and-consumed-capacity-d1728942eb7c),
+but no single article will convey the complete picture - reading and observing charges empirically should not be an afterthought.
+
 ## Observability
+
+Critical to any production deployment is to ensure that you have good insight into the costs your application is incurring at runtime.
 
 A hook is provided so metrics can be published via your preferred Observability provider. For example, using [Prometheus.NET](https://github.com/prometheus-net/prometheus-net):
 
@@ -254,7 +318,7 @@ let table = TableContext<WorkItemInfo>(client, tableName = "workItems", metricsC
 If `metricsCollector` is supplied, the requests will set `ReturnConsumedCapacity` to `ReturnConsumedCapacity.INDEX` 
 and the `RequestMetrics` parameter will contain a list of `ConsumedCapacity` objects returned from the DynamoDB operations.
 
-### Building & Running Tests
+## Building & Running Tests
 
 To build using the dotnet SDK:
 

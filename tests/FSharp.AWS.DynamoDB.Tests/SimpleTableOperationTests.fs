@@ -128,7 +128,7 @@ type ``Simple Table Operation Tests`` (fixture : TableFixture) =
 
     interface IClassFixture<TableFixture>
 
-type TransactWriteItems(fixture : TableFixture) =
+type ``TransactWriteItems tests``(fixture : TableFixture) =
 
     let rand = let r = Random() in fun () -> int64 <| r.Next()
     let mkItem() =
