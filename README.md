@@ -152,7 +152,7 @@ type Record =
     }
 ```
 
-Queries can now be performed on the `GSIH` and `GSIR` fields as if they were regular hashkey and rangekey attributes.
+Queries can now be performed on the `GSIH` and `GSIR` fields as if they were regular `HashKey` and `RangeKey` Attributes.
 
 _NOTE: Global secondary indices are created using the same provisioned throughput as for the primary keys_.
 
@@ -167,10 +167,10 @@ type Record =
     }
 ```
 
-Queries can now be performed using LSI as a secondary RangeKey.
+Queries can now be performed using `LSI` as a secondary `RangeKey`.
 
-NB: Due to API restrictions, secondary indices in the scope of `FSharp.AWS.DynamoDB` always project *all* table attributes,
-which can incur additional costs from Amazon.
+NB: Due to API restrictions, the secondary index support in `FSharp.AWS.DynamoDB` always [projects](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Projection.html) `ALL` table attributes.
+_NOTE: A key impact of this is that it induces larger write and storage costs (each write hits two copies of everything) although it does minimize read latency due to extra 'fetch' operations - see [the LSI documentation](http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LSI.html) for details._
 
 ### Pagination
 
