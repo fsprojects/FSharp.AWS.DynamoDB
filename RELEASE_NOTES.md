@@ -1,3 +1,7 @@
+### 0.11.0-beta
+* Added `Precondition.CheckFailed`
+* Added `TableContext.TransactWriteItems`, `TransactWrite` DU, `TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed`
+
 ### 0.10.1-beta
 * Fixed accidentally removed/renamed legacy factory methods (`TableContext.Create`/`TableContext.CreateAsync`) 
 
