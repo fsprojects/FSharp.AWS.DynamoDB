@@ -1,3 +1,6 @@
+### 0.11.1-beta
+* Updated internal `AwaitTaskCorrect` implementation to align with [canonical version](http://www.fssnip.net/7Rc/title/AsyncAwaitTaskCorrect) [#49](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/49) 
+
 ### 0.11.0-beta
 * Added `Precondition.CheckFailed`
 * Added `TableContext.TransactWriteItems`, `TransactWrite` DU, `TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed`
@@ -16,7 +19,7 @@
 * Obsoleted `TableContext.UpdateProvisionedThroughputAsync` (replace with `TableContext.UpdateTableIfRequiredAsync`)
 * (breaking) Obsoleted `TableContext.VerifyTableAsync` optional argument to create a Table (replace with `VerifyOrCreateTableAsync`)
 * (breaking) Changed `TableKeySchemata.CreateCreateTableRequest` to `ApplyToCreateTableRequest` (with minor signature change)
-* (breaking) Removed `TableContext.CreateAsync` (replace with `TableContext.VerifyTableAsync` or `VerifyOrCreateTableAsync`)
+* (breaking; reverted in `0.10.1`) Removed `TableContext.CreateAsync` (replace with `TableContext.VerifyTableAsync` or `VerifyOrCreateTableAsync`)
 
 ### 0.9.4-beta
 * Moved Sync-over-Async versions of `TableContext` operations into `namespace FSharp.AWS.DynamoDB.Scripting`
