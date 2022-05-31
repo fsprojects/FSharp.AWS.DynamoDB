@@ -430,7 +430,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         test <@ 50 = results.Length @>
 
-    member this.``Detect incompatible key conditions`` () =
+    let [<Fact>] ``Detect incompatible key conditions`` () =
         let test outcome q =
             test <@ outcome = table.Template.PrecomputeConditionalExpr(q).IsKeyConditionCompatible @>
 
@@ -452,7 +452,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         test false <@ fun r -> r.HashKey = "2" && r.GSIR = 2 @>
         test false <@ fun r -> r.GSIH = "1" && r.LSI > 1L @>
 
-    member this.``Detect incompatible comparisons`` () =
+    let [<Fact>] ``Detect incompatible comparisons`` () =
         let test outcome q =
             let f () = table.Template.PrecomputeConditionalExpr(q)
             if outcome then f () |> ignore
@@ -468,7 +468,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         test false <@ fun r -> r.Tuple <= (1L, 2L) @>
         test false <@ fun r -> r.Nested <= r.Nested @>
 
-    member this.``Simple Scan Expression`` () =
+    let [<Fact>] ``Simple Scan Expression`` () =
         let hKey = guid()
 
         seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; RangeKey = int64 i ; Bool = i % 2 = 0}}
@@ -481,19 +481,19 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let results = table.Scan(<@ fun r -> r.HashKey = hKey && r.RangeKey <= 100L && r.Bool = true @>)
         test <@ 50 = results.Length @>
 
-    member this.``Simple Parametric Conditional`` () =
+    let [<Fact>] ``Simple Parametric Conditional`` () =
         let item = mkItem()
         let _key = table.PutItem item
         let cond = table.Template.PrecomputeConditionalExpr <@ fun hk rk r -> r.HashKey = hk && r.RangeKey = rk @>
         table.PutItem(item, cond item.HashKey item.RangeKey) |> ignore
 
-    member this.``Parametric Conditional with optional argument`` () =
+    let [<Fact>] ``Parametric Conditional with optional argument`` () =
         let item = { mkItem() with Optional = None }
         let _key = table.PutItem item
         let cond = table.Template.PrecomputeConditionalExpr <@ fun opt r -> r.Optional = opt @>
         table.PutItem(item, cond None) |> ignore
 
-    member this.``Parametric Conditional with invalid param usage`` () =
+    let [<Fact>] ``Parametric Conditional with invalid param usage`` () =
         let template = table.Template
         fun () -> template.PrecomputeConditionalExpr <@ fun v r -> r.Value = v + 1L @>
         |> shouldFailwith<_, ArgumentException>
@@ -501,7 +501,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         fun () -> template.PrecomputeConditionalExpr <@ fun v r -> r.Value = Option.get v @>
         |> shouldFailwith<_, ArgumentException>
 
-    member this.``Global Secondary index query`` () =
+    let [<Fact>] ``Global Secondary index query`` () =
         let hKey = guid()
 
         seq { for i in 1 .. 200 -> { mkItem() with GSIH = hKey ; GSIR = i }}
@@ -515,7 +515,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         test <@ 100 = result.Length @>
 
 
-    member this.``Local Secondary index query`` () =
+    let [<Fact>] ``Local Secondary index query`` () =
         let hKey = guid()
 
         seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; LSI = int64 i }}
