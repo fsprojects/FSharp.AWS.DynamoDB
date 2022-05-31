@@ -209,7 +209,7 @@ type TimeSpanPickler() =
         else invalidCast a
 
 
-type EnumerationPickler<'E, 'U when 'E : enum<'U>>() =
+type EnumerationPickler<'E, 'U when 'E : enum<'U> and 'E : struct and 'E :> ValueType and 'E : (new : unit -> 'E)>() =
     inherit StringRepresentablePickler<'E> ()
     override __.PickleType = PickleType.String
     override __.PicklerType = PicklerType.Enum
@@ -258,8 +258,8 @@ type StringRepresentationPickler<'T>(ep : StringRepresentablePickler<'T>) =
 
 let mkStringRepresentationPickler (resolver : IPicklerResolver) (prop : PropertyInfo) =
     TypeShape.Create(prop.PropertyType).Accept {
-        new ITypeShapeVisitor<Pickler> with
-            member __.Visit<'T>() =
+        new ITypeVisitor<Pickler> with
+            member _.Visit<'T>() =
                 match resolver.Resolve<'T>() with
                 | :? StringRepresentablePickler<'T> as tp ->
                     if tp.PickleType = PickleType.String then tp :> Pickler
@@ -288,6 +288,6 @@ type SerializerAttributePickler<'T>(serializer : IPropertySerializer, resolver :
 
 let mkSerializerAttributePickler (resolver : IPicklerResolver) (serializer : IPropertySerializer) (t : Type) =
     TypeShape.Create(t).Accept {
-        new ITypeShapeVisitor<Pickler> with
+        new ITypeVisitor<Pickler> with
             member __.Visit<'T> () =
                 new SerializerAttributePickler<'T>(serializer, resolver) :> _ }

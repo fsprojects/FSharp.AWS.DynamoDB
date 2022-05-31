@@ -44,8 +44,10 @@ module private ResolverImpl =
         | Shape.Enum s ->
             s.Accept {
                 new IEnumVisitor<Pickler> with
-                    member __.Visit<'E, 'U when 'E : enum<'U>> () =
-                        new EnumerationPickler<'E, 'U>() :> _ }
+                    member _.Visit<'Enum, 'Underlying when 'Enum : enum<'Underlying>
+                                            and 'Enum : struct
+                                            and 'Enum :> ValueType
+                                            and 'Enum : (new : unit -> 'Enum)>() = new EnumerationPickler<'Enum, 'Underlying>() :> _ }
 
         | Shape.Nullable s ->
             s.Accept {
@@ -54,30 +56,30 @@ module private ResolverImpl =
                         new NullablePickler<'T>(resolver.Resolve()) :> _ }
 
         | Shape.FSharpOption s ->
-            s.Accept {
-                new IFSharpOptionVisitor<Pickler> with
-                    member __.Visit<'T> () =
+            s.Element.Accept {
+                new ITypeVisitor<Pickler> with
+                    member _.Visit<'T> () =
                         let tp = resolver.Resolve<'T>()
                         new OptionPickler<'T>(tp) :> _ }
 
         | Shape.Array s when s.Rank = 1 ->
-            s.Accept {
-                new IArrayVisitor<Pickler> with
-                    member __.Visit<'T> _rank =
+            s.Element.Accept {
+                new ITypeVisitor<Pickler> with
+                    member _.Visit<'T> () =
                         let tp = resolver.Resolve<'T>()
                         new ListPickler<'T [], 'T>(Seq.toArray, null, tp) :> _ }
 
         | Shape.FSharpList s ->
-            s.Accept {
-                new IFSharpListVisitor<Pickler> with
-                    member __.Visit<'T> () =
+            s.Element.Accept {
+                new ITypeVisitor<Pickler> with
+                    member _.Visit<'T> () =
                         let tp = resolver.Resolve<'T>()
                         new ListPickler<'T list, 'T>(List.ofSeq, [], tp) :> _ }
 
         | Shape.ResizeArray s ->
-            s.Accept {
-                new IResizeArrayVisitor<Pickler> with
-                    member __.Visit<'T> () =
+            s.Element.Accept {
+                new ITypeVisitor<Pickler> with
+                    member _.Visit<'T> () =
                         let tp = resolver.Resolve<'T>()
                         new ListPickler<ResizeArray<'T>, 'T>(rlist, null, tp) :> _ }
 
@@ -98,17 +100,17 @@ module private ResolverImpl =
 
         | Shape.Tuple _ as s ->
             s.Accept {
-                new ITypeShapeVisitor<Pickler> with
+                new ITypeVisitor<Pickler> with
                     member __.Visit<'T> () = mkTuplePickler<'T> resolver :> _ }
 
         | Shape.FSharpRecord _ as s ->
             s.Accept {
-                new ITypeShapeVisitor<Pickler> with
+                new ITypeVisitor<Pickler> with
                     member __.Visit<'T>() = mkFSharpRecordPickler<'T> resolver :> _   }
 
         | Shape.FSharpUnion _ as s ->
             s.Accept {
-                new ITypeShapeVisitor<Pickler> with
+                new ITypeVisitor<Pickler> with
                     member __.Visit<'T>() = new UnionPickler<'T>(resolver) :> _   }
 
         | _ -> UnSupportedType.Raise t
