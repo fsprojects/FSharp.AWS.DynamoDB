@@ -197,17 +197,17 @@ type RequestMetrics =
 /// Scan/query limit type (internal only)
 type private LimitType =
     | All | Default | Count of int
-    member x.GetCount () =
+    member x.GetCount() =
         match x with
         | Count l -> Some l
         | _ -> None
-    member x.IsDownloadIncomplete (count : int) =
+    member x.IsDownloadIncomplete(count : int) =
         match x with
         | Count l -> count < l
         | All -> true
         | Default -> false
-    static member AllOrCount (l : int option) = l |> Option.map Count |> Option.defaultValue All
-    static member DefaultOrCount (l : int option) = l |> Option.map Count |> Option.defaultValue Default
+    static member AllOrCount(l : int option) = l |> Option.map Count |> Option.defaultValue All
+    static member DefaultOrCount(l : int option) = l |> Option.map Count |> Option.defaultValue Default
 
 /// <summary>Represents an individual request that can be included in the <c>TransactItems</c> of a <c>TransactWriteItems</c> call.</summary>
 [<RequireQualifiedAccess>]

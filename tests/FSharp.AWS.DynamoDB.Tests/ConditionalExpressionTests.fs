@@ -415,7 +415,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let results = table.Query(<@ fun r -> r.HashKey = hKey && BETWEEN r.RangeKey 50L 149L @>)
         test <@ 100 = results.Length @>
 
-    member this.``Simple Query/Filter Expression`` () =
+    let [<Fact>] ``Simple Query/Filter Expression`` () =
         let hKey = guid()
 
         seq { for i in 1 .. 200 -> { mkItem() with HashKey = hKey ; RangeKey = int64 i ; Bool = i % 2 = 0}}

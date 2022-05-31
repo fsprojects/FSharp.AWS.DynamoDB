@@ -60,17 +60,17 @@ module internal Utils =
         let rec last (ts : 'T list) =
             match ts with
             | [] -> invalidArg "ts" "list is empty"
-            | t :: [] -> t
+            | [ t ] -> t
             | _ :: tail -> last tail
 
     type MemberInfo with
-        member m.TryGetAttribute<'Attribute when 'Attribute :> Attribute> () : 'Attribute option =
+        member m.TryGetAttribute<'Attribute when 'Attribute :> Attribute>() : 'Attribute option =
             m.GetCustomAttributes(true) |> Seq.map unbox<Attribute> |> tryGetAttribute
 
-        member m.GetAttributes<'Attribute when 'Attribute :> Attribute> () : 'Attribute [] =
+        member m.GetAttributes<'Attribute when 'Attribute :> Attribute>() : 'Attribute [] =
             m.GetCustomAttributes(true) |> Seq.map unbox<Attribute> |> getAttributes
 
-        member m.ContainsAttribute<'Attribute when 'Attribute :> Attribute> () : bool =
+        member m.ContainsAttribute<'Attribute when 'Attribute :> Attribute>() : bool =
             m.GetCustomAttributes(true) |> Seq.map unbox<Attribute> |> containsAttribute
 
     type MethodInfo with

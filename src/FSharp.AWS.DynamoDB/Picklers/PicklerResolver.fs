@@ -1,16 +1,10 @@
 ﻿namespace FSharp.AWS.DynamoDB
 
 open System
-open System.Collections
-open System.Collections.Generic
 open System.Collections.Concurrent
-open System.IO
-open System.Reflection
+open System.Collections.Generic
 
-open Microsoft.FSharp.Reflection
 open TypeShape
-
-open FSharp.AWS.DynamoDB
 
 //
 //  Pickler resolution implementation
@@ -21,7 +15,7 @@ module private ResolverImpl =
 
     let resolvePickler (resolver : IPicklerResolver) (t : Type) : Pickler =
         match TypeShape.Create t with
-        | Shape.Bool -> new BoolPickler() :> _
+        | Shape.Bool -> BoolPickler() :> _
         | Shape.Byte -> mkNumericalPickler<byte> () :> _
         | Shape.SByte -> mkNumericalPickler<sbyte> () :> _
         | Shape.Int16 -> mkNumericalPickler<int16> () :> _
@@ -32,15 +26,15 @@ module private ResolverImpl =
         | Shape.UInt64 -> mkNumericalPickler<uint64> () :> _
         | Shape.Single -> mkNumericalPickler<single> () :> _
         | Shape.Decimal -> mkNumericalPickler<decimal> () :> _
-        | Shape.Double -> new DoublePickler() :> _
-        | Shape.Char -> new CharPickler() :> _
-        | Shape.String -> new StringPickler() :> _
-        | Shape.Guid -> new GuidPickler() :> _
-        | Shape.ByteArray -> new ByteArrayPickler() :> _
-        | Shape.TimeSpan -> new TimeSpanPickler() :> _
+        | Shape.Double -> DoublePickler() :> _
+        | Shape.Char -> CharPickler() :> _
+        | Shape.String -> StringPickler() :> _
+        | Shape.Guid -> GuidPickler() :> _
+        | Shape.ByteArray -> ByteArrayPickler() :> _
+        | Shape.TimeSpan -> TimeSpanPickler() :> _
         | Shape.DateTime -> UnSupportedType.Raise(t, "please use DateTimeOffset instead.")
-        | Shape.DateTimeOffset -> new DateTimeOffsetPickler() :> _
-        | :? TypeShape<System.IO.MemoryStream> -> new MemoryStreamPickler() :> _
+        | Shape.DateTimeOffset -> DateTimeOffsetPickler() :> _
+        | :? TypeShape<System.IO.MemoryStream> -> MemoryStreamPickler() :> _
         | Shape.Enum s ->
             s.Accept {
                 new IEnumVisitor<Pickler> with
@@ -52,47 +46,47 @@ module private ResolverImpl =
         | Shape.Nullable s ->
             s.Accept {
                 new INullableVisitor<Pickler> with
-                    member __.Visit<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct> () =
+                    member _.Visit<'T when 'T : (new : unit -> 'T) and 'T :> ValueType and 'T : struct>() =
                         new NullablePickler<'T>(resolver.Resolve()) :> _ }
 
         | Shape.FSharpOption s ->
             s.Element.Accept {
                 new ITypeVisitor<Pickler> with
-                    member _.Visit<'T> () =
+                    member _.Visit<'T>() =
                         let tp = resolver.Resolve<'T>()
                         new OptionPickler<'T>(tp) :> _ }
 
         | Shape.Array s when s.Rank = 1 ->
             s.Element.Accept {
                 new ITypeVisitor<Pickler> with
-                    member _.Visit<'T> () =
+                    member _.Visit<'T>() =
                         let tp = resolver.Resolve<'T>()
                         new ListPickler<'T [], 'T>(Seq.toArray, null, tp) :> _ }
 
         | Shape.FSharpList s ->
             s.Element.Accept {
                 new ITypeVisitor<Pickler> with
-                    member _.Visit<'T> () =
+                    member _.Visit<'T>() =
                         let tp = resolver.Resolve<'T>()
                         new ListPickler<'T list, 'T>(List.ofSeq, [], tp) :> _ }
 
         | Shape.ResizeArray s ->
             s.Element.Accept {
                 new ITypeVisitor<Pickler> with
-                    member _.Visit<'T> () =
+                    member _.Visit<'T>() =
                         let tp = resolver.Resolve<'T>()
                         new ListPickler<ResizeArray<'T>, 'T>(rlist, null, tp) :> _ }
 
         | Shape.FSharpSet s ->
             s.Accept {
                 new IFSharpSetVisitor<Pickler> with
-                    member __.Visit<'T when 'T : comparison> () =
+                    member _.Visit<'T when 'T : comparison>() =
                         mkSetPickler<'T>(resolver.Resolve()) :> _ }
 
         | Shape.FSharpMap s ->
             s.Accept {
                 new IFSharpMapVisitor<Pickler> with
-                    member __.Visit<'K, 'V when 'K : comparison> () =
+                    member _.Visit<'K, 'V when 'K : comparison>() =
                         if typeof<'K> <> typeof<string> then
                             UnSupportedType.Raise(t, "Map types must have key of type string.")
 
@@ -101,23 +95,23 @@ module private ResolverImpl =
         | Shape.Tuple _ as s ->
             s.Accept {
                 new ITypeVisitor<Pickler> with
-                    member __.Visit<'T> () = mkTuplePickler<'T> resolver :> _ }
+                    member _.Visit<'T>() = mkTuplePickler<'T> resolver :> _ }
 
         | Shape.FSharpRecord _ as s ->
             s.Accept {
                 new ITypeVisitor<Pickler> with
-                    member __.Visit<'T>() = mkFSharpRecordPickler<'T> resolver :> _   }
+                    member _.Visit<'T>() = mkFSharpRecordPickler<'T> resolver :> _   }
 
         | Shape.FSharpUnion _ as s ->
             s.Accept {
                 new ITypeVisitor<Pickler> with
-                    member __.Visit<'T>() = new UnionPickler<'T>(resolver) :> _   }
+                    member _.Visit<'T>() = new UnionPickler<'T>(resolver) :> _   }
 
         | _ -> UnSupportedType.Raise t
 
     type CachedResolver private () as self =
-        static let globalCache = new ConcurrentDictionary<Type, Lazy<Pickler>>()
-        let stack = new Stack<Type>()
+        static let globalCache = ConcurrentDictionary<Type, Lazy<Pickler>>()
+        let stack = Stack<Type>()
         let resolve t =
             try
                 if stack.Contains t then
@@ -131,19 +125,19 @@ module private ResolverImpl =
             with UnsupportedShape t -> UnSupportedType.Raise t
 
         interface IPicklerResolver with
-            member __.Resolve(t : Type) = resolve t
-            member __.Resolve<'T> () = resolve typeof<'T> :?> Pickler<'T>
+            member _.Resolve(t : Type) = resolve t
+            member _.Resolve<'T>() = resolve typeof<'T> :?> Pickler<'T>
 
         static member Resolve(t : Type) =
             let ok, found = globalCache.TryGetValue t
             if ok then found.Value
             else
-                (new CachedResolver() :> IPicklerResolver).Resolve t
+                (CachedResolver() :> IPicklerResolver).Resolve t
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module internal Pickler =
 
     /// Resolves pickler for given type
-    let resolveUntyped (t : Type) = CachedResolver.Resolve t
+    let  resolveUntyped (t : Type) = CachedResolver.Resolve t
     /// Resolves pickler for given type
     let resolve<'T> () = CachedResolver.Resolve typeof<'T> :?> Pickler<'T>

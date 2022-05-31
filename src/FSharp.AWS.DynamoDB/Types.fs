@@ -25,14 +25,14 @@ type RangeKeyAttribute() =
 [<Sealed; AttributeUsage(AttributeTargets.Property)>]
 type GlobalSecondaryHashKeyAttribute(indexName : string) =
     inherit Attribute()
-    member __.IndexName = indexName
+    member _.IndexName = indexName
 
 /// Declares that the carrying property should contain the HashKey
 /// for a global secondary index.
 [<Sealed; AttributeUsage(AttributeTargets.Property)>]
 type GlobalSecondaryRangeKeyAttribute(indexName : string) =
     inherit Attribute()
-    member __.IndexName = indexName
+    member _.IndexName = indexName
 
 /// Declares the carrying property as local secondary index
 /// in the table schema.
@@ -41,7 +41,7 @@ type LocalSecondaryIndexAttribute private (indexName : string option) =
     inherit Attribute()
     new () = LocalSecondaryIndexAttribute(None)
     new (indexName : string) = LocalSecondaryIndexAttribute(Some indexName)
-    member internal __.IndexName = indexName
+    member internal _.IndexName = indexName
 
 /// Declares a constant HashKey attribute for the given record.
 /// Records carrying this attribute should specify a RangeKey field.
@@ -52,9 +52,9 @@ type ConstantHashKeyAttribute(name : string, hashkey : obj) =
         if isNull name then raise <| ArgumentNullException("name")
         if isNull hashkey then raise <| ArgumentNullException("hashkey")
 
-    member __.Name = name
-    member __.HashKey = hashkey
-    member __.HashKeyType = hashkey.GetType()
+    member _.Name = name
+    member _.HashKey = hashkey
+    member _.HashKeyType = hashkey.GetType()
 
 /// Declares a constant RangeKey attribute for the given record.
 /// Records carrying this attribute should specify a HashKey field.
@@ -65,9 +65,9 @@ type ConstantRangeKeyAttribute(name : string, rangeKey : obj) =
         if isNull name then raise <| ArgumentNullException("name")
         if isNull rangeKey then raise <| ArgumentNullException("rangeKey")
 
-    member __.Name = name
-    member __.RangeKey = rangeKey
-    member __.HashKeyType = rangeKey.GetType()
+    member _.Name = name
+    member _.RangeKey = rangeKey
+    member _.HashKeyType = rangeKey.GetType()
 
 /// Declares that annotated property should be represented
 /// as string in the DynamoDB table. Only applies to
@@ -78,15 +78,15 @@ type StringRepresentationAttribute() =
 /// Specify a custom DynamoDB attribute name for the given record field.
 [<AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
 type CustomNameAttribute(name : string) =
-    inherit System.Attribute()
+    inherit Attribute()
     do if isNull name then raise <| ArgumentNullException("name")
-    member __.Name = name
+    member _.Name = name
 
 /// Specifies that record deserialization should fail if not corresponding attribute
 /// was fetched from the table.
 [<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Class)>]
 type NoDefaultValueAttribute() =
-    inherit System.Attribute()
+    inherit Attribute()
 
 /// Declares that the given property should be serialized using the given
 /// Serialization/Deserialization methods before being uploaded to the table.
@@ -106,22 +106,22 @@ type PropertySerializerAttribute<'PickleType>() =
     abstract Deserialize : 'PickleType -> 'T
 
     interface IPropertySerializer with
-        member __.PickleType = typeof<'PickleType>
-        member __.Serialize value = __.Serialize value :> obj
-        member __.Deserialize pickle = __.Deserialize (pickle :?> 'PickleType)
+        member _.PickleType = typeof<'PickleType>
+        member x.Serialize value = x.Serialize value :> obj
+        member x.Deserialize pickle = x.Deserialize (pickle :?> 'PickleType)
 
 /// Declares that the given property should be serialized using BinaryFormatter
 [<AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
 type BinaryFormatterAttribute() =
     inherit PropertySerializerAttribute<byte[]>()
 
-    override __.Serialize(value:'T) =
+    override _.Serialize(value:'T) =
         let bfs = BinaryFormatter()
         use m = new MemoryStream()
         bfs.Serialize(m, value)
         m.ToArray()
 
-    override __.Deserialize(pickle : byte[]) =
+    override _.Deserialize(pickle : byte[]) =
         let bfs = BinaryFormatter()
         use m = new MemoryStream(pickle)
         bfs.Deserialize(m) :?> 'T
@@ -156,11 +156,11 @@ type TableKeySchema =
 /// Table entry key identifier
 [<Struct; CustomEquality; NoComparison; StructuredFormatDisplay("{Format}")>]
 type TableKey private (hashKey : obj, rangeKey : obj) =
-    member __.HashKey = hashKey
-    member __.RangeKey = rangeKey
-    member __.IsRangeKeySpecified = notNull rangeKey
-    member __.IsHashKeySpecified = notNull hashKey
-    member private __.Format =
+    member _.HashKey = hashKey
+    member _.RangeKey = rangeKey
+    member _.IsRangeKeySpecified = notNull rangeKey
+    member _.IsHashKeySpecified = notNull hashKey
+    member private _.Format =
         match rangeKey with
         | null -> sprintf "{ HashKey = %A }" hashKey
         | rk ->
@@ -195,28 +195,28 @@ type TableKey private (hashKey : obj, rangeKey : obj) =
 /// Query (start/last evaluated) key identifier
 [<Struct; CustomEquality; NoComparison; StructuredFormatDisplay("{Format}")>]
 type IndexKey private (hashKey : obj, rangeKey : obj, primaryKey: TableKey) =
-    member __.HashKey = hashKey
-    member __.RangeKey = rangeKey
-    member __.IsRangeKeySpecified = notNull rangeKey
-    member __.PrimaryKey = primaryKey
-    member private __.Format =
+    member _.HashKey = hashKey
+    member _.RangeKey = rangeKey
+    member _.IsRangeKeySpecified = notNull rangeKey
+    member _.PrimaryKey = primaryKey
+    member private _.Format =
         match (hashKey, rangeKey) with
-        | (null, null) -> sprintf "{ Primary = %A }" primaryKey
-        | (hk, null) -> sprintf "{ HashKey = %A ; Primary = %A }" hk primaryKey
-        | (hk, rk) -> sprintf "{ HashKey = %A ; RangeKey = %A ; Primary = %A }" hk rk primaryKey
+        | null, null -> sprintf "{ Primary = %A }" primaryKey
+        | hk, null -> sprintf "{ HashKey = %A ; Primary = %A }" hk primaryKey
+        | hk, rk -> sprintf "{ HashKey = %A ; RangeKey = %A ; Primary = %A }" hk rk primaryKey
 
-    override __.ToString() = __.Format
+    override x.ToString() = x.Format
 
-    override __.Equals o =
+    override _.Equals o =
         match o with
         | :? IndexKey as qk' -> hashKey = qk'.HashKey && rangeKey = qk'.RangeKey && primaryKey = qk'.PrimaryKey
         | _ -> false
 
-    override __.GetHashCode() = hash3 hashKey rangeKey primaryKey
+    override _.GetHashCode() = hash3 hashKey rangeKey primaryKey
 
     /// Defines an index key using provided HashKey and primary TableKey
     static member Hash<'HashKey>(hashKey : 'HashKey, primaryKey: TableKey) =
-        if isNull hashKey then raise <| ArgumentNullException("hashKey") 
+        if isNull hashKey then raise <| ArgumentNullException("hashKey")
         IndexKey(hashKey, null, primaryKey)
 
     /// Defines an index key using combined HashKey, RangeKey and primary TableKey
@@ -235,9 +235,9 @@ type PaginatedResult<'TRecord, 'Key> =
         LastEvaluatedKey : 'Key option
     }
     interface System.Collections.IEnumerable with
-        member x.GetEnumerator () = x.Records.GetEnumerator ()
+        member x.GetEnumerator() = x.Records.GetEnumerator ()
     interface System.Collections.Generic.IEnumerable<'TRecord> with
-        member x.GetEnumerator () = (x.Records :> System.Collections.Generic.IEnumerable<'TRecord>).GetEnumerator ()
+        member x.GetEnumerator() = (x.Records :> System.Collections.Generic.IEnumerable<'TRecord>).GetEnumerator ()
 
 
 #nowarn "1182"
