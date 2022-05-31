@@ -1,5 +1,6 @@
 ### 0.11.1-beta
 * Updated internal `AwaitTaskCorrect` implementation to align with [canonical version](http://www.fssnip.net/7Rc/title/AsyncAwaitTaskCorrect) [#49](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/49) 
+* Added SourceLink info (using `DotNet.ReproducibleBuilds`)
 
 ### 0.11.0-beta
 * Added `Precondition.CheckFailed`
