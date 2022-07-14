@@ -127,7 +127,7 @@ type EasyCounters private (table : TableContext<CounterEntry>) =
         // Create the table if necessary. Verifies schema is correct if it has already been created
         // NOTE the hard coded initial throughput provisioning - arguably this belongs outside of your application logic
         let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
-        do! table.VerifyOrCreateTableAsync(Throughput.Provisioned throughput)
+        let! _desc = table.VerifyOrCreateTableAsync(Throughput.Provisioned throughput)
         return EasyCounters(table)
     }
 
@@ -137,21 +137,21 @@ type EasyCounters private (table : TableContext<CounterEntry>) =
 /// Variant of EasyCounters that splits the provisioning step from the (optional) validation that the table is present
 type SimpleCounters private (table : TableContext<CounterEntry>) =
 
-    static member Provision(client : IAmazonDynamoDB, tableName : string, readCapacityUnits, writeCapacityUnits) : Async<unit> = async {
+    static member Provision(client : IAmazonDynamoDB, tableName : string, readCapacityUnits, writeCapacityUnits) = async {
         let table = TableContext<CounterEntry>(client, tableName)
         let provisionedThroughput = ProvisionedThroughput(readCapacityUnits, writeCapacityUnits)
         let throughput = Throughput.Provisioned provisionedThroughput
         // normally, RCU/WCU provisioning only happens first time the Table is created and is then considered an external concern
         // here we use `UpdateTableIfRequiredAsync` to reset it each time we deploy the app
-        do! table.VerifyOrCreateTableAsync(throughput)
-        do! table.UpdateTableIfRequiredAsync(throughput) }
+        let! desc = table.VerifyOrCreateTableAsync(throughput)
+        return! table.UpdateTableIfRequiredAsync(throughput, currentTableDescription = desc) }
 
-    static member ProvisionOnDemand(client : IAmazonDynamoDB, tableName : string) : Async<unit> = async {
+    static member ProvisionOnDemand(client : IAmazonDynamoDB, tableName : string) = async {
         let table = TableContext<CounterEntry>(client, tableName)
         let throughput = Throughput.OnDemand
-        do! table.VerifyOrCreateTableAsync(throughput)
+        let! desc = table.VerifyOrCreateTableAsync(throughput)
         // as per the Provision, above, we reset to OnDemand, if it got reconfigured since it was originally created
-        do! table.UpdateTableIfRequiredAsync(throughput) }
+        return! table.UpdateTableIfRequiredAsync(throughput, currentTableDescription = desc) }
 
     /// We only want to do the initialization bit once per instance of our application
     /// Similar to EasyCounters.Create in that it ensures the table is provisioned correctly
