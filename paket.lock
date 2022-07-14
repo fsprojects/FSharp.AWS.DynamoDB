@@ -35,7 +35,7 @@ NUGET
       FSharp.Core (>= 4.7.2)
 GITHUB
   remote: eiriktsarpalis/TypeShape
-    src/TypeShape/TypeShape.fs (9b718052f093bd63bfbea519928ff6956958fcaa)
+    src/TypeShape/TypeShape.fs (6e7fe07c799de723de7e4b32d64a4fd6c1697c7f)
 GROUP Build
 STORAGE: NONE
 RESTRICTION: || (== net6.0) (== netstandard2.0)
