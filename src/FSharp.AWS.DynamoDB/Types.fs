@@ -280,6 +280,10 @@ module UpdateOperators =
     let ADD (path : Set<'T>) (values : seq<'T>) : UpdateOp =
         invalidOp "ADD operation reserved for quoted update expressions."
 
+    /// Adds given value to attribute path
+    let ADD_INT64 (path : int64) (value : int64) : UpdateOp =
+        invalidOp "ADD_INT64 operation reserved for quoted update expressions."
+
     /// Deletes given set of values to set attribute path
     let DELETE (path : Set<'T>) (values : seq<'T>) : UpdateOp =
         invalidOp "DELETE operation reserved for quoted update expressions."
