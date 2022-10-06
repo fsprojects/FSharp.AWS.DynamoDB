@@ -317,7 +317,6 @@ You can enable this by supplying the `consistentRead` parameter on the respectiv
 
 ```fsharp
 async {
-
     let! key : TableKey = table.PutItemAsync(workItem)
     let! workItem = table.GetItemAsync(key, consistentRead = true)
 }
