@@ -308,6 +308,20 @@ let table = TableContext<WorkItemInfo>(client, tableName = "workItems", metricsC
 If `metricsCollector` is supplied, the requests will set `ReturnConsumedCapacity` to `ReturnConsumedCapacity.INDEX` 
 and the `RequestMetrics` parameter will contain a list of `ConsumedCapacity` objects returned from the DynamoDB operations.
 
+## Read consistency
+
+DynamoDB follows an [eventually consistent model](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html) by default.
+As a consequence, data returned from a read operation might not reflect the changes of the most recently performed write operation if they are made in quick succession.
+To circumvent this limitation and enforce strongly consistent reads, DynamoDB provides a `ConsistentRead` parameter for read operations.
+You can enable this by supplying the `consistentRead` parameter on the respective `TableContext` methods, e.g. for `GetItem`:
+
+```fsharp
+async {
+    let! key : TableKey = table.PutItemAsync(workItem)
+    let! workItem = table.GetItemAsync(key, consistentRead = true)
+}
+```
+
 ## Building & Running Tests
 
 To build using the dotnet SDK:

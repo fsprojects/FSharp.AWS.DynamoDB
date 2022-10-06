@@ -283,7 +283,8 @@ type TableContext<'TRecord> internal
         | Some sink -> ReturnConsumedCapacity.INDEXES, Some (reportMetrics sink)
         | None -> ReturnConsumedCapacity.NONE, None
 
-    let tryGetItemAsync (key : TableKey) (proj : ProjectionExpr.ProjectionExpr option) = async {
+    let tryGetItemAsync (key : TableKey) (consistentRead: bool option)
+                         (proj : ProjectionExpr.ProjectionExpr option) = async {
         let kav = template.ToAttributeValues(key)
         let request = GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity)
         match proj with
@@ -291,6 +292,10 @@ type TableContext<'TRecord> internal
         | Some proj ->
             let aw = AttributeWriter(request.ExpressionAttributeNames, null)
             request.ProjectionExpression <- proj.Write aw
+        
+        match consistentRead with
+        | None -> ()
+        | Some c -> request.ConsistentRead <- c
 
         let! ct = Async.CancellationToken
         let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
@@ -302,8 +307,8 @@ type TableContext<'TRecord> internal
         else return None
     }
 
-    let getItemAsync (key : TableKey) (proj : ProjectionExpr.ProjectionExpr option) = async {
-        match! tryGetItemAsync key proj with
+    let getItemAsync (key : TableKey) (consistentRead: bool option) (proj : ProjectionExpr.ProjectionExpr option) = async {
+        match! tryGetItemAsync key consistentRead proj with
         | Some item -> return item
         | None -> return raise <| ResourceNotFoundException(sprintf "could not find item %O" key)
     }
@@ -624,8 +629,9 @@ type TableContext<'TRecord> internal
     ///     Asynchronously attempts to fetch item with given key from table. Returns None if no item with that key is present.
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
-    member _.TryGetItemAsync(key : TableKey) : Async<'TRecord option> = async {
-        let! response = tryGetItemAsync key None
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member _.TryGetItemAsync(key : TableKey, ?consistentRead : bool) : Async<'TRecord option> = async {
+        let! response = tryGetItemAsync key consistentRead None
         return response |> Option.map template.OfAttributeValues
     }
 
@@ -652,8 +658,9 @@ type TableContext<'TRecord> internal
     ///     See <c>TryGetItemAsync</c> if you need to implement fallback logic in the case where it is not found
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
-    member _.GetItemAsync(key : TableKey) : Async<'TRecord> = async {
-        let! item = getItemAsync key None
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member _.GetItemAsync(key : TableKey, ?consistentRead : bool) : Async<'TRecord> = async {
+        let! item = getItemAsync key consistentRead None
         return template.OfAttributeValues item
     }
 
@@ -665,8 +672,9 @@ type TableContext<'TRecord> internal
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
     /// <param name="projection">Projection expression to be applied to item.</param>
-    member _.GetItemProjectedAsync(key : TableKey, projection : ProjectionExpression<'TRecord, 'TProjection>) : Async<'TProjection> = async {
-        let! item = getItemAsync key (Some projection.ProjectionExpr)
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member _.GetItemProjectedAsync(key : TableKey, projection : ProjectionExpression<'TRecord, 'TProjection>, ?consistentRead : bool) : Async<'TProjection> = async {
+        let! item = getItemAsync key consistentRead (Some projection.ProjectionExpr)
         return projection.UnPickle item
     }
 
@@ -677,8 +685,9 @@ type TableContext<'TRecord> internal
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
     /// <param name="projection">Projection expression to be applied to item.</param>
-    member t.GetItemProjectedAsync(key : TableKey, projection : Expr<'TRecord -> 'TProjection>) : Async<'TProjection> =
-        t.GetItemProjectedAsync(key, template.PrecomputeProjectionExpr projection)
+    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    member t.GetItemProjectedAsync(key : TableKey, projection : Expr<'TRecord -> 'TProjection>, ?consistentRead : bool) : Async<'TProjection> =
+        t.GetItemProjectedAsync(key, (template.PrecomputeProjectionExpr projection), ?consistentRead = consistentRead)
 
     /// <summary>
     ///     Asynchronously performs a batch fetch of items with supplied keys.
