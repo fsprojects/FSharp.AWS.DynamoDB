@@ -313,7 +313,7 @@ and the `RequestMetrics` parameter will contain a list of `ConsumedCapacity` obj
 DynamoDB follows an [eventually consistent model](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html) by default.
 As a consequence, data returned from a read operation might not reflect the changes of the most recently performed write operation if they are made in quick succession.
 To circumvent this limitation and enforce strongly consistent reads, DynamoDB provides a `ConsistentRead` parameter for read operations.
-You can opt enable this by supplying the `consistentRead` parameter on the respective `TableContext` methods, e.g. for `GetItem`:
+You can enable this by supplying the `consistentRead` parameter on the respective `TableContext` methods, e.g. for `GetItem`:
 
 ```fsharp
 async {
