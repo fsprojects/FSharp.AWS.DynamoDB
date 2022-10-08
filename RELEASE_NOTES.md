@@ -1,5 +1,5 @@
 ### 0.11.1-beta
-* Fixed `TransactWriteItems`: removed hard-wired limit of 25 to enable leaning on [increased limit of 100 in service](https://aws.amazon.com/about-aws/whats-new/2022/09/amazon-dynamodb-supports-100-actions-per-transaction/)
+* Fixed `TransactWriteItems`: updated validation to reflect [increased limit of 100 items in service](https://aws.amazon.com/about-aws/whats-new/2022/09/amazon-dynamodb-supports-100-actions-per-transaction/)
 
 ### 0.11.1-beta
 * Updated internal `TypeShape` dependency to 10.0.0
