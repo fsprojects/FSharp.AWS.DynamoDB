@@ -292,7 +292,7 @@ type TableContext<'TRecord> internal
         | Some proj ->
             let aw = AttributeWriter(request.ExpressionAttributeNames, null)
             request.ProjectionExpression <- proj.Write aw
-        
+
         match consistentRead with
         | None -> ()
         | Some c -> request.ConsistentRead <- c
@@ -792,17 +792,17 @@ type TableContext<'TRecord> internal
 
 
     /// <summary>
-    ///     Atomically applies a set of 1-25 write operations to the table.<br/>
+    ///     Atomically applies a set of 1 write operations to the table.<br/>
     ///     NOTE requests are charged at twice the normal rate in Write Capacity Units.
     ///     See the DynamoDB <a href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_TransactWriteItems.html"><c>TransactWriteItems</c> API documentation</a> for full details of semantics and charges.<br/>
     /// </summary>
     /// <param name="items">Operations to be performed.<br/>
-    /// Throws <c>ArgumentOutOfRangeException</c> if item count is not between 1 and 25 as required by underlying API.<br/>
+    /// Throws <c>ArgumentOutOfRangeException</c> if item count is less than 1 as required by underlying API.<br/>
     /// Use <c>TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed</c> to identify any Precondition Check failures.</param>
     /// <param name="clientRequestToken">The <c>ClientRequestToken</c> to supply as an idempotency key (10 minute window).</param>
     member _.TransactWriteItems(items : seq<TransactWrite<'TRecord>>, ?clientRequestToken) : Async<unit> = async {
         let reqs = TransactWriteItemsRequest.toTransactItems tableName template items
-        if reqs.Count = 0 || reqs.Count > 25 then raise <| System.ArgumentOutOfRangeException(nameof items, "must be between 1 and 25 items.")
+        if reqs.Count = 0 then raise <| System.ArgumentOutOfRangeException(nameof items, "There must be at least 1 item.")
         let req = TransactWriteItemsRequest(ReturnConsumedCapacity = returnConsumedCapacity, TransactItems = reqs)
         clientRequestToken |> Option.iter (fun x -> req.ClientRequestToken <- x)
         let! ct = Async.CancellationToken
