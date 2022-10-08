@@ -225,7 +225,4 @@ type ``TransactWriteItems tests``(fixture : TableFixture) =
     let [<Fact>] ``Empty request list is rejected with AORE`` () =
         shouldBeRejectedWithArgumentOutOfRangeException []
 
-    let [<Fact>] ``Over 25 writes are rejected with AORE`` () =
-        shouldBeRejectedWithArgumentOutOfRangeException [for _x in 1..26 -> TransactWrite.Put (mkItem (), None)]
-
     interface IClassFixture<TableFixture>
