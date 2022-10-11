@@ -1,4 +1,5 @@
-### 0.11.1-beta
+### 0.11.2-beta
+* Added optional `?consistentRead` parameter to Get requests (thanks @matti-avilabs)
 * Fixed `TransactWriteItems`: updated validation to reflect [increased limit of 100 items in service](https://aws.amazon.com/about-aws/whats-new/2022/09/amazon-dynamodb-supports-100-actions-per-transaction/)
 
 ### 0.11.1-beta

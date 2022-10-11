@@ -322,6 +322,8 @@ async {
 }
 ```
 
+**Note:** strongly consistent reads are more likely to fail, have higher latency, and use more read capacity than eventually consistent reads.
+
 ## Building & Running Tests
 
 To build using the dotnet SDK:
