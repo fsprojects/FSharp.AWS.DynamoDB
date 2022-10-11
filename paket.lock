@@ -2,10 +2,10 @@ STORAGE: NONE
 RESTRICTION: || (== net6.0) (== netstandard2.0) (== netstandard2.1)
 NUGET
   remote: https://api.nuget.org/v3/index.json
-    AWSSDK.Core (3.7.10.1)
+    AWSSDK.Core (3.7.13.18)
       Microsoft.Bcl.AsyncInterfaces (>= 1.1) - restriction: || (&& (== net6.0) (< netcoreapp3.1)) (== netstandard2.0) (== netstandard2.1)
-    AWSSDK.DynamoDBv2 (3.7.3.16)
-      AWSSDK.Core (>= 3.7.10.1 < 4.0)
+    AWSSDK.DynamoDBv2 (3.7.5.14)
+      AWSSDK.Core (>= 3.7.13.18 < 4.0)
     DotNet.ReproducibleBuilds (1.1.1)
       Microsoft.SourceLink.AzureRepos.Git (>= 1.1.1)
       Microsoft.SourceLink.Bitbucket.Git (>= 1.1.1)

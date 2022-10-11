@@ -1,4 +1,7 @@
 ### 0.11.1-beta
+* Fixed `TransactWriteItems`: updated validation to reflect [increased limit of 100 items in service](https://aws.amazon.com/about-aws/whats-new/2022/09/amazon-dynamodb-supports-100-actions-per-transaction/)
+
+### 0.11.1-beta
 * Updated internal `TypeShape` dependency to 10.0.0
 * Updated internal `AwaitTaskCorrect` implementation to align with [canonical version](http://www.fssnip.net/7Rc/title/AsyncAwaitTaskCorrect) [#49](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/49) 
 * Added SourceLink info (using `DotNet.ReproducibleBuilds`)
