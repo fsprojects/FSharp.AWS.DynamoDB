@@ -330,6 +330,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         table.PutItem(item, <@ fun r -> r.Set.Contains elem @>) |> ignore
         table.PutItem(item, <@ fun r -> r.Set |> Set.contains elem @>) |> ignore
 
+
     let [<Fact>] ``Map-count precondition`` () =
         let item = mkItem()
         let _key = table.PutItem item
@@ -527,5 +528,21 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         let result = table.Query <@ fun r -> r.HashKey = hKey && BETWEEN r.LSI 101L 200L @>
         test <@ 100 = result.Length @>
+
+    let [<Fact>] ``Can check if table value is contained in a list or array of values`` () =
+        let item = mkItem()
+        let elem = [|item.Value+10L;item.Value-10L;item.Value|]
+        let elemL = [item.Value+10L;item.Value-10L;item.Value]
+        let elemS = elemL|>Set.ofList
+        let _key = table.PutItem item
+
+        let testScan (expr:Quotations.Expr<('TRecord -> bool)>)=
+            let res = table.Scan expr
+            test <@res.Length=1@>
+
+        testScan <@ fun r -> [|item.Value+10L;item.Value-10L;item.Value|]|>Array.contains r.Value  @>
+        testScan <@ fun r -> elem|>Array.contains r.Value  @>
+        testScan <@ fun r -> elemL|>List.contains r.Value  @>
+        testScan <@ fun r -> elemS|>Set.contains r.Value  @>
 
     interface IClassFixture<TableFixture>

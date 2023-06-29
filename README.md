@@ -93,7 +93,8 @@ with Precondition.CheckFailed ->
 Query expressions support the following F# operators in their predicates:
 * `Array.length`, `List.length`, `Set.count` and `Map.Count`.
 * `String.StartsWith` and `String.Contains`.
-* `Set.contains` and `Map.containsKey`.
+* `Set.contains` and `Map.containsKey` **NOTE**: Only works for checking if a single value is contained in a set in the table.
+* `Array.contains`,`String.contains` **NOTE**: Only works for checking if a list of values contains a single value in the table.
 * `Array.isEmpty` and `List.isEmpty`.
 * `Option.isSome`, `Option.isNone`, `Option.Value` and `Option.get`.
 * `fst` and `snd` for tuple records.
