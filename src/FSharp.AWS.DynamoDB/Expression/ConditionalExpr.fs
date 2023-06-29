@@ -1,4 +1,4 @@
-﻿module internal FSharp.AWS.DynamoDB.ConditionalExpr
+module internal FSharp.AWS.DynamoDB.ConditionalExpr
 
 open System
 open System.Collections.Generic
@@ -309,7 +309,9 @@ let extractQueryExpr (recordInfo : RecordTableInfo) (expr : Expr) : ConditionalE
                 let op = extractOperand None value
                 Contains(attr.Id, op)
 
-            | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; AttributeGet attr]) ->
+            | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; AttributeGet attr])
+            | SpecificCall2 <@ Array.contains @> (None, _, _, [elem; AttributeGet attr])
+            | SpecificCall2 <@ List.contains @> (None, _, _, [elem; AttributeGet attr]) ->
                 let ep = getElemPickler attr.Pickler
                 let op = extractOperand (Some ep) elem
                 Contains(attr.Id, op)
@@ -319,6 +321,7 @@ let extractQueryExpr (recordInfo : RecordTableInfo) (expr : Expr) : ConditionalE
 
             | SpecificCall2 <@ List.contains @> (None, _, _, [ AttributeGet attr; SequenceGet items]) ->
                 In(Attribute attr.Id,items)
+
 
             | SpecificCall2 <@ fun (x:Set<_>) e -> x.Contains e @> (Some(AttributeGet attr), _, _, [elem]) ->
                 let ep = getElemPickler attr.Pickler
