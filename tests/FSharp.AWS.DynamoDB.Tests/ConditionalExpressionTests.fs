@@ -543,7 +543,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         testScan 1 <@ fun r -> [| item.Value + 10L; item.Value - 10L; item.Value |] |>Array.contains r.Value @>
         testScan 1 <@ fun r -> elem|>Array.contains r.Value  @>
-        testScan 1 <@ fun r -> elemL|>List.contains r.Value  @>
+        testScan 1 <@ fun r -> elemL |> List.contains r.Value @>
 
     let [<Fact>] ``Table List or Array contains item`` () =
         let item = mkItem()
