@@ -30,7 +30,7 @@ type QueryExpr =
     | Or of QueryExpr * QueryExpr
     | Compare of Comparator * Operand * Operand
     | Between of Operand * Operand * Operand
-    | In of Operand * Operand array
+    | In of Operand * Operand[]
     | BeginsWith of AttributeId * Operand
     | Contains of AttributeId * Operand
     | Attribute_Exists of AttributeId
