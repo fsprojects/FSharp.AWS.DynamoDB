@@ -434,7 +434,7 @@ let writeConditionExpression (writer : AttributeWriter) (cond : ConditionalExpre
         | SizeOf a -> ! "( size ( " ; !(writer.WriteAttibute a) ; ! " ))"
 
     let writeOps (ops:Operand array) =
-        if ops.Length = 0 then writeOp ops.[0]
+        if ops.Length = 1 then writeOp ops.[0]
         else
             for i = 0 to ops.Length - 2 do
                 writeOp ops.[i]
