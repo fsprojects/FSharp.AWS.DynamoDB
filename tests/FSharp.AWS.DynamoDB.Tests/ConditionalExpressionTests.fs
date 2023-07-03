@@ -550,7 +550,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         let testScan (expr: Quotations.Expr<('TRecord -> bool)>) =
             let res = table.Scan expr
-            test <@res.Length=1@>
+            test <@ res.Length = 1 @>
 
         testScan <@ fun r -> r.List|>List.contains item.List[0]  @>
         testScan <@ fun r -> r.Array|>Array.contains item.Array[0]  @>
