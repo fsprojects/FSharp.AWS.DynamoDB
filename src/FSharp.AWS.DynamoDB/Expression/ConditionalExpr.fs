@@ -30,7 +30,7 @@ type QueryExpr =
     | Or of QueryExpr * QueryExpr
     | Compare of Comparator * Operand * Operand
     | Between of Operand * Operand * Operand
-    | In of Operand * Operand list
+    | In of Operand * Operand array
     | BeginsWith of AttributeId * Operand
     | Contains of AttributeId * Operand
     | Attribute_Exists of AttributeId
@@ -229,8 +229,7 @@ let extractQueryExpr (recordInfo : RecordTableInfo) (expr : Expr) : ConditionalE
             match op with
             |Value va ->
                 va.AttributeValue.L
-                |> Seq.map (fun x-> x |> wrap |> Value)
-                |>Seq.toList
+                |>ResizeArray.mapToArray (fun x-> x |> wrap |> Value)
                 |>Some
             | _ ->None
 
@@ -398,7 +397,7 @@ let applyParams (cond : ConditionalExpression) (inputValues : obj[]) =
         | Not q -> QueryExpr.ENot (applyQuery q)
         | And(q, q') -> QueryExpr.EAnd (applyQuery q) (applyQuery q')
         | Or(q, q') -> QueryExpr.EOr (applyQuery q) (applyQuery q')
-        | In(o, os) -> In(applyOperand o, List.map applyOperand os)
+        | In(o, os) -> In(applyOperand o, Array.map applyOperand os)
         | Between(x, l, u) -> Between(applyOperand x, applyOperand l, applyOperand u)
         | BeginsWith(attr, o) -> BeginsWith(applyAttr attr, applyOperand o)
         | Contains(attr, o) -> Contains(applyAttr attr, applyOperand o)
@@ -434,11 +433,14 @@ let writeConditionExpression (writer : AttributeWriter) (cond : ConditionalExpre
         | Attribute a -> !(writer.WriteAttibute a)
         | SizeOf a -> ! "( size ( " ; !(writer.WriteAttibute a) ; ! " ))"
 
-    let rec writeOps ops =
-        match ops with
-        | o :: [] -> writeOp o
-        | o :: tl -> writeOp o ; ! ", " ; writeOps tl
-        | [] -> invalidOp "Internal error: empty operand sequence."
+    let writeOps (ops:Operand array) =
+        if ops.Length = 0 then writeOp ops.[0]
+        else
+            for i = 0 to ops.Length - 2 do
+                writeOp ops.[i]
+                ! ", "
+            writeOp ops.[ops.Length - 1]
+
 
     let inline writeCmp cmp =
         match cmp with
