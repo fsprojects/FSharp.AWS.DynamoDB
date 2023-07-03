@@ -83,7 +83,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
             Map = seq { for _ in 0L .. rand() % 5L -> "K" + guid(), rand() } |> Map.ofSeq
             Set = seq { for _ in 0L .. rand() % 5L -> rand() } |> Set.ofSeq
             List = [for _ in 0L .. rand() % 5L -> rand() ]
-            Array =  [|for _ in 0L .. rand() % 5L -> rand() |]
+            Array = [| for _ in 0L .. rand() % 5L -> rand() |]
             Union = if rand() % 2L = 0L then UA (rand()) else UB(guid())
             Serialized = rand(), guid()
         }
