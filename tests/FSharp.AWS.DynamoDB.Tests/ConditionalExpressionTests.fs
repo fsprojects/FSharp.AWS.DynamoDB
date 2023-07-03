@@ -332,7 +332,6 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         table.PutItem(item, <@ fun r -> r.Set.Contains elem @>) |> ignore
         table.PutItem(item, <@ fun r -> r.Set |> Set.contains elem @>) |> ignore
 
-
     let [<Fact>] ``Map-count precondition`` () =
         let item = mkItem()
         let _key = table.PutItem item
@@ -531,28 +530,27 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let result = table.Query <@ fun r -> r.HashKey = hKey && BETWEEN r.LSI 101L 200L @>
         test <@ 100 = result.Length @>
 
+    let testScan items (expr:Quotations.Expr<(CondExprRecord -> bool)>) =
+        let res = table.Scan expr
+        test <@ res.Length=items @>
+
     let [<Fact>] ``Can check if table value is contained in a list or array of values`` () =
         let item = mkItem()
-        let elem = [|item.Value+10L;item.Value-10L;item.Value|]
-        let elemL = [item.Value+10L;item.Value-10L;item.Value]
+        let elem = [| item.Value+10L; item.Value-10L; item.Value |]
+        let elemL = [ item.Value+10L; item.Value-10L; item.Value ]
+
         let _key = table.PutItem item
 
-        let testScan (expr:Quotations.Expr<('TRecord -> bool)>)=
-            let res = table.Scan expr
-            test <@res.Length=1@>
+        testScan 1 <@ fun r -> [| item.Value+10L; item.Value-10L; item.Value |]|>Array.contains r.Value  @>
+        testScan 1 <@ fun r -> elem|>Array.contains r.Value  @>
+        testScan 1 <@ fun r -> elemL|>List.contains r.Value  @>
 
-        testScan <@ fun r -> [|item.Value+10L;item.Value-10L;item.Value|]|>Array.contains r.Value  @>
-        testScan <@ fun r -> elem|>Array.contains r.Value  @>
-        testScan <@ fun r -> elemL|>List.contains r.Value  @>
     let [<Fact>] ``Table List or Array contains item`` () =
         let item = mkItem()
+
         let _key = table.PutItem item
 
-        let testScan (expr: Quotations.Expr<('TRecord -> bool)>) =
-            let res = table.Scan expr
-            test <@ res.Length = 1 @>
-
-        testScan <@ fun r -> r.List|>List.contains item.List[0]  @>
-        testScan <@ fun r -> r.Array|>Array.contains item.Array[0]  @>
+        testScan 1 <@ fun r -> r.List|>List.contains item.List[0]  @>
+        testScan 1 <@ fun r -> r.Array|>Array.contains item.Array[0]  @>
 
     interface IClassFixture<TableFixture>
