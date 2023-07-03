@@ -541,7 +541,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         let _key = table.PutItem item
 
-        testScan 1 <@ fun r -> [| item.Value+10L; item.Value-10L; item.Value |]|>Array.contains r.Value  @>
+        testScan 1 <@ fun r -> [| item.Value + 10L; item.Value - 10L; item.Value |] |>Array.contains r.Value @>
         testScan 1 <@ fun r -> elem|>Array.contains r.Value  @>
         testScan 1 <@ fun r -> elemL|>List.contains r.Value  @>
 
