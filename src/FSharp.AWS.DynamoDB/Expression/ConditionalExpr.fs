@@ -229,7 +229,7 @@ let extractQueryExpr (recordInfo : RecordTableInfo) (expr : Expr) : ConditionalE
             match op with
             |Value va ->
                 va.AttributeValue.L
-                |>ResizeArray.mapToArray (fun x-> x |> wrap |> Value)
+                |> ResizeArray.mapToArray (fun x-> x |> wrap |> Value)
                 |>Some
             | _ ->None
 
