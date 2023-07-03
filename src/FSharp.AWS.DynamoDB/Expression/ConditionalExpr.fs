@@ -225,7 +225,7 @@ let extractQueryExpr (recordInfo : RecordTableInfo) (expr : Expr) : ConditionalE
         ///Attempts to convert an expression into a list of operands.
         ///This should be used when we know the expression is some kind of sequence.
         let (|SequenceGet|_|) (expr:Expr)=
-            let op=extractOperand None expr
+            let op = extractOperand None expr
             match op with
             |Value va ->
                 va.AttributeValue.L
