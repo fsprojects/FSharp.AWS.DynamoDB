@@ -548,7 +548,7 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         let item = mkItem()
         let _key = table.PutItem item
 
-        let testScan (expr:Quotations.Expr<('TRecord -> bool)>)=
+        let testScan (expr: Quotations.Expr<('TRecord -> bool)>) =
             let res = table.Scan expr
             test <@res.Length=1@>
 
