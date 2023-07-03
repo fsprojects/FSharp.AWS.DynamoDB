@@ -541,16 +541,24 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
 
         let _key = table.PutItem item
 
-        testScan 1 <@ fun r -> [| item.Value + 10L; item.Value - 10L; item.Value |] |>Array.contains r.Value @>
-        testScan 1 <@ fun r -> elem|>Array.contains r.Value  @>
+        testScan 1 <@ fun r -> [| item.Value + 10L; item.Value - 10L; item.Value |] |> Array.contains r.Value @>
+        testScan 1 <@ fun r -> elem |> Array.contains r.Value  @>
         testScan 1 <@ fun r -> elemL |> List.contains r.Value @>
+
+    let [<Fact>] ``Contains doesn't break with 1 element`` () =
+        let item = mkItem()
+        let elem = [| item.Value; |]
+
+        let _key = table.PutItem item
+
+        testScan 1 <@ fun r -> elem |> Array.contains r.Value  @>
 
     let [<Fact>] ``Table List or Array contains item`` () =
         let item = mkItem()
 
         let _key = table.PutItem item
 
-        testScan 1 <@ fun r -> r.List|>List.contains item.List[0]  @>
-        testScan 1 <@ fun r -> r.Array|>Array.contains item.Array[0]  @>
+        testScan 1 <@ fun r -> r.List |> List.contains item.List[0]  @>
+        testScan 1 <@ fun r -> r.Array |> Array.contains item.Array[0]  @>
 
     interface IClassFixture<TableFixture>
