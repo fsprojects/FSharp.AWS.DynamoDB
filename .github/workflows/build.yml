@@ -13,7 +13,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Setup .NET
-      uses: actions/setup-dotnet@v2
+      uses: actions/setup-dotnet@v3
       with:
         dotnet-version: ${{ matrix.dotnet }}
     - name: Restore tools
@@ -21,7 +21,7 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
     - name: Run build
-      run: dotnet fake build -t Build
+      run: dotnet fsi build.fsx -t Build
 
   test:
     strategy:
@@ -39,7 +39,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Setup .NET
-      uses: actions/setup-dotnet@v2
+      uses: actions/setup-dotnet@v3
       with:
         dotnet-version: ${{ matrix.dotnet }}
     - name: Restore tools
@@ -47,4 +47,4 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
     - name: Run tests
-      run: dotnet fake build -t Test
+      run: dotnet fsi build.fsx -t Test
