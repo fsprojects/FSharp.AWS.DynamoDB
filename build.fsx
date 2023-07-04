@@ -1,8 +1,30 @@
+#!/usr/bin/env -S dotnet fsi
+#r "nuget: Fake.Core.Target"
+
+// Boilerplate
+System.Environment.GetCommandLineArgs()
+|> Array.skip 2 // skip fsi.exe; build.fsx
+|> Array.toList
+|> Fake.Core.Context.FakeExecutionContext.Create false __SOURCE_FILE__
+|> Fake.Core.Context.RuntimeContext.Fake
+|> Fake.Core.Context.setExecutionContext
+
 // --------------------------------------------------------------------------------------
 // FAKE build script
 // --------------------------------------------------------------------------------------
-#r "paket: groupref build //"
-#load ".fake/build.fsx/intellisense.fsx"
+#r "nuget: Fake.Core.Target"
+#r "nuget: Fake.Core.Process"
+#r "nuget: Fake.DotNet.Cli"
+#r "nuget: Fake.Core.ReleaseNotes"
+#r "nuget: Fake.DotNet.AssemblyInfoFile"
+#r "nuget: Fake.DotNet.Paket"
+#r "nuget: Fake.Tools.Git"
+#r "nuget: Fake.Core.Environment"
+#r "nuget: Fake.Core.UserInput"
+#r "nuget: Fake.IO.FileSystem"
+#r "nuget: Fake.Api.GitHub"
+#r "nuget: Octokit"
+#r "nuget: MSBuild.StructuredLogger, Version=2.1.820"
 
 open Fake.Core
 open Fake.DotNet
@@ -92,10 +114,12 @@ Target.create "AssemblyInfo" (fun _ ->
 
 Target.create "Restore" (fun _ ->
     DotNet.restore id ""
+    //exec "dotnet" "restore" "."   
 )
 
 Target.create "Build" (fun _ ->
     DotNet.build id ""
+    exec "dotnet" "restore" "."  
 )
 
 Target.create "Test" (fun _ ->
@@ -205,4 +229,4 @@ Target.create "Release" DoNothing
   ==> "Push"
   ==> "Release"
 
-Target.runOrDefault "Default"
+Target.runOrDefaultWithArguments "Default"
