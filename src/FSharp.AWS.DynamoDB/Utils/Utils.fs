@@ -275,3 +275,11 @@ module internal Utils =
         match Environment.OSVersion.Platform with
         | PlatformID.Unix | PlatformID.MacOSX -> Environment.GetEnvironmentVariable "HOME"
         | _ -> Environment.ExpandEnvironmentVariables "%HOMEDRIVE%%HOMEPATH%"
+
+    [<RequireQualifiedAccess>]
+    module ResizeArray =
+        let mapToArray f (list:ResizeArray<_>)=
+            let newList = Array.zeroCreate list.Count
+            for i in 0 .. list.Count - 1 do
+                newList.[i] <- f list.[i]
+            newList

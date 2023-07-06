@@ -1,4 +1,4 @@
-﻿module internal FSharp.AWS.DynamoDB.ConditionalExpr
+module internal FSharp.AWS.DynamoDB.ConditionalExpr
 
 open System
 open System.Collections.Generic
@@ -30,7 +30,7 @@ type QueryExpr =
     | Or of QueryExpr * QueryExpr
     | Compare of Comparator * Operand * Operand
     | Between of Operand * Operand * Operand
-    | In of Operand * Operand list
+    | In of Operand * Operand[]
     | BeginsWith of AttributeId * Operand
     | Contains of AttributeId * Operand
     | Attribute_Exists of AttributeId
@@ -108,7 +108,7 @@ let extractKeyCondition (qExpr : QueryExpr) =
     let trySet r v =
         if Option.isSome !r then false
         else r := Some v ; true
-        
+
     let rec isKeyCond qExpr =
         match qExpr with
         | False | True
@@ -120,7 +120,7 @@ let extractKeyCondition (qExpr : QueryExpr) =
         | Or _ -> false
         | And(l,r) -> isKeyCond l && isKeyCond r
         | BeginsWith(attr,_) when attr.IsHashKey -> false
-        | BeginsWith(attr,_) when attr.IsRangeKey -> 
+        | BeginsWith(attr,_) when attr.IsRangeKey ->
             trySet rangeKeyRef attr
 
         | BeginsWith _ -> false
@@ -169,12 +169,12 @@ let extractQueryExpr (recordInfo : RecordTableInfo) (expr : Expr) : ConditionalE
         let getAttrValue (pickler : Pickler) (expr : Expr) =
             expr |> evalRaw |> pickler.PickleCoerced
 
-        let (|AttributeGet|_|) e = 
+        let (|AttributeGet|_|) e =
             match QuotedAttribute.TryExtract (|PVar|_|) r recordInfo e with
             | None -> None
             | Some qa as aopt ->
-                qa.Iter (fun pickler -> 
-                    if pickler.PicklerType = PicklerType.Serialized then 
+                qa.Iter (fun pickler ->
+                    if pickler.PicklerType = PicklerType.Serialized then
                         invalidArg "expr" "cannot perform queries on serialized attributes.")
 
                 aopt
@@ -192,35 +192,46 @@ let extractQueryExpr (recordInfo : RecordTableInfo) (expr : Expr) : ConditionalE
             | PipeRight e -> extractOperand pickler e
 
             | AttributeGet attr -> Attribute attr.Id
-            | PVar i -> 
+            | PVar i ->
                 let pickler = match pickler with Some p -> p | None -> Pickler.resolveUntyped expr.Type
                 Param(i, pickler)
 
-            | SpecificProperty <@ fun (s : string) -> s.Length @> (Some (AttributeGet attr), _, []) -> 
+            | SpecificProperty <@ fun (s : string) -> s.Length @> (Some (AttributeGet attr), _, []) ->
                 SizeOf attr.Id
 
-            | SpecificProperty <@ fun (l : _ list) -> l.Length @> (Some (AttributeGet attr), _, []) -> 
+            | SpecificProperty <@ fun (l : _ list) -> l.Length @> (Some (AttributeGet attr), _, []) ->
                 SizeOf attr.Id
 
-            | SpecificCall2 <@ List.length @> (None, _, _, [AttributeGet attr]) -> 
+            | SpecificCall2 <@ List.length @> (None, _, _, [AttributeGet attr]) ->
                 SizeOf attr.Id
 
-            | SpecificProperty <@ fun (s : Set<_>) -> s.Count @> (Some (AttributeGet attr), _, []) -> 
+            | SpecificProperty <@ fun (s : Set<_>) -> s.Count @> (Some (AttributeGet attr), _, []) ->
                 SizeOf attr.Id
 
-            | SpecificCall2 <@ Set.count @> (None, _, _, [AttributeGet attr]) -> 
+            | SpecificCall2 <@ Set.count @> (None, _, _, [AttributeGet attr]) ->
                 SizeOf attr.Id
 
-            | SpecificProperty <@ fun (m : Map<_,_>) -> m.Count @> (Some (AttributeGet attr), _, []) -> 
+            | SpecificProperty <@ fun (m : Map<_,_>) -> m.Count @> (Some (AttributeGet attr), _, []) ->
                 SizeOf attr.Id
 
-            | SpecificProperty <@ fun (a : _ []) -> a.Length @> (Some (AttributeGet attr), _, []) -> 
+            | SpecificProperty <@ fun (a : _ []) -> a.Length @> (Some (AttributeGet attr), _, []) ->
                 SizeOf attr.Id
 
-            | SpecificCall2 <@ Array.length @> (None, _, _, [AttributeGet attr]) -> 
+            | SpecificCall2 <@ Array.length @> (None, _, _, [AttributeGet attr]) ->
                 SizeOf attr.Id
 
             | _ -> invalidQuery()
+
+        ///Attempts to convert an expression into a list of operands.
+        ///This should be used when we know the expression is some kind of sequence.
+        let (|SequenceGet|_|) (expr:Expr)=
+            let op = extractOperand None expr
+            match op with
+            |Value va ->
+                va.AttributeValue.L
+                |> ResizeArray.mapToArray (fun x-> x |> wrap |> Value)
+                |>Some
+            | _ ->None
 
         let extractNestedField (expr : Expr) =
             let op = extractOperand None expr
@@ -262,13 +273,13 @@ let extractQueryExpr (recordInfo : RecordTableInfo) (expr : Expr) : ConditionalE
 
             if left = Undefined then assignUndefined right
             elif right = Undefined then assignUndefined left
-            else 
+            else
                 Compare(cmp, left, right)
 
         let rec extractQuery (expr : Expr) =
             match expr with
             | e when e.IsClosed -> if evalRaw e then True else False
-            | SpecificCall <@ not @> (None, _, [body]) -> 
+            | SpecificCall <@ not @> (None, _, [body]) ->
                 QueryExpr.ENot (extractQuery body)
 
             | AndAlso(left, right) ->
@@ -297,10 +308,19 @@ let extractQueryExpr (recordInfo : RecordTableInfo) (expr : Expr) : ConditionalE
                 let op = extractOperand None value
                 Contains(attr.Id, op)
 
-            | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; AttributeGet attr]) ->
+            | SpecificCall2 <@ Set.contains @> (None, _, _, [elem; AttributeGet attr])
+            | SpecificCall2 <@ Array.contains @> (None, _, _, [elem; AttributeGet attr])
+            | SpecificCall2 <@ List.contains @> (None, _, _, [elem; AttributeGet attr]) ->
                 let ep = getElemPickler attr.Pickler
                 let op = extractOperand (Some ep) elem
                 Contains(attr.Id, op)
+
+            | SpecificCall2 <@ Array.contains @> (None, _, _, [ AttributeGet attr; SequenceGet items]) ->
+                In(Attribute attr.Id,items)
+
+            | SpecificCall2 <@ List.contains @> (None, _, _, [ AttributeGet attr; SequenceGet items]) ->
+                In(Attribute attr.Id,items)
+
 
             | SpecificCall2 <@ fun (x:Set<_>) e -> x.Contains e @> (Some(AttributeGet attr), _, _, [elem]) ->
                 let ep = getElemPickler attr.Pickler
@@ -332,16 +352,16 @@ let extractQueryExpr (recordInfo : RecordTableInfo) (expr : Expr) : ConditionalE
             | SpecificCall2 <@ NOT_EXISTS @> (None, _, _, [AttributeGet attr]) ->
                 Attribute_Not_Exists attr.Id
 
-            | SpecificCall2 <@ Array.isEmpty @> (None, _, _, [AttributeGet attr]) -> 
+            | SpecificCall2 <@ Array.isEmpty @> (None, _, _, [AttributeGet attr]) ->
                 Attribute_Not_Exists attr.Id
 
-            | SpecificCall2 <@ List.isEmpty @> (None, _, _, [AttributeGet attr]) -> 
+            | SpecificCall2 <@ List.isEmpty @> (None, _, _, [AttributeGet attr]) ->
                 Attribute_Not_Exists attr.Id
 
-            | SpecificCall2 <@ Option.isSome @> (None, _, _, [AttributeGet attr]) -> 
+            | SpecificCall2 <@ Option.isSome @> (None, _, _, [AttributeGet attr]) ->
                 Attribute_Exists attr.Id
 
-            | SpecificCall2 <@ Option.isNone @> (None, _, _, [AttributeGet attr]) -> 
+            | SpecificCall2 <@ Option.isNone @> (None, _, _, [AttributeGet attr]) ->
                 Attribute_Not_Exists attr.Id
 
             | _ -> invalidQuery()
@@ -377,7 +397,7 @@ let applyParams (cond : ConditionalExpression) (inputValues : obj[]) =
         | Not q -> QueryExpr.ENot (applyQuery q)
         | And(q, q') -> QueryExpr.EAnd (applyQuery q) (applyQuery q')
         | Or(q, q') -> QueryExpr.EOr (applyQuery q) (applyQuery q')
-        | In(o, os) -> In(applyOperand o, List.map applyOperand os)
+        | In(o, os) -> In(applyOperand o, Array.map applyOperand os)
         | Between(x, l, u) -> Between(applyOperand x, applyOperand l, applyOperand u)
         | BeginsWith(attr, o) -> BeginsWith(applyAttr attr, applyOperand o)
         | Contains(attr, o) -> Contains(applyAttr attr, applyOperand o)
@@ -405,19 +425,22 @@ let applyParams (cond : ConditionalExpression) (inputValues : obj[]) =
 let writeConditionExpression (writer : AttributeWriter) (cond : ConditionalExpression) =
     let sb = new System.Text.StringBuilder()
     let inline (!) (p:string) = sb.Append p |> ignore
-    let inline writeOp o = 
-        match o with 
+    let inline writeOp o =
+        match o with
         | Undefined -> invalidOp "internal error: attempting to reference undefined value in query expression."
         | Param _ -> invalidOp "internal error: attempting to reference parameter value in query expression."
         | Value v -> !(writer.WriteValue (unwrap v))
         | Attribute a -> !(writer.WriteAttibute a)
         | SizeOf a -> ! "( size ( " ; !(writer.WriteAttibute a) ; ! " ))"
 
-    let rec writeOps ops =
-        match ops with
-        | o :: [] -> writeOp o
-        | o :: tl -> writeOp o ; ! ", " ; writeOps tl
-        | [] -> invalidOp "Internal error: empty operand sequence."
+    let writeOps (ops:Operand array) =
+        if ops.Length = 1 then writeOp ops.[0]
+        else
+            for i = 0 to ops.Length - 2 do
+                writeOp ops.[i]
+                ! ", "
+            writeOp ops.[ops.Length - 1]
+
 
     let inline writeCmp cmp =
         match cmp with
@@ -463,11 +486,11 @@ let mkItemNotExistsCondition (schema : TableKeySchema) =
 
 /// Generates a hash key equality condition for given key schema
 let mkHashKeyEqualityCondition (schema : TableKeySchema) (av : AttributeValue) =
-    let hkAttrId = AttributeId.FromKeySchema schema 
+    let hkAttrId = AttributeId.FromKeySchema schema
     {
         QueryExpr = Compare(EQ, Attribute hkAttrId, Value (wrap av))
         KeyCondition = Some schema
-        NParams = 0    
+        NParams = 0
     }
 
 type ConditionalExpression with
