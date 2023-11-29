@@ -119,6 +119,8 @@ let extractKeyCondition (qExpr : QueryExpr) =
         | Not _
         | Or _ -> false
         | And(l,r) -> isKeyCond l && isKeyCond r
+        | BeginsWith(attr,_) when attr.IsRangeKey -> 
+            trySet rangeKeyRef attr
         | BeginsWith(attr,_) when attr.IsHashKey -> false
         | BeginsWith(attr,_) when attr.IsRangeKey ->
             trySet rangeKeyRef attr
