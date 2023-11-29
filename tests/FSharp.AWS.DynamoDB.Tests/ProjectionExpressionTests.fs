@@ -64,12 +64,6 @@ module ProjectionExprTypes =
             StringSet : Set<string>
 
             ByteSet : Set<byte[]>
-
-            [<BinaryFormatter>]
-            Serialized : int64 * string
-
-            [<BinaryFormatter>]
-            Serialized2 : Nested
         }
 
     type R = ProjectionExprRecord
@@ -94,7 +88,6 @@ type ``Projection Expression Tests`` (fixture : TableFixture) =
             List = [for _ in 0L .. rand() % 5L -> rand() ]
             Union = if rand() % 2L = 0L then UA (rand()) else UB(guid())
             Unions = [for _ in 0L .. rand() % 5L -> if rand() % 2L = 0L then UA (rand()) else UB(guid()) ]
-            Serialized = rand(), guid() ; Serialized2 = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
         }
 
     let table = fixture.CreateEmpty<ProjectionExprRecord>()
@@ -150,8 +143,8 @@ type ``Projection Expression Tests`` (fixture : TableFixture) =
     let [<Fact>] ``Multi-value projection`` () =
         let item = mkItem()
         let key = table.PutItem(item)
-        let result = table.GetItemProjected(key, <@ fun r -> r.Bool, r.ByteSet, r.Bytes, r.Serialized2 @>)
-        test <@ (item.Bool, item.ByteSet, item.Bytes, item.Serialized2) = result @>
+        let result = table.GetItemProjected(key, <@ fun r -> r.Bool, r.ByteSet, r.Bytes @>)
+        test <@ (item.Bool, item.ByteSet, item.Bytes) = result @>
 
     let [<Fact>] ``Nested value projection 1`` () =
         let item = { mkItem() with Map = Map.ofList ["Nested", 42L ] }

@@ -1,3 +1,9 @@
+### 0.11.3-beta
+* Added support for `Array.contains` and `List.contains` to compare an attribute against multiple values (thanks @faldor20)
+* Added `AllowMultiple = true` for `GlobalSecondaryIndex*` Attributes to allow indices to share an attribute
+* (breaking) Removed `BinaryFormatterAttribute`
+
+
 ### 0.11.2-beta
 * Added optional `?consistentRead` parameter to Get requests (thanks @matti-avilabs)
 * Fixed `TransactWriteItems`: updated validation to reflect [increased limit of 100 items in service](https://aws.amazon.com/about-aws/whats-new/2022/09/amazon-dynamodb-supports-100-actions-per-transaction/)

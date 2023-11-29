@@ -10,6 +10,7 @@
     <Compile Include="ConditionalExpressionTests.fs" />
     <Compile Include="UpdateExpressionTests.fs" />
     <Compile Include="ProjectionExpressionTests.fs" />
+    <Compile Include="MultipleKeyAttributeTests.fs" />
     <Compile Include="SparseGSITests.fs" />
     <Compile Include="PaginationTests.fs" />
     <Compile Include="MetricsCollectorTests.fs" />

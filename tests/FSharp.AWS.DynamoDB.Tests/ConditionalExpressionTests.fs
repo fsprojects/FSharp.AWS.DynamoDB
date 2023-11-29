@@ -62,9 +62,6 @@ module CondExprTypes =
             Map : Map<string, int64>
 
             Set : Set<int64>
-
-            [<BinaryFormatter>]
-            Serialized : int64 * string
         }
 
 type ``Conditional Expression Tests`` (fixture : TableFixture) =
@@ -85,7 +82,6 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
             List = [for _ in 0L .. rand() % 5L -> rand() ]
             Array = [| for _ in 0L .. rand() % 5L -> rand() |]
             Union = if rand() % 2L = 0L then UA (rand()) else UB(guid())
-            Serialized = rand(), guid()
         }
 
     let table = fixture.CreateEmpty<CondExprRecord>()
@@ -376,13 +372,6 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         fun () -> table.Template.PrecomputeConditionalExpr <@ fun r -> r.Bytes.Length = r.Bytes.Length @>
         |> shouldFailwith<_, ArgumentException>
 
-
-    let [<Fact>] ``Serializable precondition`` () =
-        let item = mkItem()
-        let _key = table.PutItem item
-        fun () -> table.PutItem(item, <@ fun r -> r.Serialized = (0L,"")  @>)
-        |> shouldFailwith<_, ArgumentException>
-
     let [<Fact>] ``EXISTS precondition`` () =
         let item = { mkItem() with List = [1L] }
         let _key = table.PutItem item
@@ -466,7 +455,6 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         test false <@ fun r -> r.Map > Map.empty @>
         test false <@ fun r -> r.Set > Set.empty @>
         test false <@ fun r -> r.Ref > ref "12" @>
-        test false <@ fun r -> r.Serialized <= (1L, "32") @>
         test false <@ fun r -> r.Tuple <= (1L, 2L) @>
         test false <@ fun r -> r.Nested <= r.Nested @>
 
