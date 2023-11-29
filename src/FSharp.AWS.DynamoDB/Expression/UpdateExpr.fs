@@ -338,7 +338,7 @@ let extractUpdateOps (exprs : IntermediateUpdateExprs) =
         exprs.Assignments
         |> Seq.map (fun (rp,e) -> extractUpdateOp rp e)
         |> Seq.append exprs.UpdateOps
-        |> Seq.filter (function Skip _ -> false | _ -> true)
+        |> Seq.filter (function Skip -> false | _ -> true)
         |> Seq.map (fun uop ->
             if uop.Attribute.IsHashKey && uop.Attribute.IsPrimaryKey then invalidArg "expr" "update expression cannot update hash key."
             if uop.Attribute.IsRangeKey && uop.Attribute.IsPrimaryKey then invalidArg "expr" "update expression cannot update range key."
@@ -373,7 +373,7 @@ let applyParams (uops : UpdateOperations) (inputValues : obj[]) =
 
     let applyUpdateOp uop =
         match uop with
-        | Skip _ -> uop
+        | Skip -> uop
         | Remove(attr) -> Remove (applyAttr attr)
         | Set(attr, uv) -> UpdateOperation.ESet (applyAttr attr) (applyUpdateValue uv)
         | Add(attr, op) -> UpdateOperation.EAdd (applyAttr attr) (applyOperand op)
