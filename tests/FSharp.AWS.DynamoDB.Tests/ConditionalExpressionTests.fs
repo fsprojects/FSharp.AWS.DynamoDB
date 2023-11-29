@@ -100,6 +100,14 @@ type ``Conditional Expression Tests`` (fixture : TableFixture) =
         fun () -> table.PutItem(item, precondition = itemDoesNotExist)
         |> shouldFailwith<_, ConditionalCheckFailedException>
 
+    let [<Fact(Skip = "Not sure if this should be working")>] ``Item not exists failure should add conflicting item data to the exception`` () =
+        let item = mkItem()
+        let _key = table.PutItem(item, precondition = itemDoesNotExist)
+        try
+            table.PutItem(item, precondition = itemDoesNotExist) |> ignore
+        with :? ConditionalCheckFailedException as e ->
+            test <@ e.Item.Count > 0  @>
+
     let [<Fact>] ``String precondition`` () =
         let item = mkItem()
         let _key = table.PutItem item
