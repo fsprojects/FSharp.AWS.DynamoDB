@@ -4,6 +4,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>  
   <ItemGroup>
+    <None Include="paket.references" />
     <Compile Include="Utils.fs" />
     <Compile Include="RecordGenerationTests.fs" />
     <Compile Include="SimpleTableOperationTests.fs" />
