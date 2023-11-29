@@ -2,6 +2,7 @@
 * Added support for `Array.contains` and `List.contains` to compare an attribute against multiple values (thanks @faldor20)
 * Added `AllowMultiple = true` for `GlobalSecondaryIndex*` Attributes to allow indices to share an attribute
 * Modified index selection priority to better handle string `BeginsWith` queries on inverse GSIs (thanks @matti-avilabs)
+* Added `ReturnValuesOnConditionCheckFailure.ALL_OLD` to include the item values in the `ConditionCheckFailedException` (thanks for the suggestion @bartelink)
 * (breaking) Removed [obsolete](https://learn.microsoft.com/en-us/dotnet/core/compatibility/serialization/5.0/binaryformatter-serialization-obsolete) `BinaryFormatterAttribute`
 
 ### 0.11.2-beta
