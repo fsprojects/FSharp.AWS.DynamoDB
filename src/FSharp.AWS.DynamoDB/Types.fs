@@ -20,16 +20,16 @@ type HashKeyAttribute() =
 type RangeKeyAttribute() =
     inherit Attribute()
 
-/// Declares that the carrying property should contain the RangeKey
+/// Declares that the carrying property should contain the HashKey
 /// for a global secondary index.
-[<Sealed; AttributeUsage(AttributeTargets.Property)>]
+[<Sealed; AttributeUsage(AttributeTargets.Property, AllowMultiple = true)>]
 type GlobalSecondaryHashKeyAttribute(indexName : string) =
     inherit Attribute()
     member _.IndexName = indexName
 
-/// Declares that the carrying property should contain the HashKey
+/// Declares that the carrying property should contain the RangeKey
 /// for a global secondary index.
-[<Sealed; AttributeUsage(AttributeTargets.Property)>]
+[<Sealed; AttributeUsage(AttributeTargets.Property, AllowMultiple = true)>]
 type GlobalSecondaryRangeKeyAttribute(indexName : string) =
     inherit Attribute()
     member _.IndexName = indexName
@@ -109,22 +109,6 @@ type PropertySerializerAttribute<'PickleType>() =
         member _.PickleType = typeof<'PickleType>
         member x.Serialize value = x.Serialize value :> obj
         member x.Deserialize pickle = x.Deserialize (pickle :?> 'PickleType)
-
-/// Declares that the given property should be serialized using BinaryFormatter
-[<AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
-type BinaryFormatterAttribute() =
-    inherit PropertySerializerAttribute<byte[]>()
-
-    override _.Serialize(value:'T) =
-        let bfs = BinaryFormatter()
-        use m = new MemoryStream()
-        bfs.Serialize(m, value)
-        m.ToArray()
-
-    override _.Deserialize(pickle : byte[]) =
-        let bfs = BinaryFormatter()
-        use m = new MemoryStream(pickle)
-        bfs.Deserialize(m) :?> 'T
 
 /// Metadata on a table key attribute
 type KeyAttributeSchema =

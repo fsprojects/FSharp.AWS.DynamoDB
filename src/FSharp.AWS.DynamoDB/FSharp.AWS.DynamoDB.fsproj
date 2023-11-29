@@ -1,21 +1,19 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+    <TargetFramework>netstandard2.0</TargetFramework>
     <OutputPath>..\..\bin\</OutputPath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>A library that provides an idiomatic F# API for AWS DynamoDB.</Description>
+    <Description>An idiomatic F# wrapper for the AWS DynamoDB SDK.</Description>
     <Authors>Eirik Tsarpalis</Authors>
-    <Company />
     <Copyright>Copyright 2016</Copyright>
-    <Product />
-    <PackageLicense>MIT</PackageLicense>
-    <PackageLicenseUrl>https://github.com/fsprojects/FSharp.AWS.DynamoDB/blob/master/License.md</PackageLicenseUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/fsprojects/FSharp.AWS.DynamoDB</PackageProjectUrl>
     <PackageIconUrl>https://avatars0.githubusercontent.com/u/6001315</PackageIconUrl>
     <PackageTags>fsharp, f#, aws, amazon, dynamodb</PackageTags>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="paket.references" />
     <Compile Include="..\..\paket-files\eiriktsarpalis\TypeShape\src\TypeShape\TypeShape.fs">
       <Paket>True</Paket>
       <Link>TypeShape/TypeShape.fs</Link>
@@ -41,7 +39,6 @@
     <Compile Include="TableContext.fs" />
     <Compile Include="Extensions.fs" />
     <None Include="Script.fsx" />
-    <None Include="paket.references" />
     <None Include="paket.template" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />

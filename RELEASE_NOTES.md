@@ -1,3 +1,10 @@
+### 0.12.0-beta
+* Added support for `Array.contains` and `List.contains` to compare an attribute against multiple values (thanks @faldor20)
+* Added `AllowMultiple = true` for `GlobalSecondaryIndex*` Attributes to allow indices to share an attribute
+* Modified index selection priority to better handle string `BeginsWith` queries on inverse GSIs (thanks @matti-avilabs)
+* Added `ReturnValuesOnConditionCheckFailure.ALL_OLD` to include the item values in the `ConditionCheckFailedException` (thanks for the suggestion @bartelink)
+* (breaking) Removed [obsolete](https://learn.microsoft.com/en-us/dotnet/core/compatibility/serialization/5.0/binaryformatter-serialization-obsolete) `BinaryFormatterAttribute`
+
 ### 0.11.2-beta
 * Added optional `?consistentRead` parameter to Get requests (thanks @matti-avilabs)
 * Fixed `TransactWriteItems`: updated validation to reflect [increased limit of 100 items in service](https://aws.amazon.com/about-aws/whats-new/2022/09/amazon-dynamodb-supports-100-actions-per-transaction/)

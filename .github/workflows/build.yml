@@ -7,11 +7,11 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        dotnet: ['6.0.x']
+        dotnet: ['8.0.x']
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
@@ -27,7 +27,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        dotnet: ['6.0.x']
+        dotnet: ['8.0.x']
     runs-on: ${{ matrix.os }}
 
     services:
@@ -37,7 +37,7 @@ jobs:
           - 8000:8000
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:

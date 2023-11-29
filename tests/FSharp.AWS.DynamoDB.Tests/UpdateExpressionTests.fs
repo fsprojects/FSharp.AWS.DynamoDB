@@ -62,12 +62,6 @@ module UpdateExprTypes =
             StringSet : Set<string>
 
             ByteSet : Set<byte[]>
-
-            [<BinaryFormatter>]
-            Serialized : int64 * string
-
-            [<BinaryFormatter>]
-            Serialized2 : Nested
         }
 
     type R = UpdateExprRecord
@@ -91,7 +85,6 @@ type ``Update Expression Tests``(fixture : TableFixture) =
             List = [for _ in 0L .. rand() % 5L -> rand() ]
             Union = if rand() % 2L = 0L then UA (rand()) else UB(guid())
             Unions = [for _ in 0L .. rand() % 5L -> if rand() % 2L = 0L then UA (rand()) else UB(guid()) ]
-            Serialized = rand(), guid() ; Serialized2 = { NV = guid() ; NE = enum<Enum> (int (rand()) % 3) } ;
         }
 
     let table = fixture.CreateEmpty<UpdateExprRecord>()
@@ -146,13 +139,6 @@ type ``Update Expression Tests``(fixture : TableFixture) =
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Value = r.Value - 10L } @>)
         test <@ item.Value - 10L = item'.Value @>
-
-    let [<Fact>] ``Simple update serialized value`` () =
-        let item = mkItem()
-        let key = table.PutItem item
-        let value' = rand(), guid()
-        let item' = table.UpdateItem(key, <@ fun (r : R) -> { r with Serialized = value' } @>)
-        test <@ value' = item'.Serialized @>
 
     let [<Fact>] ``Update using nested record values`` () =
         let item = mkItem()

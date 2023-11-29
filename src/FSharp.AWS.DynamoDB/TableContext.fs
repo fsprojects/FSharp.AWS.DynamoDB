@@ -522,6 +522,7 @@ type TableContext<'TRecord> internal
         | Some pc ->
             let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
             request.ConditionExpression <- pc.Conditional.Write writer
+            request.ReturnValuesOnConditionCheckFailure <- ReturnValuesOnConditionCheckFailure.ALL_OLD
         | _ -> ()
 
         let! ct = Async.CancellationToken
@@ -592,7 +593,9 @@ type TableContext<'TRecord> internal
         request.UpdateExpression <- updater.UpdateOps.Write(writer)
 
         match precondition with
-        | Some pc -> request.ConditionExpression <- pc.Conditional.Write writer
+        | Some pc ->
+            request.ConditionExpression <- pc.Conditional.Write writer
+            request.ReturnValuesOnConditionCheckFailure <- ReturnValuesOnConditionCheckFailure.ALL_OLD
         | _ -> ()
 
         let! ct = Async.CancellationToken
@@ -735,6 +738,7 @@ type TableContext<'TRecord> internal
         | Some pc ->
             let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
             request.ConditionExpression <- pc.Conditional.Write writer
+            request.ReturnValuesOnConditionCheckFailure <- ReturnValuesOnConditionCheckFailure.ALL_OLD
         | None -> ()
 
         let! ct = Async.CancellationToken

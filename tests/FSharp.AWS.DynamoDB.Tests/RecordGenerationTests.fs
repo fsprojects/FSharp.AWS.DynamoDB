@@ -159,9 +159,6 @@ module ``Record Generation Tests`` =
             Union : NestedUnion
 
             Ref : int64 ref ref ref
-
-            [<BinaryFormatter>]
-            BlobValue : (int * string) [][]
         }
 
 
@@ -173,8 +170,6 @@ module ``Record Generation Tests`` =
             Map : Map<string, decimal>
             Set : Set<string> ref
 
-            [<BinaryFormatter>]
-            BlobValue : (int * string) [][]
         }
 
     type ``Complex Record C`` =
@@ -345,6 +340,29 @@ module ``Record Generation Tests`` =
             SH : string option
         }
 
+    type InverseGSI =
+        {
+            [<HashKey>]
+            [<GlobalSecondaryHashKey(indexName = "GSI")>]
+            HashKey : string
+            [<RangeKey>]
+            [<GlobalSecondaryRangeKey(indexName = "GSI")>]
+            RangeKey : string
+        }
+
+    type SameRangeKeyGSI =
+        {
+            [<HashKey>]
+            HashKey : string
+            [<GlobalSecondaryHashKey(indexName = "GSI1")>]
+            GSI1Hash : string
+            [<GlobalSecondaryHashKey(indexName = "GSI2")>]
+            GSI2Hash : string
+            [<GlobalSecondaryRangeKey(indexName = "GSI1")>]
+            [<GlobalSecondaryRangeKey(indexName = "GSI2")>]
+            GSIRange : string
+        }
+
     let [<Fact>] ``GSI Simple HashKey`` () =
         let template = RecordTemplate.Define<GSI1>()
         test <@ 1 = template.GlobalSecondaryIndices.Length @>
@@ -378,6 +396,17 @@ module ``Record Generation Tests`` =
     let [<Fact>] ``GSI should fail with option primary hash key`` () =
         fun () -> RecordTemplate.Define<GSI6>()
         |> shouldFailwith<_, ArgumentException>
+
+    let [<Fact>] ``Inverse GSI should be permitted`` () =
+        let template = RecordTemplate.Define<InverseGSI>()
+        test <@ template.PrimaryKey.RangeKey.IsSome @>
+        test <@ template.GlobalSecondaryIndices[0].RangeKey.IsSome @>
+
+    let [<Fact>] ``Shared GSI Range Keys should be permitted`` () =
+        let template = RecordTemplate.Define<SameRangeKeyGSI>()
+        test <@ template.GlobalSecondaryIndices[0].RangeKey.IsSome @>
+        test <@ template.GlobalSecondaryIndices[1].RangeKey.IsSome @>
+        test <@ template.GlobalSecondaryIndices[0].RangeKey = template.GlobalSecondaryIndices[1].RangeKey @>
 
     type LSI1 =
         {
