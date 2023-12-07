@@ -357,6 +357,27 @@ type ``Update Expression Tests``(fixture : TableFixture) =
 
         test <@ item'.IntSet.Contains 42L @>
 
+    let [<Fact>] ``ADD to int`` () =
+        let item = mkItem()
+        let key = table.PutItem item
+        let item' = table.UpdateItem(key, <@ fun r -> ADD_INT64 r.Value 1L @>)
+
+        test <@ item.Value + 1L = item'.Value @>
+
+
+    let [<Fact>] ``ADD to int without creating item first`` () =
+        let item = mkItem()
+        let item' = table.UpdateItem(TableKey.Combined(item.HashKey, item.RangeKey), <@ fun (r : R) ->
+            ADD_INT64 r.Value 42L &&&
+            // Set attributes to satisfy default values
+            //  System.NotSupportedException : Default value...
+            //    at FSharp.AWS.DynamoDB.Pickler.Pickler`1.get_DefaultValueUntyped()
+            SET r.Union (UA 0L) &&&
+            SET r.Serialized item.Serialized &&&
+            SET r.Serialized2 item.Serialized2 @>)
+
+        test <@ 0L + 42L = item'.Value @>
+
     let [<Fact>]``DELETE from set`` () =
         let item = { mkItem() with IntSet = set [1L ; 42L] }
         let key = table.PutItem item

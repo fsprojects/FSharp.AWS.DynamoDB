@@ -220,6 +220,11 @@ let extractOpExprUpdaters (recordInfo : RecordTableInfo) (expr : Expr) : Interme
                 attrs.Add attr
                 updateOps.Add (Add (attr.Id, op))
 
+            | SpecificCall2 <@ ADD_INT64 @> (None, _, _, [AttributeGet attr; value]) ->
+                let op = getOperand attr.Pickler value
+                attrs.Add attr
+                updateOps.Add (Add (attr.Id, op))
+
             | SpecificCall2 <@ DELETE @> (None, _, _, [AttributeGet attr; value]) ->
                 let op = getOperand attr.Pickler value
                 attrs.Add attr
