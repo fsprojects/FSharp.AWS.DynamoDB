@@ -12,7 +12,7 @@ type AttributeValueComparer() =
         if m.Length <> m'.Length then
             false
         else
-            m.ToArray() = m'.ToArray()
+            m.ToArray () = m'.ToArray ()
 
     static let areEqualResizeArrays (ra: ResizeArray<'T>) (ra': ResizeArray<'T>) =
         if ra.Count <> ra'.Count then
@@ -89,7 +89,8 @@ type AttributeValueComparer() =
         elif av.IsLSet then
             getSeqHash getAttributeValueHashCode av.L
         elif av.IsMSet then
-            av.M |> getSeqHash (fun kv -> hash2 kv.Key (getAttributeValueHashCode kv.Value))
+            av.M
+            |> getSeqHash (fun kv -> hash2 kv.Key (getAttributeValueHashCode kv.Value))
         else
             -1
 
@@ -107,12 +108,12 @@ type AttributeValueEqWrapper(av: AttributeValue) =
 
     override __.Equals(o) =
         match o with
-        | :? AttributeValueEqWrapper as av' -> AttributeValueComparer.Equals(av, av')
+        | :? AttributeValueEqWrapper as av' -> AttributeValueComparer.Equals (av, av')
         | _ -> false
 
     override __.GetHashCode() = AttributeValueComparer.GetHashCode av
 
-let inline wrap av = new AttributeValueEqWrapper(av)
+let inline wrap av = new AttributeValueEqWrapper (av)
 let inline unwrap (avw: AttributeValueEqWrapper) = avw.AttributeValue
 
 type AttributeValue with
@@ -131,23 +132,26 @@ type AttributeValue with
         elif av.N <> null then
             sprintf "{ N = %s }" av.N
         elif av.B <> null then
-            sprintf "{ N = %A }" (av.B.ToArray())
+            sprintf "{ N = %A }" (av.B.ToArray ())
         elif av.SS.Count > 0 then
             sprintf "{ SS = %A }" (Seq.toArray av.SS)
         elif av.NS.Count > 0 then
             sprintf "{ SN = %A }" (Seq.toArray av.NS)
         elif av.BS.Count > 0 then
             av.BS
-            |> Seq.map (fun bs -> bs.ToArray())
+            |> Seq.map (fun bs -> bs.ToArray ())
             |> Seq.toArray
             |> sprintf "{ BS = %A }"
 
         elif av.IsLSet then
-            av.L |> Seq.map (fun av -> av.Print()) |> Seq.toArray |> sprintf "{ L = %A }"
+            av.L
+            |> Seq.map (fun av -> av.Print ())
+            |> Seq.toArray
+            |> sprintf "{ L = %A }"
 
         elif av.IsMSet then
             av.M
-            |> Seq.map (fun kv -> (kv.Key, kv.Value.Print()))
+            |> Seq.map (fun kv -> (kv.Key, kv.Value.Print ()))
             |> Seq.toArray
             |> sprintf "{ M = %A }"
 
@@ -156,18 +160,15 @@ type AttributeValue with
 
 // DynamoDB Name limitations, see:
 // http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Limits.html
-let private tableNameRegex = Regex("^[\w\-_\.]*$", RegexOptions.Compiled)
+let private tableNameRegex = Regex ("^[\w\-_\.]*$", RegexOptions.Compiled)
 
 let isValidTableName (tableName: string) =
     if tableName.Length < 3 || tableName.Length > 255 then false
     elif not <| tableNameRegex.IsMatch tableName then false
     else true
 
-let private utf8Length (str: string) =
-    System.Text.Encoding.UTF8.GetBytes(str).Length
+let private utf8Length (str: string) = System.Text.Encoding.UTF8.GetBytes(str).Length
 
-let isValidFieldName (name: string) =
-    name <> null && name.Length > 0 && utf8Length name <= 65535
+let isValidFieldName (name: string) = name <> null && name.Length > 0 && utf8Length name <= 65535
 
-let isValidKeyName (name: string) =
-    name <> null && name.Length > 0 && utf8Length name <= 255
+let isValidKeyName (name: string) = name <> null && name.Length > 0 && utf8Length name <= 255

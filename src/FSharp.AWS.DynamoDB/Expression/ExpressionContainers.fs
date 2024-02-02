@@ -14,7 +14,7 @@ open FSharp.AWS.DynamoDB.ProjectionExpr
 /// Represents a condition expression for a given record type
 [<Sealed; AutoSerializable(false)>]
 type ConditionExpression<'TRecord> internal (cond: ConditionalExpression) =
-    let data = lazy (cond.GetDebugData())
+    let data = lazy (cond.GetDebugData ())
     /// Gets whether given conditional is a valid key condition
     member __.IsKeyConditionCompatible = cond.IsKeyConditionCompatible
     /// Gets the infered local secondary index for the query, if applicable
@@ -46,12 +46,7 @@ type ConditionExpression =
     static member And(left: ConditionExpression<'TRecord>, right: ConditionExpression<'TRecord>) =
         let qExpr = QueryExpr.EAnd left.Conditional.QueryExpr right.Conditional.QueryExpr
         ensureNotTautological qExpr
-
-        new ConditionExpression<'TRecord>(
-            { QueryExpr = qExpr
-              KeyCondition = extractKeyCondition qExpr
-              NParams = 0 }
-        )
+        new ConditionExpression<'TRecord> ({ QueryExpr = qExpr; KeyCondition = extractKeyCondition qExpr; NParams = 0 })
 
     /// <summary>
     ///     Applies the OR operation on two conditionals
@@ -59,12 +54,7 @@ type ConditionExpression =
     static member Or(left: ConditionExpression<'TRecord>, right: ConditionExpression<'TRecord>) =
         let qExpr = QueryExpr.EOr left.Conditional.QueryExpr right.Conditional.QueryExpr
         ensureNotTautological qExpr
-
-        new ConditionExpression<'TRecord>(
-            { QueryExpr = qExpr
-              KeyCondition = extractKeyCondition qExpr
-              NParams = 0 }
-        )
+        new ConditionExpression<'TRecord> ({ QueryExpr = qExpr; KeyCondition = extractKeyCondition qExpr; NParams = 0 })
 
     /// <summary>
     ///     Applies the NOT operation on a conditional
@@ -72,17 +62,12 @@ type ConditionExpression =
     static member Not(conditional: ConditionExpression<'TRecord>) =
         let qExpr = QueryExpr.ENot conditional.Conditional.QueryExpr
         ensureNotTautological qExpr
-
-        new ConditionExpression<'TRecord>(
-            { QueryExpr = qExpr
-              KeyCondition = extractKeyCondition qExpr
-              NParams = 0 }
-        )
+        new ConditionExpression<'TRecord> ({ QueryExpr = qExpr; KeyCondition = extractKeyCondition qExpr; NParams = 0 })
 
 /// Represents an update expression for a given record type
 [<Sealed; AutoSerializable(false)>]
 type UpdateExpression<'TRecord> internal (updateOps: UpdateOperations) =
-    let data = lazy (updateOps.GetDebugData())
+    let data = lazy (updateOps.GetDebugData ())
     /// Internal update expression object
     member internal __.UpdateOps = updateOps
     /// DynamoDB update expression string
@@ -99,8 +84,7 @@ type UpdateExpression<'TRecord> internal (updateOps: UpdateOperations) =
 
     override __.GetHashCode() = hash updateOps.UpdateOps
 
-    static member (&&&)(this: UpdateExpression<'TRecord>, that: UpdateExpression<'TRecord>) =
-        UpdateExpression.Combine(this, that)
+    static member (&&&)(this: UpdateExpression<'TRecord>, that: UpdateExpression<'TRecord>) = UpdateExpression.Combine (this, that)
 
 and UpdateExpression =
     /// Combines a collection of compatible update expressions into a single expression.
@@ -112,20 +96,22 @@ and UpdateExpression =
 
             let uops = exprs |> Array.collect (fun e -> e.UpdateOps.UpdateOps)
 
-            match uops |> Seq.map (fun o -> o.Attribute) |> tryFindConflictingPaths with
+            match
+                uops
+                |> Seq.map (fun o -> o.Attribute)
+                |> tryFindConflictingPaths
+            with
             | None -> ()
-            | Some(p1, p2) ->
-                let msg =
-                    sprintf "found conflicting paths '%s' and '%s' being accessed in update expression." p1 p2
-
+            | Some (p1, p2) ->
+                let msg = sprintf "found conflicting paths '%s' and '%s' being accessed in update expression." p1 p2
                 invalidArg "expr" msg
 
-            new UpdateExpression<'TRecord>({ UpdateOps = uops; NParams = 0 })
+            new UpdateExpression<'TRecord> ({ UpdateOps = uops; NParams = 0 })
 
 /// Represents a projection expression for a given record type
 [<Sealed; AutoSerializable(false)>]
 type ProjectionExpression<'TRecord, 'TProjection> internal (expr: ProjectionExpr) =
-    let data = lazy (expr.GetDebugData())
+    let data = lazy (expr.GetDebugData ())
     /// Internal projection expression object
     member internal __.ProjectionExpr = expr
     /// DynamoDB projection expression string

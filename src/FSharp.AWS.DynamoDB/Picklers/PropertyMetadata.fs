@@ -17,13 +17,9 @@ type PropertyMetadata =
       NoDefaultValue: bool
       Attributes: Attribute[] }
 
-    member rp.TryGetAttribute<'Attribute when 'Attribute :> Attribute>() =
-        tryGetAttribute<'Attribute> rp.Attributes
-
+    member rp.TryGetAttribute<'Attribute when 'Attribute :> Attribute>() = tryGetAttribute<'Attribute> rp.Attributes
     member rp.GetAttributes<'Attribute when 'Attribute :> Attribute>() = getAttributes<'Attribute> rp.Attributes
-
-    member rp.ContainsAttribute<'Attribute when 'Attribute :> Attribute>() =
-        containsAttribute<'Attribute> rp.Attributes
+    member rp.ContainsAttribute<'Attribute when 'Attribute :> Attribute>() = containsAttribute<'Attribute> rp.Attributes
 
     override r.Equals o =
         match o with
@@ -33,7 +29,7 @@ type PropertyMetadata =
     override r.GetHashCode() = hash r.PropertyInfo
 
     static member FromPropertyInfo (resolver: IPicklerResolver) (attrId: int) (prop: PropertyInfo) =
-        let attributes = prop.GetAttributes()
+        let attributes = prop.GetAttributes ()
 
         let pickler =
             match
@@ -44,7 +40,10 @@ type PropertyMetadata =
                     | _ -> None)
             with
             | Some serializer -> mkSerializerAttributePickler resolver serializer prop.PropertyType
-            | None when attributes |> containsAttribute<StringRepresentationAttribute> ->
+            | None when
+                attributes
+                |> containsAttribute<StringRepresentationAttribute>
+                ->
                 mkStringRepresentationPickler resolver prop
             | None -> resolver.Resolve prop.PropertyType
 

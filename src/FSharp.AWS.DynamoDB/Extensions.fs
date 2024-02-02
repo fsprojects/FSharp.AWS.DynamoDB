@@ -14,7 +14,7 @@ open Amazon.Runtime.CredentialManagement
 module Extensions =
 
     /// Precomputes a template expression
-    let inline template<'TRecord> = RecordTemplate.Define<'TRecord>()
+    let inline template<'TRecord> = RecordTemplate.Define<'TRecord> ()
 
     /// A conditional which verifies that given item exists
     let inline itemExists<'TRecord> = template<'TRecord>.ItemExists
@@ -22,16 +22,13 @@ module Extensions =
     let inline itemDoesNotExist<'TRecord> = template<'TRecord>.ItemDoesNotExist
 
     /// Precomputes a conditional expression
-    let inline cond (expr: Expr<'TRecord -> bool>) : ConditionExpression<'TRecord> =
-        template<'TRecord>.PrecomputeConditionalExpr expr
+    let inline cond (expr: Expr<'TRecord -> bool>) : ConditionExpression<'TRecord> = template<'TRecord>.PrecomputeConditionalExpr expr
 
     /// Precomputes an update expression
-    let inline update (expr: Expr<'TRecord -> 'TRecord>) : UpdateExpression<'TRecord> =
-        template<'TRecord>.PrecomputeUpdateExpr expr
+    let inline update (expr: Expr<'TRecord -> 'TRecord>) : UpdateExpression<'TRecord> = template<'TRecord>.PrecomputeUpdateExpr expr
 
     /// Precomputes an update operation expression
-    let inline updateOp (expr: Expr<'TRecord -> UpdateOp>) : UpdateExpression<'TRecord> =
-        template<'TRecord>.PrecomputeUpdateExpr expr
+    let inline updateOp (expr: Expr<'TRecord -> UpdateOp>) : UpdateExpression<'TRecord> = template<'TRecord>.PrecomputeUpdateExpr expr
 
     /// Precomputes a projection expression
     let inline proj (expr: Expr<'TRecord -> 'TProjection>) : ProjectionExpression<'TRecord, 'TProjection> =
@@ -41,7 +38,7 @@ module Extensions =
     // simple recognizer for aws credentials file syntax
     // c.f. http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html
     let private profileRegex =
-        Regex("\[(\S+)\]\s+aws_access_key_id\s*=\s*(\S+)\s+aws_secret_access_key\s*=\s*(\S+)", RegexOptions.Compiled)
+        Regex ("\[(\S+)\]\s+aws_access_key_id\s*=\s*(\S+)\s+aws_secret_access_key\s*=\s*(\S+)", RegexOptions.Compiled)
 
     type AWSCredentials with
 
@@ -52,31 +49,33 @@ module Extensions =
         static member FromEnvironmentVariables() : Amazon.Runtime.AWSCredentials =
             let accessKeyName = "AWS_ACCESS_KEY_ID"
             let secretKeyName = "AWS_SECRET_ACCESS_KEY"
-
-            let getEnv x =
-                Environment.ResolveEnvironmentVariable x
+            let getEnv x = Environment.ResolveEnvironmentVariable x
 
             match getEnv accessKeyName, getEnv secretKeyName with
             | null, null ->
                 sprintf "Undefined environment variables '%s' and '%s'" accessKeyName secretKeyName
                 |> invalidOp
-            | null, _ -> sprintf "Undefined environment variable '%s'" accessKeyName |> invalidOp
-            | _, null -> sprintf "Undefined environment variable '%s'" secretKeyName |> invalidOp
-            | aK, sK -> new BasicAWSCredentials(aK, sK) :> _
+            | null, _ ->
+                sprintf "Undefined environment variable '%s'" accessKeyName
+                |> invalidOp
+            | _, null ->
+                sprintf "Undefined environment variable '%s'" secretKeyName
+                |> invalidOp
+            | aK, sK -> new BasicAWSCredentials (aK, sK) :> _
 
         /// <summary>
         ///     Recover a set of credentials using the local credentials store.
         /// </summary>
         /// <param name="profileName">Credential store profile name. Defaults to 'default' profile.</param>
         static member FromCredentialsStore(?profileName: string) : Amazon.Runtime.AWSCredentials =
-            let credentialProfileStoreChain = new CredentialProfileStoreChain()
+            let credentialProfileStoreChain = new CredentialProfileStoreChain ()
             let profileName = defaultArg profileName "default"
-            let ok, creds = credentialProfileStoreChain.TryGetAWSCredentials(profileName)
+            let ok, creds = credentialProfileStoreChain.TryGetAWSCredentials (profileName)
 
             if ok then
                 creds
             else
-                let credsFile = Path.Combine(getHomePath (), ".aws", "credentials")
+                let credsFile = Path.Combine (getHomePath (), ".aws", "credentials")
 
                 if not <| File.Exists credsFile then
                     sprintf "Could not locate stored credentials profile '%s'." profileName
@@ -94,4 +93,4 @@ module Extensions =
                 | None ->
                     sprintf "Could not locate stored credentials profile '%s'." profileName
                     |> invalidOp
-                | Some(_, aK, sK) -> new BasicAWSCredentials(aK, sK) :> _
+                | Some (_, aK, sK) -> new BasicAWSCredentials (aK, sK) :> _

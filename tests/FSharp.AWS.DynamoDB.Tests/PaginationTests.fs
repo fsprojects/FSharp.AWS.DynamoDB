@@ -30,7 +30,7 @@ module PaginationTests =
 
 type ``Pagination Tests``(fixture: TableFixture) =
 
-    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
+    let rand = let r = Random.Shared in fun () -> int64 <| r.Next ()
 
     let mkItem (hk: string) (gshk: string) : PaginationRecord =
         { HashKey = hk
@@ -40,7 +40,7 @@ type ``Pagination Tests``(fixture: TableFixture) =
           SecondaryRangeKey = guid ()
           LocalAttribute = int (rand () % 2L) }
 
-    let table = fixture.CreateEmpty<PaginationRecord>()
+    let table = fixture.CreateEmpty<PaginationRecord> ()
 
     [<Fact>]
     let ``Paginated Query on Primary Key`` () =
@@ -53,15 +53,12 @@ type ``Pagination Tests``(fixture: TableFixture) =
             |> Array.sortBy (fun r -> r.RangeKey)
 
         for item in items do
-            table.PutItem item =! TableKey.Combined(item.HashKey, item.RangeKey)
+            table.PutItem item
+            =! TableKey.Combined (item.HashKey, item.RangeKey)
 
-        let res1 = table.QueryPaginated(<@ fun r -> r.HashKey = hk @>, limit = 5)
-
-        let res2 =
-            table.QueryPaginated(<@ fun r -> r.HashKey = hk @>, limit = 5, ?exclusiveStartKey = res1.LastEvaluatedKey)
-
-        let res3 =
-            table.QueryPaginated(<@ fun r -> r.HashKey = hk @>, limit = 5, ?exclusiveStartKey = res2.LastEvaluatedKey)
+        let res1 = table.QueryPaginated (<@ fun r -> r.HashKey = hk @>, limit = 5)
+        let res2 = table.QueryPaginated (<@ fun r -> r.HashKey = hk @>, limit = 5, ?exclusiveStartKey = res1.LastEvaluatedKey)
+        let res3 = table.QueryPaginated (<@ fun r -> r.HashKey = hk @>, limit = 5, ?exclusiveStartKey = res2.LastEvaluatedKey)
 
         test
             <@
@@ -70,7 +67,11 @@ type ``Pagination Tests``(fixture: TableFixture) =
                 && None = res3.LastEvaluatedKey
             @>
 
-        test <@ items = Array.append res1.Records res2.Records && Array.isEmpty res3.Records @>
+        test
+            <@
+                items = Array.append res1.Records res2.Records
+                && Array.isEmpty res3.Records
+            @>
 
     [<Fact>]
     let ``Paginated Query on LSI`` () =
@@ -83,20 +84,20 @@ type ``Pagination Tests``(fixture: TableFixture) =
             |> Array.sortBy (fun r -> r.LocalSecondaryRangeKey)
 
         for item in items do
-            table.PutItem item =! TableKey.Combined(item.HashKey, item.RangeKey)
+            table.PutItem item
+            =! TableKey.Combined (item.HashKey, item.RangeKey)
 
-        let res1 =
-            table.QueryPaginated(<@ fun r -> r.HashKey = hk && r.LocalSecondaryRangeKey > "0" @>, limit = 5)
+        let res1 = table.QueryPaginated (<@ fun r -> r.HashKey = hk && r.LocalSecondaryRangeKey > "0" @>, limit = 5)
 
         let res2 =
-            table.QueryPaginated(
+            table.QueryPaginated (
                 <@ fun r -> r.HashKey = hk && r.LocalSecondaryRangeKey > "0" @>,
                 limit = 5,
                 ?exclusiveStartKey = res1.LastEvaluatedKey
             )
 
         let res3 =
-            table.QueryPaginated(
+            table.QueryPaginated (
                 <@ fun r -> r.HashKey = hk && r.LocalSecondaryRangeKey > "0" @>,
                 limit = 5,
                 ?exclusiveStartKey = res2.LastEvaluatedKey
@@ -109,7 +110,11 @@ type ``Pagination Tests``(fixture: TableFixture) =
                 && None = res3.LastEvaluatedKey
             @>
 
-        test <@ items = Array.append res1.Records res2.Records && Array.isEmpty res3.Records @>
+        test
+            <@
+                items = Array.append res1.Records res2.Records
+                && Array.isEmpty res3.Records
+            @>
 
     [<Fact>]
     let ``Paginated Query on GSI`` () =
@@ -122,23 +127,12 @@ type ``Pagination Tests``(fixture: TableFixture) =
             |> Array.sortBy (fun r -> r.SecondaryRangeKey)
 
         for item in items do
-            table.PutItem item =! TableKey.Combined(item.HashKey, item.RangeKey)
+            table.PutItem item
+            =! TableKey.Combined (item.HashKey, item.RangeKey)
 
-        let res1 = table.QueryPaginated(<@ fun r -> r.SecondaryHashKey = gsk @>, limit = 5)
-
-        let res2 =
-            table.QueryPaginated(
-                <@ fun r -> r.SecondaryHashKey = gsk @>,
-                limit = 5,
-                ?exclusiveStartKey = res1.LastEvaluatedKey
-            )
-
-        let res3 =
-            table.QueryPaginated(
-                <@ fun r -> r.SecondaryHashKey = gsk @>,
-                limit = 5,
-                ?exclusiveStartKey = res2.LastEvaluatedKey
-            )
+        let res1 = table.QueryPaginated (<@ fun r -> r.SecondaryHashKey = gsk @>, limit = 5)
+        let res2 = table.QueryPaginated (<@ fun r -> r.SecondaryHashKey = gsk @>, limit = 5, ?exclusiveStartKey = res1.LastEvaluatedKey)
+        let res3 = table.QueryPaginated (<@ fun r -> r.SecondaryHashKey = gsk @>, limit = 5, ?exclusiveStartKey = res2.LastEvaluatedKey)
 
         test
             <@
@@ -147,7 +141,11 @@ type ``Pagination Tests``(fixture: TableFixture) =
                 && None = res3.LastEvaluatedKey
             @>
 
-        test <@ items = Array.append res1.Records res2.Records && Array.isEmpty res3.Records @>
+        test
+            <@
+                items = Array.append res1.Records res2.Records
+                && Array.isEmpty res3.Records
+            @>
 
     [<Fact>]
     let ``Paginated Query with filter`` () =
@@ -160,15 +158,16 @@ type ``Pagination Tests``(fixture: TableFixture) =
             |> Array.sortBy (fun r -> r.RangeKey)
 
         for item in items do
-            table.PutItem item =! TableKey.Combined(item.HashKey, item.RangeKey)
+            table.PutItem item
+            =! TableKey.Combined (item.HashKey, item.RangeKey)
 
-        let res =
-            table.QueryPaginated(
-                <@ fun r -> r.HashKey = hk @>,
-                filterCondition = <@ fun r -> r.LocalAttribute = 0 @>,
-                limit = 5
-            )
+        let res = table.QueryPaginated (<@ fun r -> r.HashKey = hk @>, filterCondition = <@ fun r -> r.LocalAttribute = 0 @>, limit = 5)
 
-        test <@ items |> Array.filter (fun r -> r.LocalAttribute = 0) |> Array.take 5 = res.Records @>
+        test
+            <@
+                items
+                |> Array.filter (fun r -> r.LocalAttribute = 0)
+                |> Array.take 5 = res.Records
+            @>
 
     interface IClassFixture<TableFixture>
