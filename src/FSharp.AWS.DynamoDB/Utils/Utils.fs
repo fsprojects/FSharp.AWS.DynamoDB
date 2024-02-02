@@ -72,19 +72,13 @@ module internal Utils =
     type MemberInfo with
 
         member m.TryGetAttribute<'Attribute when 'Attribute :> Attribute>() : 'Attribute option =
-            m.GetCustomAttributes(true)
-            |> Seq.map unbox<Attribute>
-            |> tryGetAttribute
+            m.GetCustomAttributes(true) |> Seq.map unbox<Attribute> |> tryGetAttribute
 
         member m.GetAttributes<'Attribute when 'Attribute :> Attribute>() : 'Attribute[] =
-            m.GetCustomAttributes(true)
-            |> Seq.map unbox<Attribute>
-            |> getAttributes
+            m.GetCustomAttributes(true) |> Seq.map unbox<Attribute> |> getAttributes
 
         member m.ContainsAttribute<'Attribute when 'Attribute :> Attribute>() : bool =
-            m.GetCustomAttributes(true)
-            |> Seq.map unbox<Attribute>
-            |> containsAttribute
+            m.GetCustomAttributes(true) |> Seq.map unbox<Attribute> |> containsAttribute
 
     type MethodInfo with
 
@@ -239,10 +233,7 @@ module internal Utils =
         | NewUnionCase(uci, [ h; t ]) ->
             let dt = uci.DeclaringType
 
-            if
-                dt.IsGenericType
-                && dt.GetGenericTypeDefinition() = typedefof<_ list>
-            then
+            if dt.IsGenericType && dt.GetGenericTypeDefinition() = typedefof<_ list> then
                 Some(h, t)
             else
                 None

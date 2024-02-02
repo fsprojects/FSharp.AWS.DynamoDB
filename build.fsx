@@ -2,7 +2,7 @@
 #r "nuget: Fake.Core.Target"
 
 // Boilerplate
-System.Environment.GetCommandLineArgs ()
+System.Environment.GetCommandLineArgs()
 |> Array.skip 2 // skip fsi.exe; build.fsx
 |> Array.toList
 |> Fake.Core.Context.FakeExecutionContext.Create false __SOURCE_FILE__
@@ -90,20 +90,20 @@ Target.create "AssemblyInfo" (fun _ ->
           AssemblyInfo.Description summary
           AssemblyInfo.Version release.AssemblyVersion
           AssemblyInfo.FileVersion release.AssemblyVersion
-          AssemblyInfo.InternalsVisibleTo (projectName + ".Tests") ]
+          AssemblyInfo.InternalsVisibleTo(projectName + ".Tests") ]
 
     let getProjectDetails (projectPath: string) =
-        let projectName = System.IO.Path.GetFileNameWithoutExtension (projectPath)
-        (projectPath, projectName, System.IO.Path.GetDirectoryName (projectPath), (getAssemblyInfoAttributes projectName))
+        let projectName = System.IO.Path.GetFileNameWithoutExtension(projectPath)
+        (projectPath, projectName, System.IO.Path.GetDirectoryName(projectPath), (getAssemblyInfoAttributes projectName))
 
     !! "src/**/*.??proj"
     |> Seq.map getProjectDetails
     |> Seq.iter (fun (projFileName, _, folderName, attributes) ->
         match projFileName with
-        | proj when proj.EndsWith ("fsproj") -> AssemblyInfoFile.createFSharp (folderName </> "AssemblyInfo.fs") attributes
-        | proj when proj.EndsWith ("csproj") ->
+        | proj when proj.EndsWith("fsproj") -> AssemblyInfoFile.createFSharp (folderName </> "AssemblyInfo.fs") attributes
+        | proj when proj.EndsWith("csproj") ->
             AssemblyInfoFile.createCSharp ((folderName </> "Properties") </> "AssemblyInfo.cs") attributes
-        | proj when proj.EndsWith ("vbproj") ->
+        | proj when proj.EndsWith("vbproj") ->
             AssemblyInfoFile.createVisualBasic ((folderName </> "My Project") </> "AssemblyInfo.vb") attributes
         | _ -> ()))
 
@@ -155,11 +155,11 @@ Target.create "Pack" (fun _ ->
 Target.create "ReleaseGitHub" (fun _ ->
     let remote =
         Git.CommandHelper.getGitResult "" "remote -v"
-        |> Seq.filter (fun (s: string) -> s.EndsWith ("(push)"))
-        |> Seq.tryFind (fun (s: string) -> s.Contains (gitOwner + "/" + gitName))
+        |> Seq.filter (fun (s: string) -> s.EndsWith("(push)"))
+        |> Seq.tryFind (fun (s: string) -> s.Contains(gitOwner + "/" + gitName))
         |> function
             | None -> gitHome + "/" + gitName
-            | Some (s: string) -> s.Split().[0]
+            | Some(s: string) -> s.Split().[0]
 
     Git.Staging.stageAll ""
     Git.Commit.exec "" (sprintf "Bump version to %s" release.NugetVersion)
@@ -196,7 +196,7 @@ Target.create "Push" (fun _ ->
         | _ -> UserInput.getUserPassword "NuGet Key: "
 
     let pushParams =
-        { NuGet.NuGet.NuGetPushParams.Create () with
+        { NuGet.NuGet.NuGetPushParams.Create() with
             ApiKey = Some key
             Source = Some "https://api.nuget.org/v3/index.json" }
 
@@ -208,23 +208,10 @@ Target.create "Push" (fun _ ->
 Target.create "Default" DoNothing
 Target.create "Release" DoNothing
 
-"Clean"
-==> "AssemblyInfo"
-==> "Restore"
-==> "Build"
-==> "Test"
-==> "Default"
+"Clean" ==> "AssemblyInfo" ==> "Restore" ==> "Build" ==> "Test" ==> "Default"
 
-"Clean"
-==> "AssemblyInfo"
-==> "Restore"
-==> "BuildRelease"
-==> "Docs"
+"Clean" ==> "AssemblyInfo" ==> "Restore" ==> "BuildRelease" ==> "Docs"
 
-"Default"
-==> "Pack"
-==> "ReleaseGitHub"
-==> "Push"
-==> "Release"
+"Default" ==> "Pack" ==> "ReleaseGitHub" ==> "Push" ==> "Release"
 
 Target.runOrDefaultWithArguments "Default"

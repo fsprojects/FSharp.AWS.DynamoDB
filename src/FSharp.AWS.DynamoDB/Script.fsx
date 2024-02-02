@@ -205,9 +205,7 @@ type SimpleCounters private (table: TableContext<CounterEntry>) =
 
     member _.StartCounter() : Async<Counter> = Counter.Start table
 
-let e =
-    EasyCounters.Create(ddb, "testing")
-    |> Async.RunSynchronously
+let e = EasyCounters.Create(ddb, "testing") |> Async.RunSynchronously
 
 let e1 = e.StartCounter() |> Async.RunSynchronously
 let e2 = e.StartCounter() |> Async.RunSynchronously
@@ -215,8 +213,7 @@ e1.Incr() |> Async.RunSynchronously
 e2.Incr() |> Async.RunSynchronously
 
 // First, we create it in On-Demand mode
-SimpleCounters.ProvisionOnDemand(ddb, "testing-pre-provisioned")
-|> Async.RunSynchronously
+SimpleCounters.ProvisionOnDemand(ddb, "testing-pre-provisioned") |> Async.RunSynchronously
 // Then we flip it to Provisioned mode
 SimpleCounters.Provision(ddb, "testing-pre-provisioned", readCapacityUnits = 10L, writeCapacityUnits = 10L)
 |> Async.RunSynchronously
@@ -227,9 +224,7 @@ let s1 = s.StartCounter() |> Async.RunSynchronously // Throws if Provision step 
 s1.Incr() |> Async.RunSynchronously
 
 // Alternately, we can have the app do an extra call (and have some asynchronous initialization work) to check the table is ready
-let v =
-    SimpleCounters.CreateWithVerify(ddb, "testing-not-present")
-    |> Async.RunSynchronously // Throws, as table not present
+let v = SimpleCounters.CreateWithVerify(ddb, "testing-not-present") |> Async.RunSynchronously // Throws, as table not present
 
 let v2 = v.StartCounter() |> Async.RunSynchronously
 v2.Incr() |> Async.RunSynchronously

@@ -49,9 +49,7 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
           RangeKey = guid ()
           Value = rand ()
           Tuple = rand (), rand ()
-          Map =
-            seq { for _ in 0L .. rand () % 5L -> "K" + guid (), rand () }
-            |> Map.ofSeq
+          Map = seq { for _ in 0L .. rand () % 5L -> "K" + guid (), rand () } |> Map.ofSeq
           Unions = [ Choice1Of3(guid ()); Choice2Of3(rand ()); Choice3Of3(Guid.NewGuid().ToByteArray()) ] }
 
     let table = fixture.CreateEmpty<SimpleRecord>()
@@ -101,10 +99,7 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
         let unprocessed = table.BatchPutItems values
 
         let values' =
-            table.BatchGetItems(
-                values
-                |> Seq.map (fun r -> TableKey.Combined(r.HashKey, r.RangeKey))
-            )
+            table.BatchGetItems(values |> Seq.map (fun r -> TableKey.Combined(r.HashKey, r.RangeKey)))
             |> Set.ofArray
 
         test <@ Array.isEmpty unprocessed @>
@@ -115,19 +110,11 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
         let values = set [ for _ in 1L .. 20L -> mkItem () ]
         table.BatchPutItems values |> ignore
 
-        let unprocessed =
-            table.BatchDeleteItems(
-                values
-                |> Seq.map (fun r -> TableKey.Combined(r.HashKey, r.RangeKey))
-            )
+        let unprocessed = table.BatchDeleteItems(values |> Seq.map (fun r -> TableKey.Combined(r.HashKey, r.RangeKey)))
 
         test <@ Array.isEmpty unprocessed @>
 
-        let values' =
-            table.BatchGetItems(
-                values
-                |> Seq.map (fun r -> TableKey.Combined(r.HashKey, r.RangeKey))
-            )
+        let values' = table.BatchGetItems(values |> Seq.map (fun r -> TableKey.Combined(r.HashKey, r.RangeKey)))
 
         test <@ Array.isEmpty values' @>
 
@@ -162,9 +149,7 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
           RangeKey = guid ()
           Value = rand ()
           Tuple = rand (), rand ()
-          Map =
-            seq { for _ in 0L .. rand () % 5L -> "K" + guid (), rand () }
-            |> Map.ofSeq
+          Map = seq { for _ in 0L .. rand () % 5L -> "K" + guid (), rand () } |> Map.ofSeq
           Unions = [ Choice1Of3(guid ()); Choice2Of3(rand ()); Choice3Of3(Guid.NewGuid().ToByteArray()) ] }
 
     let table = fixture.CreateEmpty<SimpleRecord>()
@@ -262,11 +247,7 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
 
             let! maybeItem = table.TryGetItemAsync key
 
-            test
-                <@
-                    shouldFail
-                    <> (maybeItem |> Option.contains { item with Value = 42 })
-                @>
+            test <@ shouldFail <> (maybeItem |> Option.contains { item with Value = 42 }) @>
 
             let! maybeItem2 = table.TryGetItemAsync(table.Template.ExtractKey item2)
             test <@ shouldFail <> (maybeItem2 |> Option.contains item2) @>
@@ -276,13 +257,7 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
 
             let! maybeItem7 = table.TryGetItemAsync(table.Template.ExtractKey item7)
 
-            test
-                <@
-                    shouldFail
-                    <> (maybeItem7
-                        |> Option.map (fun x -> x.Tuple)
-                        |> Option.contains (42, 42))
-                @>
+            test <@ shouldFail <> (maybeItem7 |> Option.map (fun x -> x.Tuple) |> Option.contains (42, 42)) @>
         }
 
     let shouldBeRejectedWithArgumentOutOfRangeException requests =

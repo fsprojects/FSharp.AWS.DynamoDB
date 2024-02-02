@@ -205,10 +205,7 @@ type IndexKey private (hashKey: obj, rangeKey: obj, primaryKey: TableKey) =
 
     override _.Equals o =
         match o with
-        | :? IndexKey as qk' ->
-            hashKey = qk'.HashKey
-            && rangeKey = qk'.RangeKey
-            && primaryKey = qk'.PrimaryKey
+        | :? IndexKey as qk' -> hashKey = qk'.HashKey && rangeKey = qk'.RangeKey && primaryKey = qk'.PrimaryKey
         | _ -> false
 
     override _.GetHashCode() = hash3 hashKey rangeKey primaryKey

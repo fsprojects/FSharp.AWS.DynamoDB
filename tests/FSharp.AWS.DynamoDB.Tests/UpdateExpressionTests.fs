@@ -89,9 +89,7 @@ type ``Update Expression Tests``(fixture: TableFixture) =
           Bytes = Guid.NewGuid().ToByteArray()
           Nested = { NV = guid (); NE = enum<Enum> (int (rand ()) % 3) }
           NestedList = [ { NV = guid (); NE = enum<Enum> (int (rand ()) % 3) } ]
-          Map =
-            seq { for _ in 0L .. rand () % 5L -> "K" + guid (), rand () }
-            |> Map.ofSeq
+          Map = seq { for _ in 0L .. rand () % 5L -> "K" + guid (), rand () } |> Map.ofSeq
           IntSet = seq { for _ in 0L .. rand () % 5L -> rand () } |> Set.ofSeq
           StringSet = seq { for _ in 0L .. rand () % 5L -> guid () } |> Set.ofSeq
           ByteSet = seq { for _ in 0L .. rand () % 5L -> bytes () } |> Set.ofSeq
@@ -390,11 +388,7 @@ type ``Update Expression Tests``(fixture: TableFixture) =
         let item' =
             table.UpdateItem(
                 key,
-                <@
-                    fun r ->
-                        SET r.NestedList[0].NV item.HashKey
-                        &&& SET r.NestedList[1] { NV = item.HashKey; NE = Enum.C }
-                @>
+                <@ fun r -> SET r.NestedList[0].NV item.HashKey &&& SET r.NestedList[1] { NV = item.HashKey; NE = Enum.C } @>
             )
 
         test <@ item.HashKey = item'.NestedList[0].NV @>

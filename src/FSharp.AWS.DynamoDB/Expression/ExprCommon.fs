@@ -25,9 +25,7 @@ type NestedAttribute =
     member nf.Print() =
         match nf with
         | FParam i -> sprintf "<$param%d>" i
-        | FField f when not <| isValidFieldName f ->
-            sprintf "map keys must be 1 to 64k long (as utf8)."
-            |> invalidArg f
+        | FField f when not <| isValidFieldName f -> sprintf "map keys must be 1 to 64k long (as utf8)." |> invalidArg f
 
         | FField f -> "." + f
         | FIndex i -> sprintf "[%d]" i
@@ -182,15 +180,9 @@ type QuotedAttribute =
         let tryGetPropInfo (properties: PropertyMetadata[]) isFinalProp (p: PropertyInfo) =
             match properties |> Array.tryFind (fun rp -> rp.PropertyInfo = p) with
             | None -> None
-            | Some rp when
-                rp.Pickler.PicklerType = PicklerType.Serialized
-                && not isFinalProp
-                ->
+            | Some rp when rp.Pickler.PicklerType = PicklerType.Serialized && not isFinalProp ->
                 invalidArg "expr" "cannot access nested properties of serialized fields."
-            | Some rp when
-                rp.Pickler.PicklerType = PicklerType.Union
-                && not isFinalProp
-                ->
+            | Some rp when rp.Pickler.PicklerType = PicklerType.Union && not isFinalProp ->
                 invalidArg "expr" "cannot access nested properties of union fields."
             | Some _ as r -> r
 

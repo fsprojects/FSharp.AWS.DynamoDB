@@ -27,9 +27,7 @@ type UnionPickler<'U>(resolver: IPicklerResolver) =
     let mkUCD uci =
         let ctor = FSharpValue.PreComputeUnionConstructorInfo(uci, true)
 
-        let props =
-            uci.GetFields()
-            |> Array.mapi (PropertyMetadata.FromPropertyInfo resolver)
+        let props = uci.GetFields() |> Array.mapi (PropertyMetadata.FromPropertyInfo resolver)
 
         { UCI = uci; CaseCtor = ctor; Properties = props }
 
@@ -51,9 +49,7 @@ type UnionPickler<'U>(resolver: IPicklerResolver) =
         values
 
     member __.ToUnion(ro: RestObject) : 'U =
-        let notFound name =
-            raise
-            <| new KeyNotFoundException(sprintf "attribute %A not found." name)
+        let notFound name = raise <| new KeyNotFoundException(sprintf "attribute %A not found." name)
 
         let tag =
             let ok, av = ro.TryGetValue caseAttr
@@ -86,9 +82,7 @@ type UnionPickler<'U>(resolver: IPicklerResolver) =
     override __.PicklerType = PicklerType.Union
     override __.PickleType = PickleType.Map
 
-    override __.DefaultValue =
-        invalidOp
-        <| sprintf "default values not supported for unions."
+    override __.DefaultValue = invalidOp <| sprintf "default values not supported for unions."
 
     override __.Pickle(union: 'U) =
         let ro = __.OfUnion union

@@ -69,11 +69,9 @@ let inline mkNumericalPickler< ^N
     when ^N: (static member Parse: string * IFormatProvider -> ^N) and ^N: (member ToString: IFormatProvider -> string)>
     ()
     =
-    let inline parseNum s =
-        (^N: (static member Parse: string * IFormatProvider -> ^N) (s, CultureInfo.InvariantCulture))
+    let inline parseNum s = (^N: (static member Parse: string * IFormatProvider -> ^N) (s, CultureInfo.InvariantCulture))
 
-    let inline toString n =
-        (^N: (member ToString: IFormatProvider -> string) (n, CultureInfo.InvariantCulture))
+    let inline toString n = (^N: (member ToString: IFormatProvider -> string) (n, CultureInfo.InvariantCulture))
 
     { new NumRepresentablePickler< ^N >() with
         member _.PickleType = PickleType.Number
@@ -291,9 +289,7 @@ type SerializerAttributePickler<'T>(serializer: IPropertySerializer, resolver: I
     override _.PickleType = picklePickler.PickleType
     override _.PicklerType = PicklerType.Serialized
 
-    override _.DefaultValue =
-        raise
-        <| NotSupportedException("Default values not supported in serialized types.")
+    override _.DefaultValue = raise <| NotSupportedException("Default values not supported in serialized types.")
 
     override _.Pickle value =
         let pickle = serializer.Serialize value

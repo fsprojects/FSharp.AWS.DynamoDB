@@ -142,9 +142,7 @@ let extractRecordExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Inter
     if not expr.IsClosed then
         invalidArg "expr" "supplied update expression contains free variables."
 
-    let invalidExpr () =
-        invalidArg "expr"
-        <| sprintf "Supplied expression is not a valid update expression."
+    let invalidExpr () = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
     let nParams, pRecognizer, expr' = extractExprParams recordInfo expr
 
@@ -166,11 +164,7 @@ let extractRecordExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Inter
             | Var v when bindings.ContainsKey v -> Some(Root(rp, recordInfo.GetPropertySchemata rp.Name), bindings.[v])
             | e -> Some(Root(rp, recordInfo.GetPropertySchemata rp.Name), e)
 
-        let assignmentExprs =
-            assignments
-            |> Seq.mapi tryExtractValueExpr
-            |> Seq.choose id
-            |> Seq.toArray
+        let assignmentExprs = assignments |> Seq.mapi tryExtractValueExpr |> Seq.choose id |> Seq.toArray
 
         { RVar = r
           NParams = nParams
@@ -187,9 +181,7 @@ let extractOpExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Intermedi
     if not expr.IsClosed then
         invalidArg "expr" "supplied update expression contains free variables."
 
-    let invalidExpr () =
-        invalidArg "expr"
-        <| sprintf "Supplied expression is not a valid update expression."
+    let invalidExpr () = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
     let nParams, (|PVar|_|), expr' = extractExprParams recordInfo expr
 
@@ -239,11 +231,7 @@ let extractOpExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Intermedi
 
         do extract body
 
-        match
-            attrs
-            |> Seq.map (fun attr -> attr.Id)
-            |> tryFindConflictingPaths
-        with
+        match attrs |> Seq.map (fun attr -> attr.Id) |> tryFindConflictingPaths with
         | Some(p1, p2) ->
             let msg = sprintf "found conflicting paths '%s' and '%s' being accessed in update expression." p1 p2
             invalidArg "expr" msg
@@ -264,9 +252,7 @@ let extractOpExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Intermedi
 
 /// Completes conversion from intermediate update expression to final update operations
 let extractUpdateOps (exprs: IntermediateUpdateExprs) =
-    let invalidExpr () =
-        invalidArg "expr"
-        <| sprintf "Supplied expression is not a valid update expression."
+    let invalidExpr () = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
     let (|PVar|_|) = exprs.ParamRecognizer
     let (|AttributeGet|_|) (e: Expr) = QuotedAttribute.TryExtract (|PVar|_|) exprs.RVar exprs.RecordInfo e
@@ -520,15 +506,9 @@ type UpdateOperations with
         let aw = new AttributeWriter()
         let expr = writeUpdateExpression aw uops
 
-        let names =
-            aw.Names
-            |> Seq.map (fun kv -> kv.Key, kv.Value)
-            |> Seq.toList
+        let names = aw.Names |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
 
-        let values =
-            aw.Values
-            |> Seq.map (fun kv -> kv.Key, kv.Value.Print())
-            |> Seq.toList
+        let values = aw.Values |> Seq.map (fun kv -> kv.Key, kv.Value.Print()) |> Seq.toList
 
         expr, names, values
 

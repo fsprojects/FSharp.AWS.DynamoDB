@@ -57,8 +57,7 @@ type BytesSetPickler() =
             if bs.Length = 0 then
                 None
             else
-                Some
-                <| AttributeValue(BS = rlist [| new MemoryStream(bs) |])
+                Some <| AttributeValue(BS = rlist [| new MemoryStream(bs) |])
 
         | _ ->
             let rl =
@@ -190,9 +189,7 @@ type MapPickler<'Value>(vp: Pickler<'Value>) =
         if a.NULL then
             Map.empty
         elif a.IsMSet then
-            a.M
-            |> Seq.map (fun kv -> kv.Key, vp.UnPickle kv.Value)
-            |> Map.ofSeq
+            a.M |> Seq.map (fun kv -> kv.Key, vp.UnPickle kv.Value) |> Map.ofSeq
         else
             invalidCast a
 

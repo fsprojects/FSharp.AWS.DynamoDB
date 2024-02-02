@@ -164,9 +164,7 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
     if not expr.IsClosed then
         invalidArg "expr" "supplied query is not a closed expression."
 
-    let invalidQuery () =
-        invalidArg "expr"
-        <| sprintf "Supplied expression is not a valid conditional."
+    let invalidQuery () = invalidArg "expr" <| sprintf "Supplied expression is not a valid conditional."
 
     let nParams, (|PVar|_|), expr' = extractExprParams recordInfo expr
 
@@ -223,10 +221,7 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
             let op = extractOperand None expr
 
             match op with
-            | Value va ->
-                va.AttributeValue.L
-                |> ResizeArray.mapToArray (fun x -> x |> wrap |> Value)
-                |> Some
+            | Value va -> va.AttributeValue.L |> ResizeArray.mapToArray (fun x -> x |> wrap |> Value) |> Some
             | _ -> None
 
         let extractNestedField (expr: Expr) =
@@ -241,10 +236,7 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
         let (|Comparison|_|) (pat: Expr) (expr: Expr) =
             match expr with
             | SpecificCall pat (None, _, args) ->
-                let pickler =
-                    args
-                    |> List.tryPick (|AttributeGet|_|)
-                    |> Option.map (fun attr -> attr.Pickler)
+                let pickler = args |> List.tryPick (|AttributeGet|_|) |> Option.map (fun attr -> attr.Pickler)
 
                 let operands = args |> List.map (extractOperand pickler)
 
@@ -259,8 +251,7 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
 
         let extractComparison (p: Pickler) (cmp: Comparator) (left: Operand) (right: Operand) =
             if cmp.IsComparison && not p.IsComparable then
-                sprintf "Representation of type '%O' does not support comparisons." p.Type
-                |> invalidArg "expr"
+                sprintf "Representation of type '%O' does not support comparisons." p.Type |> invalidArg "expr"
 
             elif left = right then
                 match cmp with
@@ -536,15 +527,9 @@ type ConditionalExpression with
         let aw = new AttributeWriter()
         let expr = writeConditionExpression aw cond
 
-        let names =
-            aw.Names
-            |> Seq.map (fun kv -> kv.Key, kv.Value)
-            |> Seq.toList
+        let names = aw.Names |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
 
-        let values =
-            aw.Values
-            |> Seq.map (fun kv -> kv.Key, kv.Value.Print())
-            |> Seq.toList
+        let values = aw.Values |> Seq.map (fun kv -> kv.Key, kv.Value.Print()) |> Seq.toList
 
         expr, names, values
 

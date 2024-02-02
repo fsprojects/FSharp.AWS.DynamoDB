@@ -49,23 +49,11 @@ type ``Inverse GSI Table Operation Tests``(fixture: TableFixture) =
 
         let queriedTable = table.Query <@ fun (i: InverseKeyRecord) -> i.PrimaryKey = "1" && i.SortKey.StartsWith "2" @>
 
-        test
-            <@
-                set queriedTable = set (
-                    values
-                    |> Set.filter (fun i -> i.PrimaryKey = "1" && i.SortKey.StartsWith "2")
-                )
-            @>
+        test <@ set queriedTable = set (values |> Set.filter (fun i -> i.PrimaryKey = "1" && i.SortKey.StartsWith "2")) @>
 
         let queriedGSI = table.Query <@ fun (i: InverseKeyRecord) -> i.SortKey = "1" && i.PrimaryKey.StartsWith "2" @>
 
-        test
-            <@
-                set queriedGSI = set (
-                    values
-                    |> Set.filter (fun i -> i.SortKey = "1" && i.PrimaryKey.StartsWith "2")
-                )
-            @>
+        test <@ set queriedGSI = set (values |> Set.filter (fun i -> i.SortKey = "1" && i.PrimaryKey.StartsWith "2")) @>
 
     interface IClassFixture<TableFixture>
 
@@ -90,22 +78,10 @@ type ``Shared Range Key Table Operation Tests``(fixture: TableFixture) =
 
         let queried1 = table.Query <@ fun (i: SharedRangeKeyRecord) -> i.GSI1 = "1" && i.SortKey = "23" @>
 
-        test
-            <@
-                set queried1 = set (
-                    values
-                    |> Set.filter (fun i -> i.GSI1 = "1" && i.SortKey = "23")
-                )
-            @>
+        test <@ set queried1 = set (values |> Set.filter (fun i -> i.GSI1 = "1" && i.SortKey = "23")) @>
 
         let queried2 = table.Query <@ fun (i: SharedRangeKeyRecord) -> i.GSI2 = "2" && i.SortKey = "25" @>
 
-        test
-            <@
-                set queried2 = set (
-                    values
-                    |> Set.filter (fun i -> i.GSI2 = "2" && i.SortKey = "25")
-                )
-            @>
+        test <@ set queried2 = set (values |> Set.filter (fun i -> i.GSI2 = "2" && i.SortKey = "25")) @>
 
     interface IClassFixture<TableFixture>

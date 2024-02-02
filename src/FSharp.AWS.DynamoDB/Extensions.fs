@@ -51,15 +51,9 @@ module Extensions =
             let getEnv x = Environment.ResolveEnvironmentVariable x
 
             match getEnv accessKeyName, getEnv secretKeyName with
-            | null, null ->
-                sprintf "Undefined environment variables '%s' and '%s'" accessKeyName secretKeyName
-                |> invalidOp
-            | null, _ ->
-                sprintf "Undefined environment variable '%s'" accessKeyName
-                |> invalidOp
-            | _, null ->
-                sprintf "Undefined environment variable '%s'" secretKeyName
-                |> invalidOp
+            | null, null -> sprintf "Undefined environment variables '%s' and '%s'" accessKeyName secretKeyName |> invalidOp
+            | null, _ -> sprintf "Undefined environment variable '%s'" accessKeyName |> invalidOp
+            | _, null -> sprintf "Undefined environment variable '%s'" secretKeyName |> invalidOp
             | aK, sK -> new BasicAWSCredentials(aK, sK) :> _
 
         /// <summary>
@@ -77,8 +71,7 @@ module Extensions =
                 let credsFile = Path.Combine(getHomePath (), ".aws", "credentials")
 
                 if not <| File.Exists credsFile then
-                    sprintf "Could not locate stored credentials profile '%s'." profileName
-                    |> invalidOp
+                    sprintf "Could not locate stored credentials profile '%s'." profileName |> invalidOp
 
                 let text = File.ReadAllText credsFile
 
@@ -89,7 +82,5 @@ module Extensions =
                     |> Seq.tryFind (fun (pf, _, _) -> pf = profileName)
 
                 match matchingProfile with
-                | None ->
-                    sprintf "Could not locate stored credentials profile '%s'." profileName
-                    |> invalidOp
+                | None -> sprintf "Could not locate stored credentials profile '%s'." profileName |> invalidOp
                 | Some(_, aK, sK) -> new BasicAWSCredentials(aK, sK) :> _

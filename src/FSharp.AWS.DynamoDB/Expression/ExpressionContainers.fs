@@ -96,11 +96,7 @@ and UpdateExpression =
 
             let uops = exprs |> Array.collect (fun e -> e.UpdateOps.UpdateOps)
 
-            match
-                uops
-                |> Seq.map (fun o -> o.Attribute)
-                |> tryFindConflictingPaths
-            with
+            match uops |> Seq.map (fun o -> o.Attribute) |> tryFindConflictingPaths with
             | None -> ()
             | Some(p1, p2) ->
                 let msg = sprintf "found conflicting paths '%s' and '%s' being accessed in update expression." p1 p2

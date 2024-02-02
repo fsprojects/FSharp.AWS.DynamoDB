@@ -28,9 +28,7 @@ type AttributeId with
             if List.isEmpty rest then
                 false
             else
-                sprintf "Document path '%s' not found." id.Name
-                |> KeyNotFoundException
-                |> raise
+                sprintf "Document path '%s' not found." id.Name |> KeyNotFoundException |> raise
 
         let rec aux result rest (av: AttributeValue) =
             match rest with
@@ -42,28 +40,18 @@ type AttributeId with
                     let ok, nested = av.M.TryGetValue f
                     if not ok then notFound tl else aux result tl nested
                 else
-                    av.Print()
-                    |> sprintf "Expected map, but was '%s'."
-                    |> InvalidCastException
-                    |> raise
+                    av.Print() |> sprintf "Expected map, but was '%s'." |> InvalidCastException |> raise
 
             | FIndex i :: tl ->
                 if av.IsLSet then
                     if i < 0 || i >= av.L.Count then
-                        sprintf "Indexed path '%s' out of range." id.Name
-                        |> ArgumentOutOfRangeException
-                        |> raise
+                        sprintf "Indexed path '%s' out of range." id.Name |> ArgumentOutOfRangeException |> raise
                     else
                         aux result tl av.L.[i]
                 else
-                    av.Print()
-                    |> sprintf "Expected list, but was '%s'."
-                    |> InvalidCastException
-                    |> raise
+                    av.Print() |> sprintf "Expected list, but was '%s'." |> InvalidCastException |> raise
 
-            | FParam _ :: _ ->
-                sprintf "internal error; unexpected attribute path '%s'." id.Name
-                |> invalidOp
+            | FParam _ :: _ -> sprintf "internal error; unexpected attribute path '%s'." id.Name |> invalidOp
 
         let ok, prop = ro.TryGetValue id.RootName
 
@@ -171,9 +159,6 @@ type ProjectionExpr =
         let aw = new AttributeWriter()
         let expr = __.Write(aw)
 
-        let names =
-            aw.Names
-            |> Seq.map (fun kv -> kv.Key, kv.Value)
-            |> Seq.toList
+        let names = aw.Names |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
 
         expr, names

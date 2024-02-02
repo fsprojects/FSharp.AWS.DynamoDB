@@ -50,8 +50,7 @@ type ``Sparse GSI Tests``(fixture: TableFixture) =
         let value = { mkItem () with SecondaryHashKey = Some(guid ()) }
         let key = table.PutItem value
 
-        table.UpdateItem(key, <@ fun r -> { r with SecondaryHashKey = None } @>)
-        |> ignore
+        table.UpdateItem(key, <@ fun r -> { r with SecondaryHashKey = None } @>) |> ignore
 
         let res = table.Query(keyCondition = <@ fun (r: GsiRecord) -> r.SecondaryHashKey = value.SecondaryHashKey @>)
         test <@ Array.isEmpty res @>

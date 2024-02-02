@@ -43,13 +43,9 @@ type AttributeValueComparer() =
         elif av.NS.Count > 0 then
             av'.NS.Count > 0 && areEqualResizeArrays av.NS av'.NS
         elif av.BS.Count > 0 then
-            av'.BS.Count > 0
-            && av.BS.Count = av'.BS.Count
-            && Seq.forall2 areEqualMemoryStreams av.BS av'.BS
+            av'.BS.Count > 0 && av.BS.Count = av'.BS.Count && Seq.forall2 areEqualMemoryStreams av.BS av'.BS
         elif av.IsLSet then
-            av'.IsLSet
-            && av.L.Count = av'.L.Count
-            && Seq.forall2 areEqualAttributeValues av.L av'.L
+            av'.IsLSet && av.L.Count = av'.L.Count && Seq.forall2 areEqualAttributeValues av.L av'.L
         elif av.IsMSet then
             av'.IsMSet
             && av.M.Count = av'.M.Count
@@ -89,8 +85,7 @@ type AttributeValueComparer() =
         elif av.IsLSet then
             getSeqHash getAttributeValueHashCode av.L
         elif av.IsMSet then
-            av.M
-            |> getSeqHash (fun kv -> hash2 kv.Key (getAttributeValueHashCode kv.Value))
+            av.M |> getSeqHash (fun kv -> hash2 kv.Key (getAttributeValueHashCode kv.Value))
         else
             -1
 
@@ -138,22 +133,13 @@ type AttributeValue with
         elif av.NS.Count > 0 then
             sprintf "{ SN = %A }" (Seq.toArray av.NS)
         elif av.BS.Count > 0 then
-            av.BS
-            |> Seq.map (fun bs -> bs.ToArray())
-            |> Seq.toArray
-            |> sprintf "{ BS = %A }"
+            av.BS |> Seq.map (fun bs -> bs.ToArray()) |> Seq.toArray |> sprintf "{ BS = %A }"
 
         elif av.IsLSet then
-            av.L
-            |> Seq.map (fun av -> av.Print())
-            |> Seq.toArray
-            |> sprintf "{ L = %A }"
+            av.L |> Seq.map (fun av -> av.Print()) |> Seq.toArray |> sprintf "{ L = %A }"
 
         elif av.IsMSet then
-            av.M
-            |> Seq.map (fun kv -> (kv.Key, kv.Value.Print()))
-            |> Seq.toArray
-            |> sprintf "{ M = %A }"
+            av.M |> Seq.map (fun kv -> (kv.Key, kv.Value.Print())) |> Seq.toArray |> sprintf "{ M = %A }"
 
         else
             "{ }"

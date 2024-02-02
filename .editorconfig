@@ -91,7 +91,7 @@ fsharp_max_if_then_else_short_width=60
 # breaks an infix operator expression if it is on one line
 # infix: a + b + c
 # default 50
-fsharp_max_infix_operator_expression=60
+fsharp_max_infix_operator_expression=100
 
 # breaks a single-line record declaration
 # i.e. if this gets too wide: { X = 10; Y = 12 }
@@ -134,7 +134,7 @@ fsharp_max_value_binding_width=140
 
 # maximum width for function and member binding (rh-side)
 # default 40
-fsharp_max_function_binding_width=80
+fsharp_max_function_binding_width=100
 
 # maximum width for expressions like X.DoY().GetZ(10).Help()
 # default 50

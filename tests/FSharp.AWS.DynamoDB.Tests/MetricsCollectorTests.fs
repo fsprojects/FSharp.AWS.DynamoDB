@@ -259,11 +259,7 @@ type BulkMutationTests(fixture: TableFixture) =
 
     [<Fact>]
     let ``Collect Metrics on BatchDeleteItem`` () =
-        let _keys =
-            sut.BatchDeleteItems(
-                items
-                |> Seq.map (fun i -> TableKey.Combined(i.HashKey, i.RangeKey))
-            )
+        let _keys = sut.BatchDeleteItems(items |> Seq.map (fun i -> TableKey.Combined(i.HashKey, i.RangeKey)))
 
         test
             <@

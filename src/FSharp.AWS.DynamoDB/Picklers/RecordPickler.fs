@@ -39,9 +39,7 @@ type RecordPickler<'T>(ctor: obj[] -> obj, properties: PropertyMetadata[]) =
         for i = 0 to properties.Length - 1 do
             let prop = properties.[i]
 
-            let notFound () =
-                raise
-                <| new KeyNotFoundException(sprintf "attribute %A not found." prop.Name)
+            let notFound () = raise <| new KeyNotFoundException(sprintf "attribute %A not found." prop.Name)
 
             let ok, av = ro.TryGetValue prop.Name
 
@@ -58,9 +56,7 @@ type RecordPickler<'T>(ctor: obj[] -> obj, properties: PropertyMetadata[]) =
     override __.PickleType = PickleType.Map
 
     override __.DefaultValue =
-        let defaultFields =
-            properties
-            |> Array.map (fun p -> p.Pickler.DefaultValueUntyped)
+        let defaultFields = properties |> Array.map (fun p -> p.Pickler.DefaultValueUntyped)
 
         ctor defaultFields :?> 'T
 
@@ -85,9 +81,7 @@ type PropertyMetadata with
 let mkTuplePickler<'T> (resolver: IPicklerResolver) =
     let ctor = FSharpValue.PreComputeTupleConstructor typeof<'T>
 
-    let properties =
-        typeof<'T>.GetProperties()
-        |> Array.mapi (PropertyMetadata.FromPropertyInfo resolver)
+    let properties = typeof<'T>.GetProperties() |> Array.mapi (PropertyMetadata.FromPropertyInfo resolver)
 
     new RecordPickler<'T>(ctor, properties)
 

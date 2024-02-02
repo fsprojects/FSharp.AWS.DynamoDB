@@ -35,8 +35,7 @@ module ``Record Generation Tests`` =
                 // account for random inputs not supported by the library
                 | :? InvalidOperationException as e when e.Message = "empty strings not supported by DynamoDB." -> ()
                 | :? ArgumentException as e when
-                    e.Message.Contains "unsupported key name"
-                    && e.Message.Contains "should be 1 to 64k long (as utf8)"
+                    e.Message.Contains "unsupported key name" && e.Message.Contains "should be 1 to 64k long (as utf8)"
                     ->
                     ()
 
@@ -354,10 +353,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Generated picklers should be singletons`` () =
-        let actual =
-            Array.Parallel.init 100 (fun _ -> Pickler.resolve<FooRecord> ())
-            |> Seq.distinct
-            |> Seq.length
+        let actual = Array.Parallel.init 100 (fun _ -> Pickler.resolve<FooRecord> ()) |> Seq.distinct |> Seq.length
 
         test <@ 1 = actual @>
 
@@ -597,9 +593,5 @@ module ``Record Generation Tests`` =
                 let expectedDateTime, expectedOffset = d.DateTime, d.Offset
                 let actualDateTime, actualOffset = d'.DateTime, d'.Offset
 
-                test
-                    <@
-                        expectedDateTime = actualDateTime
-                        && expectedOffset = actualOffset
-                    @>
+                test <@ expectedDateTime = actualDateTime && expectedOffset = actualOffset @>
         )
