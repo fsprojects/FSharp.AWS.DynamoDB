@@ -22,19 +22,19 @@ module Extensions =
     let inline itemDoesNotExist<'TRecord> = template<'TRecord>.ItemDoesNotExist
 
     /// Precomputes a conditional expression
-    let inline cond (expr : Expr<'TRecord -> bool>) : ConditionExpression<'TRecord> =
+    let inline cond (expr: Expr<'TRecord -> bool>) : ConditionExpression<'TRecord> =
         template<'TRecord>.PrecomputeConditionalExpr expr
 
     /// Precomputes an update expression
-    let inline update (expr : Expr<'TRecord -> 'TRecord>) : UpdateExpression<'TRecord> =
+    let inline update (expr: Expr<'TRecord -> 'TRecord>) : UpdateExpression<'TRecord> =
         template<'TRecord>.PrecomputeUpdateExpr expr
 
     /// Precomputes an update operation expression
-    let inline updateOp (expr : Expr<'TRecord -> UpdateOp>) : UpdateExpression<'TRecord> =
+    let inline updateOp (expr: Expr<'TRecord -> UpdateOp>) : UpdateExpression<'TRecord> =
         template<'TRecord>.PrecomputeUpdateExpr expr
 
     /// Precomputes a projection expression
-    let inline proj (expr : Expr<'TRecord -> 'TProjection>) : ProjectionExpression<'TRecord, 'TProjection> =
+    let inline proj (expr: Expr<'TRecord -> 'TProjection>) : ProjectionExpression<'TRecord, 'TProjection> =
         template<'TRecord>.PrecomputeProjectionExpr<'TProjection> expr
 
 
@@ -52,27 +52,35 @@ module Extensions =
         static member FromEnvironmentVariables() : Amazon.Runtime.AWSCredentials =
             let accessKeyName = "AWS_ACCESS_KEY_ID"
             let secretKeyName = "AWS_SECRET_ACCESS_KEY"
-            let getEnv x = Environment.ResolveEnvironmentVariable x
+
+            let getEnv x =
+                Environment.ResolveEnvironmentVariable x
 
             match getEnv accessKeyName, getEnv secretKeyName with
-            | null, null -> sprintf "Undefined environment variables '%s' and '%s'" accessKeyName secretKeyName |> invalidOp
+            | null, null ->
+                sprintf "Undefined environment variables '%s' and '%s'" accessKeyName secretKeyName
+                |> invalidOp
             | null, _ -> sprintf "Undefined environment variable '%s'" accessKeyName |> invalidOp
             | _, null -> sprintf "Undefined environment variable '%s'" secretKeyName |> invalidOp
-            | aK, sK  -> new BasicAWSCredentials(aK, sK) :> _
+            | aK, sK -> new BasicAWSCredentials(aK, sK) :> _
 
         /// <summary>
         ///     Recover a set of credentials using the local credentials store.
         /// </summary>
         /// <param name="profileName">Credential store profile name. Defaults to 'default' profile.</param>
-        static member FromCredentialsStore(?profileName : string) : Amazon.Runtime.AWSCredentials =
+        static member FromCredentialsStore(?profileName: string) : Amazon.Runtime.AWSCredentials =
             let credentialProfileStoreChain = new CredentialProfileStoreChain()
             let profileName = defaultArg profileName "default"
             let ok, creds = credentialProfileStoreChain.TryGetAWSCredentials(profileName)
-            if ok then creds
+
+            if ok then
+                creds
             else
-                let credsFile = Path.Combine(getHomePath(), ".aws", "credentials")
+                let credsFile = Path.Combine(getHomePath (), ".aws", "credentials")
+
                 if not <| File.Exists credsFile then
-                    sprintf "Could not locate stored credentials profile '%s'." profileName |> invalidOp
+                    sprintf "Could not locate stored credentials profile '%s'." profileName
+                    |> invalidOp
 
                 let text = File.ReadAllText credsFile
 
@@ -80,8 +88,10 @@ module Extensions =
                     profileRegex.Matches text
                     |> Seq.cast<Match>
                     |> Seq.map (fun m -> m.Groups.[1].Value, m.Groups.[2].Value, m.Groups.[3].Value)
-                    |> Seq.tryFind (fun (pf,_,_) -> pf = profileName)
+                    |> Seq.tryFind (fun (pf, _, _) -> pf = profileName)
 
                 match matchingProfile with
-                | None -> sprintf "Could not locate stored credentials profile '%s'." profileName |> invalidOp
-                | Some (_,aK,sK) -> new BasicAWSCredentials(aK, sK) :> _
+                | None ->
+                    sprintf "Could not locate stored credentials profile '%s'." profileName
+                    |> invalidOp
+                | Some(_, aK, sK) -> new BasicAWSCredentials(aK, sK) :> _
