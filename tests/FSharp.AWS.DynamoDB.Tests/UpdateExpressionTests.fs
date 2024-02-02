@@ -68,7 +68,7 @@ module UpdateExprTypes =
 
 type ``Update Expression Tests``(fixture : TableFixture) =
 
-    let rand = let r = Random() in fun () -> int64 <| r.Next()
+    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
     let bytes() = Guid.NewGuid().ToByteArray()
     let mkItem() =
         {

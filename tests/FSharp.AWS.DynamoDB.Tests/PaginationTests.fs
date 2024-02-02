@@ -32,7 +32,7 @@ module PaginationTests =
 
 type ``Pagination Tests`` (fixture : TableFixture) =
 
-    let rand = let r = Random() in fun () -> int64 <| r.Next()
+    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
     let mkItem (hk : string) (gshk : string) : PaginationRecord =
         {
             HashKey = hk
@@ -50,7 +50,7 @@ type ``Pagination Tests`` (fixture : TableFixture) =
         let gsk = guid()
         let items = seq { for _ in 0 .. 9 -> mkItem hk gsk } |> Seq.toArray |> Array.sortBy (fun r -> r.RangeKey)
         for item in items do
-            table.PutItem item |> ignore
+            table.PutItem item =! TableKey.Combined (item.HashKey, item.RangeKey)
         let res1 = table.QueryPaginated (<@ fun r -> r.HashKey = hk @>, limit = 5)
         let res2 = table.QueryPaginated (<@ fun r -> r.HashKey = hk @>, limit = 5, ?exclusiveStartKey = res1.LastEvaluatedKey)
         let res3 = table.QueryPaginated (<@ fun r -> r.HashKey = hk @>, limit = 5, ?exclusiveStartKey = res2.LastEvaluatedKey)
@@ -65,7 +65,7 @@ type ``Pagination Tests`` (fixture : TableFixture) =
         let gsk = guid()
         let items = seq { for _ in 0 .. 9 -> mkItem hk gsk } |> Seq.toArray |> Array.sortBy (fun r -> r.LocalSecondaryRangeKey)
         for item in items do
-            table.PutItem item |> ignore
+            table.PutItem item =! TableKey.Combined (item.HashKey, item.RangeKey)
         let res1 = table.QueryPaginated (<@ fun r -> r.HashKey = hk && r.LocalSecondaryRangeKey > "0" @>, limit = 5)
         let res2 = table.QueryPaginated (<@ fun r -> r.HashKey = hk && r.LocalSecondaryRangeKey > "0" @>, limit = 5, ?exclusiveStartKey = res1.LastEvaluatedKey)
         let res3 = table.QueryPaginated (<@ fun r -> r.HashKey = hk && r.LocalSecondaryRangeKey > "0" @>, limit = 5, ?exclusiveStartKey = res2.LastEvaluatedKey)
@@ -80,7 +80,7 @@ type ``Pagination Tests`` (fixture : TableFixture) =
         let gsk = guid()
         let items = seq { for _ in 0 .. 9 -> mkItem hk gsk } |> Seq.toArray |> Array.sortBy (fun r -> r.SecondaryRangeKey)
         for item in items do
-            table.PutItem item |> ignore
+            table.PutItem item =! TableKey.Combined (item.HashKey, item.RangeKey)
         let res1 = table.QueryPaginated (<@ fun r -> r.SecondaryHashKey = gsk @>, limit = 5)
         let res2 = table.QueryPaginated (<@ fun r -> r.SecondaryHashKey = gsk @>, limit = 5, ?exclusiveStartKey = res1.LastEvaluatedKey)
         let res3 = table.QueryPaginated (<@ fun r -> r.SecondaryHashKey = gsk @>, limit = 5, ?exclusiveStartKey = res2.LastEvaluatedKey)
@@ -95,7 +95,7 @@ type ``Pagination Tests`` (fixture : TableFixture) =
         let gsk = guid()
         let items = seq { for _ in 0 .. 49 -> mkItem hk gsk } |> Seq.toArray |> Array.sortBy (fun r -> r.RangeKey)
         for item in items do
-            table.PutItem item |> ignore
+            table.PutItem item =! TableKey.Combined (item.HashKey, item.RangeKey)
         let res = table.QueryPaginated (<@ fun r -> r.HashKey = hk @>, filterCondition = <@ fun r -> r.LocalAttribute = 0 @>, limit = 5)
         test <@ items |> Array.filter (fun r -> r.LocalAttribute = 0) |> Array.take 5 = res.Records @>
 

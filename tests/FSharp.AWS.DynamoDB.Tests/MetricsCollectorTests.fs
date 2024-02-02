@@ -28,7 +28,7 @@ type MetricsRecord =
         LocalAttribute : int
     }
 
-let rand = let r = Random() in fun () -> r.Next() |> int64
+let rand = let r = Random.Shared in fun () -> r.Next() |> int64
 let mkItem (hk : string) (gshk : string) (i : int): MetricsRecord =
     {
         HashKey = hk

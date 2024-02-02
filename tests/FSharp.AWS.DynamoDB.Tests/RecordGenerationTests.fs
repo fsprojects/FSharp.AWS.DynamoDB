@@ -343,10 +343,10 @@ module ``Record Generation Tests`` =
     type InverseGSI =
         {
             [<HashKey>]
-            [<GlobalSecondaryHashKey(indexName = "GSI")>]
+            [<GlobalSecondaryRangeKey(indexName = "GSI")>]
             HashKey : string
             [<RangeKey>]
-            [<GlobalSecondaryRangeKey(indexName = "GSI")>]
+            [<GlobalSecondaryHashKey(indexName = "GSI")>]
             RangeKey : string
         }
 
@@ -375,7 +375,7 @@ module ``Record Generation Tests`` =
         let template = RecordTemplate.Define<GSI2>()
         test <@ 1 = template.GlobalSecondaryIndices.Length @>
         let gsi = template.GlobalSecondaryIndices[0]
-        test <@ Option.isSome gsi.RangeKey @>
+        test <@ match gsi.RangeKey with Some ks -> ks.AttributeName = "SR" | None -> false  @>
         test <@ match gsi.Type with GlobalSecondaryIndex _ -> true | _ -> false @>
 
     let [<Fact>] ``GSI should fail if supplying RangeKey only`` () =
@@ -399,13 +399,13 @@ module ``Record Generation Tests`` =
 
     let [<Fact>] ``Inverse GSI should be permitted`` () =
         let template = RecordTemplate.Define<InverseGSI>()
-        test <@ template.PrimaryKey.RangeKey.IsSome @>
-        test <@ template.GlobalSecondaryIndices[0].RangeKey.IsSome @>
+        test <@ match template.PrimaryKey.RangeKey with Some k -> k.AttributeName = "RangeKey" | None -> false @>
+        test <@ match template.GlobalSecondaryIndices[0].RangeKey with Some k -> k.AttributeName = "HashKey" | None -> false @>
 
     let [<Fact>] ``Shared GSI Range Keys should be permitted`` () =
         let template = RecordTemplate.Define<SameRangeKeyGSI>()
-        test <@ template.GlobalSecondaryIndices[0].RangeKey.IsSome @>
-        test <@ template.GlobalSecondaryIndices[1].RangeKey.IsSome @>
+        test <@ match template.GlobalSecondaryIndices[0].RangeKey with Some k -> k.AttributeName = "GSIRange" | None -> false @>
+        test <@ match template.GlobalSecondaryIndices[1].RangeKey with Some k -> k.AttributeName = "GSIRange" | None -> false @>
         test <@ template.GlobalSecondaryIndices[0].RangeKey = template.GlobalSecondaryIndices[1].RangeKey @>
 
     type LSI1 =
@@ -441,7 +441,7 @@ module ``Record Generation Tests`` =
         test <@ 1 = template.LocalSecondaryIndices.Length @>
         let lsi = template.LocalSecondaryIndices[0]
         test <@ template.PrimaryKey.HashKey = lsi.HashKey @>
-        test <@ Option.isSome lsi.RangeKey @>
+        test <@ match lsi.RangeKey with Some k -> k.AttributeName = "LSI" | None -> false @>
 
     let [<Fact>] ``LSI should fail if no RangeKey is specified`` () =
         fun () -> RecordTemplate.Define<LSI2>()
@@ -452,7 +452,7 @@ module ``Record Generation Tests`` =
         test <@ 1 = template.LocalSecondaryIndices.Length @>
         let lsi = template.LocalSecondaryIndices[0]
         test <@ template.PrimaryKey.HashKey = lsi.HashKey @>
-        test <@  Option.isSome lsi.RangeKey @>
+        test <@  match lsi.RangeKey with Some k -> k.AttributeName = "LSI" | None -> false @>
 
     let [<Fact>] ``DateTimeOffset pickler encoding should preserve ordering`` () =
         let config = { Config.QuickThrowOnFailure with MaxTest = 1000 }

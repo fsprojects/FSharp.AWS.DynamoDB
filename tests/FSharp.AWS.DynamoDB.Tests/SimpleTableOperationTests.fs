@@ -48,7 +48,7 @@ module SimpleTableTypes =
 
 type ``Simple Table Operation Tests`` (fixture : TableFixture) =
 
-    let rand = let r = Random() in fun () -> int64 <| r.Next()
+    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
     let mkItem() =
         {
             HashKey = guid() ; RangeKey = guid() ;
@@ -121,7 +121,7 @@ type ``Simple Table Operation Tests`` (fixture : TableFixture) =
         let key = table.PutItem item
         test <@ table.ContainsKey key @>
         let item' = table.DeleteItem key
-        test <@ Option.isSome item' @>
+        test <@ item' = Some item @>
         let deletedItem = table.DeleteItem key
         test <@ None = deletedItem @>
         test <@ not (table.ContainsKey key) @>
@@ -130,7 +130,7 @@ type ``Simple Table Operation Tests`` (fixture : TableFixture) =
 
 type ``TransactWriteItems tests``(fixture : TableFixture) =
 
-    let rand = let r = Random() in fun () -> int64 <| r.Next()
+    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
     let mkItem() =
         {
             HashKey = guid() ; RangeKey = guid() ;
