@@ -15,17 +15,17 @@ open Amazon.Runtime
 [<AutoOpen>]
 module Utils =
 
-    let guid () = Guid.NewGuid().ToString ("N")
+    let guid () = Guid.NewGuid().ToString("N")
 
     let getRandomTableName () = sprintf "fsdynamodb-%s" <| guid ()
 
     let shouldFailwith<'T, 'Exn when 'Exn :> exn> (f: unit -> 'T) = <@ f () |> ignore @> |> raises<'Exn>
 
     let getDynamoDBAccount () =
-        let credentials = BasicAWSCredentials ("Fake", "Fake")
-        let config = AmazonDynamoDBConfig (ServiceURL = "http://localhost:8000")
+        let credentials = BasicAWSCredentials("Fake", "Fake")
+        let config = AmazonDynamoDBConfig(ServiceURL = "http://localhost:8000")
 
-        new AmazonDynamoDBClient (credentials, config) :> IAmazonDynamoDB
+        new AmazonDynamoDBClient(credentials, config) :> IAmazonDynamoDB
 
 
     type FsCheckGenerators =
@@ -33,7 +33,7 @@ module Utils =
             Arb.generate<byte[] option>
             |> Gen.map (function
                 | None -> null
-                | Some bs -> new MemoryStream (bs))
+                | Some bs -> new MemoryStream(bs))
             |> Arb.fromGen
 
 
@@ -46,9 +46,9 @@ module Utils =
         member _.TableName = tableName
 
         member _.CreateEmpty<'TRecord>() =
-            let throughput = ProvisionedThroughput (readCapacityUnits = 10L, writeCapacityUnits = 10L)
-            Scripting.TableContext.Initialize<'TRecord> (client, tableName, Throughput.Provisioned throughput)
+            let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
+            Scripting.TableContext.Initialize<'TRecord>(client, tableName, Throughput.Provisioned throughput)
 
         interface IAsyncLifetime with
             member _.InitializeAsync() = System.Threading.Tasks.Task.CompletedTask
-            member _.DisposeAsync() = client.DeleteTableAsync (tableName)
+            member _.DisposeAsync() = client.DeleteTableAsync(tableName)

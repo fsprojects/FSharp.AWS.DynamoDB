@@ -26,7 +26,7 @@ type MetricsRecord =
 
       LocalAttribute: int }
 
-let rand = let r = Random.Shared in fun () -> r.Next () |> int64
+let rand = let r = Random.Shared in fun () -> r.Next() |> int64
 
 let mkItem (hk: string) (gshk: string) (i: int) : MetricsRecord =
     { HashKey = hk
@@ -38,32 +38,32 @@ let mkItem (hk: string) (gshk: string) (i: int) : MetricsRecord =
 
 type TestCollector() =
 
-    let metrics = ResizeArray<RequestMetrics> ()
+    let metrics = ResizeArray<RequestMetrics>()
 
     member _.Collect(m: RequestMetrics) = metrics.Add m
 
     member _.Metrics = metrics |> Seq.toList
 
-    member _.Clear() = metrics.Clear ()
+    member _.Clear() = metrics.Clear()
 
 let (|TotalCu|): ConsumedCapacity list -> float = Seq.sumBy (fun c -> c.CapacityUnits)
 
 /// Tests without common setup
 type Tests(fixture: TableFixture) =
 
-    let rawTable = fixture.CreateEmpty<MetricsRecord> ()
+    let rawTable = fixture.CreateEmpty<MetricsRecord>()
 
-    let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some () else None
+    let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some() else None
 
-    let collector = TestCollector ()
-    let sut = rawTable.WithMetricsCollector (collector.Collect)
+    let collector = TestCollector()
+    let sut = rawTable.WithMetricsCollector(collector.Collect)
 
     [<Fact>]
     let ``Collect Metrics on TryGetItem`` () =
         async {
             let! result =
                 let nonExistentHk = guid ()
-                sut.TryGetItemAsync (key = TableKey.Combined (nonExistentHk, 0))
+                sut.TryGetItemAsync(key = TableKey.Combined(nonExistentHk, 0))
 
             None =! result
 
@@ -109,10 +109,10 @@ type Tests(fixture: TableFixture) =
                         | x -> failwithf "Unexpected %A" x
                     @>
 
-            collector.Clear ()
+            collector.Clear()
 
             let item = mkItem (guid ()) (guid ()) 0
-            let requests = [ TransactWrite.Put (item, Some (compile <@ fun t -> NOT_EXISTS t.RangeKey @>)) ]
+            let requests = [ TransactWrite.Put(item, Some(compile <@ fun t -> NOT_EXISTS t.RangeKey @>)) ]
 
             do! sut.TransactWriteItems requests
 
@@ -126,20 +126,20 @@ type Tests(fixture: TableFixture) =
                     | _ -> false
                 @>
 
-            let! itemFound = sut.ContainsKeyAsync (sut.Template.ExtractKey item)
+            let! itemFound = sut.ContainsKeyAsync(sut.Template.ExtractKey item)
             test <@ itemFound @>
         }
 
     [<Fact>]
     let ``No Metrics on Canceled PutItem`` () =
         async {
-            let collector = TestCollector ()
-            let sut = rawTable.WithMetricsCollector (collector.Collect)
+            let collector = TestCollector()
+            let sut = rawTable.WithMetricsCollector(collector.Collect)
 
             let item = mkItem (guid ()) (guid ()) 0
 
             // The check will fail, which triggers a throw from the underlying AWS SDK; there's no way to extract the consumption info in that case
-            let requests = [ TransactWrite.Put (item, Some (compile <@ fun t -> EXISTS t.RangeKey @>)) ]
+            let requests = [ TransactWrite.Put(item, Some(compile <@ fun t -> EXISTS t.RangeKey @>)) ]
 
             let mutable failed = false
 
@@ -157,18 +157,18 @@ type Tests(fixture: TableFixture) =
 /// Tests that look up a specific item. Each test run gets a fresh individual item
 type ItemTests(fixture: TableFixture) =
 
-    let rawTable = fixture.CreateEmpty<MetricsRecord> ()
-    let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some () else None
+    let rawTable = fixture.CreateEmpty<MetricsRecord>()
+    let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some() else None
 
     let item = mkItem (guid ()) (guid ()) 0
     do rawTable.PutItem item |> ignore
 
-    let collector = TestCollector ()
-    let sut = rawTable.WithMetricsCollector (collector.Collect)
+    let collector = TestCollector()
+    let sut = rawTable.WithMetricsCollector(collector.Collect)
 
     [<Fact>]
     let ``Collect Metrics on GetItem`` () =
-        let _ = sut.GetItem (key = TableKey.Combined (item.HashKey, 0))
+        let _ = sut.GetItem(key = TableKey.Combined(item.HashKey, 0))
 
         test
             <@
@@ -182,7 +182,7 @@ type ItemTests(fixture: TableFixture) =
 
     [<Fact>]
     let ``Collect Metrics on ContainsKey`` () =
-        let _ = sut.ContainsKey (key = TableKey.Combined (item.HashKey, 0))
+        let _ = sut.ContainsKey(key = TableKey.Combined(item.HashKey, 0))
 
         test
             <@
@@ -197,10 +197,7 @@ type ItemTests(fixture: TableFixture) =
     [<Fact>]
     let ``Collect Metrics on UpdateItem`` () =
         let _ =
-            sut.UpdateItem (
-                TableKey.Combined (item.HashKey, item.RangeKey),
-                <@ fun (i: MetricsRecord) -> { i with LocalAttribute = 1000 } @>
-            )
+            sut.UpdateItem(TableKey.Combined(item.HashKey, item.RangeKey), <@ fun (i: MetricsRecord) -> { i with LocalAttribute = 1000 } @>)
 
         test
             <@
@@ -214,7 +211,7 @@ type ItemTests(fixture: TableFixture) =
 
     [<Fact>]
     let ``Collect Metrics on DeleteItem`` () =
-        let _ = sut.DeleteItem (TableKey.Combined (item.HashKey, item.RangeKey))
+        let _ = sut.DeleteItem(TableKey.Combined(item.HashKey, item.RangeKey))
 
         test
             <@
@@ -231,8 +228,8 @@ type ItemTests(fixture: TableFixture) =
 /// Heavy tests reliant on establishing (and mutating) multiple items. Separate Test Class so Xunit will run them in parallel with others
 type BulkMutationTests(fixture: TableFixture) =
 
-    let rawTable = fixture.CreateEmpty<MetricsRecord> ()
-    let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some () else None
+    let rawTable = fixture.CreateEmpty<MetricsRecord>()
+    let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some() else None
 
     // NOTE we mutate the items so they need to be established each time
     let items =
@@ -243,12 +240,12 @@ type BulkMutationTests(fixture: TableFixture) =
         for item in items do
             rawTable.PutItem item |> ignore
 
-    let collector = TestCollector ()
-    let sut = rawTable.WithMetricsCollector (collector.Collect)
+    let collector = TestCollector()
+    let sut = rawTable.WithMetricsCollector(collector.Collect)
 
     [<Fact>]
     let ``Collect Metrics on BatchPutItem`` () =
-        let _results = sut.BatchPutItems (items |> Seq.map (fun i -> { i with LocalAttribute = 1000 }))
+        let _results = sut.BatchPutItems(items |> Seq.map (fun i -> { i with LocalAttribute = 1000 }))
 
         test
             <@
@@ -263,9 +260,9 @@ type BulkMutationTests(fixture: TableFixture) =
     [<Fact>]
     let ``Collect Metrics on BatchDeleteItem`` () =
         let _keys =
-            sut.BatchDeleteItems (
+            sut.BatchDeleteItems(
                 items
-                |> Seq.map (fun i -> TableKey.Combined (i.HashKey, i.RangeKey))
+                |> Seq.map (fun i -> TableKey.Combined(i.HashKey, i.RangeKey))
             )
 
         test
@@ -285,7 +282,7 @@ type ManyReadOnlyItemsFixture() =
     inherit TableFixture()
 
     // TOCONSIDER shift this into IAsyncLifetime.InitializeAsync
-    let table = base.CreateEmpty<MetricsRecord> ()
+    let table = base.CreateEmpty<MetricsRecord>()
 
     let hk = guid ()
 
@@ -303,14 +300,14 @@ type ManyReadOnlyItemsFixture() =
 // DO NOT add tests that will delete or mutate those items
 type ``Bulk Read Operations``(fixture: ManyReadOnlyItemsFixture) =
 
-    let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some () else None
+    let (|ExpectedTableName|_|) name = if name = fixture.TableName then Some() else None
 
-    let collector = TestCollector ()
-    let sut = fixture.Table.WithMetricsCollector (collector.Collect)
+    let collector = TestCollector()
+    let sut = fixture.Table.WithMetricsCollector(collector.Collect)
 
     [<Fact>]
     let ``Collect Metrics on Scan`` () =
-        let items = sut.Scan ()
+        let items = sut.Scan()
 
         test
             <@
@@ -324,7 +321,7 @@ type ``Bulk Read Operations``(fixture: ManyReadOnlyItemsFixture) =
 
     [<Fact>]
     let ``Collect Metrics on Query`` () =
-        let items = sut.Query (<@ fun (r: MetricsRecord) -> r.HashKey = fixture.HashKey @>)
+        let items = sut.Query(<@ fun (r: MetricsRecord) -> r.HashKey = fixture.HashKey @>)
 
         test
             <@
@@ -338,7 +335,7 @@ type ``Bulk Read Operations``(fixture: ManyReadOnlyItemsFixture) =
 
     [<Fact>]
     let ``Collect Metrics on BatchGetItem`` () =
-        let items = sut.BatchGetItems (seq { for i in 0..99 -> TableKey.Combined (fixture.HashKey, i) })
+        let items = sut.BatchGetItems(seq { for i in 0..99 -> TableKey.Combined(fixture.HashKey, i) })
 
         test
             <@

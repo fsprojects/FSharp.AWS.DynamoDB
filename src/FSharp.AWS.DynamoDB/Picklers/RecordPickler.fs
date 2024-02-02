@@ -22,14 +22,14 @@ type RecordPickler<'T>(ctor: obj[] -> obj, properties: PropertyMetadata[]) =
     member __.Properties = properties
 
     member __.OfRecord(value: 'T) : RestObject =
-        let values = new RestObject ()
+        let values = new RestObject()
 
         for prop in properties do
             let field = prop.PropertyInfo.GetValue value
 
             match prop.Pickler.PickleUntyped field with
             | None -> ()
-            | Some av -> values.Add (prop.Name, av)
+            | Some av -> values.Add(prop.Name, av)
 
         values
 
@@ -41,7 +41,7 @@ type RecordPickler<'T>(ctor: obj[] -> obj, properties: PropertyMetadata[]) =
 
             let notFound () =
                 raise
-                <| new KeyNotFoundException (sprintf "attribute %A not found." prop.Name)
+                <| new KeyNotFoundException(sprintf "attribute %A not found." prop.Name)
 
             let ok, av = ro.TryGetValue prop.Name
 
@@ -70,7 +70,7 @@ type RecordPickler<'T>(ctor: obj[] -> obj, properties: PropertyMetadata[]) =
         if ro.Count = 0 then
             None
         else
-            Some <| AttributeValue (M = ro)
+            Some <| AttributeValue(M = ro)
 
     override __.UnPickle a = if a.IsMSet then __.ToRecord a.M else invalidCast a
 
@@ -86,16 +86,16 @@ let mkTuplePickler<'T> (resolver: IPicklerResolver) =
     let ctor = FSharpValue.PreComputeTupleConstructor typeof<'T>
 
     let properties =
-        typeof<'T>.GetProperties ()
+        typeof<'T>.GetProperties()
         |> Array.mapi (PropertyMetadata.FromPropertyInfo resolver)
 
-    new RecordPickler<'T> (ctor, properties)
+    new RecordPickler<'T>(ctor, properties)
 
 let mkFSharpRecordPickler<'T> (resolver: IPicklerResolver) =
-    let ctor = FSharpValue.PreComputeRecordConstructor (typeof<'T>, true)
+    let ctor = FSharpValue.PreComputeRecordConstructor(typeof<'T>, true)
 
     let properties =
-        FSharpType.GetRecordFields (typeof<'T>, true)
+        FSharpType.GetRecordFields(typeof<'T>, true)
         |> Array.mapi (PropertyMetadata.FromPropertyInfo resolver)
 
-    new RecordPickler<'T> (ctor, properties)
+    new RecordPickler<'T>(ctor, properties)

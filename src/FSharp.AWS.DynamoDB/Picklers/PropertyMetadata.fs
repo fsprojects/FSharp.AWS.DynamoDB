@@ -29,7 +29,7 @@ type PropertyMetadata =
     override r.GetHashCode() = hash r.PropertyInfo
 
     static member FromPropertyInfo (resolver: IPicklerResolver) (attrId: int) (prop: PropertyInfo) =
-        let attributes = prop.GetAttributes ()
+        let attributes = prop.GetAttributes()
 
         let pickler =
             match

@@ -37,8 +37,8 @@ type GlobalSecondaryRangeKeyAttribute(indexName: string) =
 [<Sealed; AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
 type LocalSecondaryIndexAttribute private (indexName: string option) =
     inherit Attribute()
-    new() = LocalSecondaryIndexAttribute (None)
-    new(indexName: string) = LocalSecondaryIndexAttribute (Some indexName)
+    new() = LocalSecondaryIndexAttribute(None)
+    new(indexName: string) = LocalSecondaryIndexAttribute(Some indexName)
     member internal _.IndexName = indexName
 
 /// Declares a constant HashKey attribute for the given record.
@@ -49,14 +49,14 @@ type ConstantHashKeyAttribute(name: string, hashkey: obj) =
 
     do
         if isNull name then
-            raise <| ArgumentNullException ("name")
+            raise <| ArgumentNullException("name")
 
         if isNull hashkey then
-            raise <| ArgumentNullException ("hashkey")
+            raise <| ArgumentNullException("hashkey")
 
     member _.Name = name
     member _.HashKey = hashkey
-    member _.HashKeyType = hashkey.GetType ()
+    member _.HashKeyType = hashkey.GetType()
 
 /// Declares a constant RangeKey attribute for the given record.
 /// Records carrying this attribute should specify a HashKey field.
@@ -66,14 +66,14 @@ type ConstantRangeKeyAttribute(name: string, rangeKey: obj) =
 
     do
         if isNull name then
-            raise <| ArgumentNullException ("name")
+            raise <| ArgumentNullException("name")
 
         if isNull rangeKey then
-            raise <| ArgumentNullException ("rangeKey")
+            raise <| ArgumentNullException("rangeKey")
 
     member _.Name = name
     member _.RangeKey = rangeKey
-    member _.HashKeyType = rangeKey.GetType ()
+    member _.HashKeyType = rangeKey.GetType()
 
 /// Declares that annotated property should be represented
 /// as string in the DynamoDB table. Only applies to
@@ -88,7 +88,7 @@ type CustomNameAttribute(name: string) =
 
     do
         if isNull name then
-            raise <| ArgumentNullException ("name")
+            raise <| ArgumentNullException("name")
 
     member _.Name = name
 
@@ -118,7 +118,7 @@ type PropertySerializerAttribute<'PickleType>() =
     interface IPropertySerializer with
         member _.PickleType = typeof<'PickleType>
         member x.Serialize value = x.Serialize value :> obj
-        member x.Deserialize pickle = x.Deserialize (pickle :?> 'PickleType)
+        member x.Deserialize pickle = x.Deserialize(pickle :?> 'PickleType)
 
 /// Metadata on a table key attribute
 type KeyAttributeSchema = { AttributeName: string; KeyType: ScalarAttributeType }
@@ -169,23 +169,23 @@ type TableKey private (hashKey: obj, rangeKey: obj) =
     /// Defines a table key using provided HashKey
     static member Hash<'HashKey>(hashKey: 'HashKey) =
         if isNull hashKey then
-            raise <| ArgumentNullException ("hashKey")
+            raise <| ArgumentNullException("hashKey")
 
-        TableKey (hashKey, null)
+        TableKey(hashKey, null)
 
     /// Defines a table key using provided RangeKey
     static member Range<'RangeKey>(rangeKey: 'RangeKey) =
         if isNull rangeKey then
-            raise <| ArgumentNullException ("rangeKey")
+            raise <| ArgumentNullException("rangeKey")
 
-        TableKey (null, rangeKey)
+        TableKey(null, rangeKey)
 
     /// Defines a table key using combined HashKey and RangeKey
     static member Combined<'HashKey, 'RangeKey>(hashKey: 'HashKey, rangeKey: 'RangeKey) =
         if isNull hashKey then
-            raise <| ArgumentNullException ("hashKey")
+            raise <| ArgumentNullException("hashKey")
 
-        TableKey (hashKey, rangeKey)
+        TableKey(hashKey, rangeKey)
 
 /// Query (start/last evaluated) key identifier
 [<Struct; CustomEquality; NoComparison; StructuredFormatDisplay("{Format}")>]
@@ -216,19 +216,19 @@ type IndexKey private (hashKey: obj, rangeKey: obj, primaryKey: TableKey) =
     /// Defines an index key using provided HashKey and primary TableKey
     static member Hash<'HashKey>(hashKey: 'HashKey, primaryKey: TableKey) =
         if isNull hashKey then
-            raise <| ArgumentNullException ("hashKey")
+            raise <| ArgumentNullException("hashKey")
 
-        IndexKey (hashKey, null, primaryKey)
+        IndexKey(hashKey, null, primaryKey)
 
     /// Defines an index key using combined HashKey, RangeKey and primary TableKey
     static member Combined<'HashKey, 'RangeKey>(hashKey: 'HashKey, rangeKey: 'RangeKey, primaryKey: TableKey) =
         if isNull hashKey then
-            raise <| ArgumentNullException ("hashKey")
+            raise <| ArgumentNullException("hashKey")
 
-        IndexKey (hashKey, rangeKey, primaryKey)
+        IndexKey(hashKey, rangeKey, primaryKey)
 
     // Defines an index key using just the primary TableKey
-    static member Primary(primaryKey: TableKey) = IndexKey (null, null, primaryKey)
+    static member Primary(primaryKey: TableKey) = IndexKey(null, null, primaryKey)
 
 /// Pagination result type
 type PaginatedResult<'TRecord, 'Key> =
@@ -236,11 +236,10 @@ type PaginatedResult<'TRecord, 'Key> =
       LastEvaluatedKey: 'Key option }
 
     interface System.Collections.IEnumerable with
-        member x.GetEnumerator() = x.Records.GetEnumerator ()
+        member x.GetEnumerator() = x.Records.GetEnumerator()
 
     interface System.Collections.Generic.IEnumerable<'TRecord> with
-        member x.GetEnumerator() =
-            (x.Records :> System.Collections.Generic.IEnumerable<'TRecord>).GetEnumerator ()
+        member x.GetEnumerator() = (x.Records :> System.Collections.Generic.IEnumerable<'TRecord>).GetEnumerator()
 
 
 #nowarn "1182"

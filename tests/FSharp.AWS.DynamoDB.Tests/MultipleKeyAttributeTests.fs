@@ -32,13 +32,13 @@ module MultiKeyTypes =
 
 type ``Inverse GSI Table Operation Tests``(fixture: TableFixture) =
 
-    let rand = let r = Random.Shared in fun () -> int64 <| r.Next ()
+    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
 
     let mkItem () =
-        { PrimaryKey = ((int (rand ())) % 50).ToString ()
-          SortKey = ((int (rand ())) % 50).ToString () }
+        { PrimaryKey = ((int (rand ())) % 50).ToString()
+          SortKey = ((int (rand ())) % 50).ToString() }
 
-    let table = fixture.CreateEmpty<InverseKeyRecord> ()
+    let table = fixture.CreateEmpty<InverseKeyRecord>()
 
     [<Fact>]
     let ``Query by Table Key and GSI`` () =
@@ -71,15 +71,15 @@ type ``Inverse GSI Table Operation Tests``(fixture: TableFixture) =
 
 type ``Shared Range Key Table Operation Tests``(fixture: TableFixture) =
 
-    let rand = let r = Random.Shared in fun () -> int64 <| r.Next ()
+    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
 
     let mkItem () =
         { HashKey = guid ()
-          GSI1 = ((int (rand ())) % 5).ToString ()
-          GSI2 = ((int (rand ())) % 5 + 20).ToString ()
-          SortKey = ((int (rand ())) % 50).ToString () }
+          GSI1 = ((int (rand ())) % 5).ToString()
+          GSI2 = ((int (rand ())) % 5 + 20).ToString()
+          SortKey = ((int (rand ())) % 50).ToString() }
 
-    let table = fixture.CreateEmpty<SharedRangeKeyRecord> ()
+    let table = fixture.CreateEmpty<SharedRangeKeyRecord>()
 
     [<Fact>]
     let ``Query by GSIs with shared range key`` () =

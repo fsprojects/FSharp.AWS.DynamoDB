@@ -67,8 +67,8 @@ type Streaming =
 module internal Streaming =
     let private (|Spec|) =
         function
-        | Streaming.Enabled svt -> StreamSpecification (StreamEnabled = true, StreamViewType = svt)
-        | Streaming.Disabled -> StreamSpecification (StreamEnabled = false)
+        | Streaming.Enabled svt -> StreamSpecification(StreamEnabled = true, StreamViewType = svt)
+        | Streaming.Disabled -> StreamSpecification(StreamEnabled = false)
 
     let applyToCreateRequest (req: CreateTableRequest) (Spec spec) = req.StreamSpecification <- spec
 
@@ -88,7 +88,7 @@ module internal Streaming =
 module internal CreateTableRequest =
 
     let create (tableName, template: RecordTemplate<'TRecord>) throughput streaming customize =
-        let req = CreateTableRequest (TableName = tableName)
+        let req = CreateTableRequest(TableName = tableName)
         template.Info.Schemata.ApplyToCreateTableRequest req // NOTE needs to precede the throughput application as that walks the GSIs list
 
         throughput
@@ -105,13 +105,13 @@ module internal CreateTableRequest =
             let! ct = Async.CancellationToken
 
             return!
-                client.CreateTableAsync (request, ct)
+                client.CreateTableAsync(request, ct)
                 |> Async.AwaitTaskCorrect
         }
 
 module internal UpdateTableRequest =
 
-    let create tableName = UpdateTableRequest (TableName = tableName)
+    let create tableName = UpdateTableRequest(TableName = tableName)
 
     let apply throughput streaming request =
         throughput
@@ -147,7 +147,7 @@ module internal UpdateTableRequest =
             let! ct = Async.CancellationToken
 
             let! response =
-                client.UpdateTableAsync (request, ct)
+                client.UpdateTableAsync(request, ct)
                 |> Async.AwaitTaskCorrect
 
             return response.TableDescription
@@ -160,7 +160,7 @@ module internal Provisioning =
             let! ct = Async.CancellationToken
 
             let! td =
-                client.DescribeTableAsync (tableName, ct)
+                client.DescribeTableAsync(tableName, ct)
                 |> Async.AwaitTaskCorrect
 
             return
@@ -184,8 +184,8 @@ module internal Provisioning =
 
     let (|Conflict|_|) (e: exn) =
         match e with
-        | :? AmazonDynamoDBException as e when e.StatusCode = HttpStatusCode.Conflict -> Some ()
-        | :? ResourceInUseException -> Some ()
+        | :? AmazonDynamoDBException as e when e.StatusCode = HttpStatusCode.Conflict -> Some()
+        | :? ResourceInUseException -> Some()
         | _ -> None
 
     let private checkOrCreate (client, tableName) validateDescription maybeMakeCreateTableRequest : Async<TableDescription> =
@@ -196,8 +196,8 @@ module internal Provisioning =
                     validateDescription desc
                     return desc
 
-                | Choice2Of2 (:? ResourceNotFoundException) when Option.isSome maybeMakeCreateTableRequest ->
-                    let req = maybeMakeCreateTableRequest.Value ()
+                | Choice2Of2(:? ResourceNotFoundException) when Option.isSome maybeMakeCreateTableRequest ->
+                    let req = maybeMakeCreateTableRequest.Value()
 
                     match! CreateTableRequest.execute client req |> Async.Catch with
                     | Choice1Of2 _ -> return! aux retries
@@ -300,38 +300,38 @@ module TransactWriteItemsRequest =
         (template: RecordTemplate<'TRecord>)
         : TransactWrite<'TRecord> -> TransactWriteItem =
         function
-        | TransactWrite.Check (key, cond) ->
-            let req = ConditionCheck (TableName = tableName, Key = template.ToAttributeValues key)
-            let writer = AttributeWriter (req.ExpressionAttributeNames, req.ExpressionAttributeValues)
+        | TransactWrite.Check(key, cond) ->
+            let req = ConditionCheck(TableName = tableName, Key = template.ToAttributeValues key)
+            let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
             req.ConditionExpression <- cond.Conditional.Write writer
-            TransactWriteItem (ConditionCheck = req)
-        | TransactWrite.Put (item, maybeCond) ->
-            let req = Put (TableName = tableName, Item = template.ToAttributeValues item)
+            TransactWriteItem(ConditionCheck = req)
+        | TransactWrite.Put(item, maybeCond) ->
+            let req = Put(TableName = tableName, Item = template.ToAttributeValues item)
 
             maybeCond
             |> Option.iter (fun cond ->
-                let writer = AttributeWriter (req.ExpressionAttributeNames, req.ExpressionAttributeValues)
+                let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
                 req.ConditionExpression <- cond.Conditional.Write writer)
 
-            TransactWriteItem (Put = req)
-        | TransactWrite.Update (key, maybeCond, updater) ->
-            let req = Update (TableName = tableName, Key = template.ToAttributeValues key)
-            let writer = AttributeWriter (req.ExpressionAttributeNames, req.ExpressionAttributeValues)
-            req.UpdateExpression <- updater.UpdateOps.Write (writer)
+            TransactWriteItem(Put = req)
+        | TransactWrite.Update(key, maybeCond, updater) ->
+            let req = Update(TableName = tableName, Key = template.ToAttributeValues key)
+            let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
+            req.UpdateExpression <- updater.UpdateOps.Write(writer)
 
             maybeCond
             |> Option.iter (fun cond -> req.ConditionExpression <- cond.Conditional.Write writer)
 
-            TransactWriteItem (Update = req)
-        | TransactWrite.Delete (key, maybeCond) ->
-            let req = Delete (TableName = tableName, Key = template.ToAttributeValues key)
+            TransactWriteItem(Update = req)
+        | TransactWrite.Delete(key, maybeCond) ->
+            let req = Delete(TableName = tableName, Key = template.ToAttributeValues key)
 
             maybeCond
             |> Option.iter (fun cond ->
-                let writer = AttributeWriter (req.ExpressionAttributeNames, req.ExpressionAttributeValues)
+                let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
                 req.ConditionExpression <- cond.Conditional.Write writer)
 
-            TransactWriteItem (Delete = req)
+            TransactWriteItem(Delete = req)
 
     let internal toTransactItems<'TRecord> tableName template items =
         Seq.map (toTransactWriteItem<'TRecord> tableName template) items
@@ -341,7 +341,7 @@ module TransactWriteItemsRequest =
     /// one or more of the supplied <c>precondition</c> checks failing.</summary>
     let (|TransactionCanceledConditionalCheckFailed|_|): exn -> unit option =
         function
-        | :? TransactionCanceledException as e when e.CancellationReasons.Exists (fun x -> x.Code = "ConditionalCheckFailed") -> Some ()
+        | :? TransactionCanceledException as e when e.CancellationReasons.Exists(fun x -> x.Code = "ConditionalCheckFailed") -> Some()
         | _ -> None
 
 /// Helpers for identifying Failed Precondition check outcomes emanating from <c>PutItem</c>, <c>UpdateItem</c> or <c>DeleteItem</c>
@@ -349,7 +349,7 @@ module Precondition =
     /// <summary>Exception filter to identify whether an individual (non-transactional) <c>PutItem</c>, <c>UpdateItem</c> or <c>DeleteItem</c> call's <c>precondition</c> check failing.</summary>
     let (|CheckFailed|_|): exn -> unit option =
         function
-        | :? ConditionalCheckFailedException -> Some ()
+        | :? ConditionalCheckFailedException -> Some()
         | _ -> None
 
 /// DynamoDB client object for performing table operations in the context of given F# record representations
@@ -367,18 +367,18 @@ type TableContext<'TRecord>
 
     let returnConsumedCapacity, maybeReport =
         match metricsCollector with
-        | Some sink -> ReturnConsumedCapacity.INDEXES, Some (reportMetrics sink)
+        | Some sink -> ReturnConsumedCapacity.INDEXES, Some(reportMetrics sink)
         | None -> ReturnConsumedCapacity.NONE, None
 
     let tryGetItemAsync (key: TableKey) (consistentRead: bool option) (proj: ProjectionExpr.ProjectionExpr option) =
         async {
-            let kav = template.ToAttributeValues (key)
-            let request = GetItemRequest (tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity)
+            let kav = template.ToAttributeValues(key)
+            let request = GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity)
 
             match proj with
             | None -> ()
             | Some proj ->
-                let aw = AttributeWriter (request.ExpressionAttributeNames, null)
+                let aw = AttributeWriter(request.ExpressionAttributeNames, null)
                 request.ProjectionExpression <- proj.Write aw
 
             match consistentRead with
@@ -386,7 +386,7 @@ type TableContext<'TRecord>
             | Some c -> request.ConsistentRead <- c
 
             let! ct = Async.CancellationToken
-            let! response = client.GetItemAsync (request, ct) |> Async.AwaitTaskCorrect
+            let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
 
             maybeReport
             |> Option.iter (fun r -> r GetItem [ response.ConsumedCapacity ] (if response.IsItemSet then 1 else 0))
@@ -407,31 +407,31 @@ type TableContext<'TRecord>
             | None ->
                 return
                     raise
-                    <| ResourceNotFoundException (sprintf "could not find item %O" key)
+                    <| ResourceNotFoundException(sprintf "could not find item %O" key)
         }
 
     let batchGetItemsAsync (keys: seq<TableKey>) (consistentRead: bool option) (projExpr: ProjectionExpr.ProjectionExpr option) =
         async {
 
             let consistentRead = defaultArg consistentRead false
-            let kna = KeysAndAttributes ()
-            kna.AttributesToGet.AddRange (template.Info.Properties |> Seq.map (fun p -> p.Name))
-            kna.Keys.AddRange (keys |> Seq.map template.ToAttributeValues)
+            let kna = KeysAndAttributes()
+            kna.AttributesToGet.AddRange(template.Info.Properties |> Seq.map (fun p -> p.Name))
+            kna.Keys.AddRange(keys |> Seq.map template.ToAttributeValues)
             kna.ConsistentRead <- consistentRead
 
             match projExpr with
             | None -> ()
             | Some projExpr ->
-                let aw = AttributeWriter (kna.ExpressionAttributeNames, null)
+                let aw = AttributeWriter(kna.ExpressionAttributeNames, null)
                 kna.ProjectionExpression <- projExpr.Write aw
 
-            let request = BatchGetItemRequest (ReturnConsumedCapacity = returnConsumedCapacity)
+            let request = BatchGetItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
             request.RequestItems[tableName] <- kna
 
             let! ct = Async.CancellationToken
 
             let! response =
-                client.BatchGetItemAsync (request, ct)
+                client.BatchGetItemAsync(request, ct)
                 |> Async.AwaitTaskCorrect
 
             maybeReport
@@ -466,8 +466,8 @@ type TableContext<'TRecord>
 * Must not contain nested operands.
 """
 
-            let downloaded = ResizeArray<_> ()
-            let consumedCapacity = ResizeArray<ConsumedCapacity> ()
+            let downloaded = ResizeArray<_>()
+            let consumedCapacity = ResizeArray<ConsumedCapacity>()
 
             let emitMetrics () =
                 maybeReport
@@ -477,12 +477,12 @@ type TableContext<'TRecord>
 
             let rec aux last =
                 async {
-                    let request = QueryRequest (tableName, ReturnConsumedCapacity = returnConsumedCapacity)
+                    let request = QueryRequest(tableName, ReturnConsumedCapacity = returnConsumedCapacity)
 
                     keyCondition.IndexName
                     |> Option.iter (fun name -> request.IndexName <- name)
 
-                    let writer = AttributeWriter (request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+                    let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
                     request.KeyConditionExpression <- keyCondition.Write writer
 
                     match filterCondition with
@@ -493,7 +493,7 @@ type TableContext<'TRecord>
                     | None -> ()
                     | Some pe -> request.ProjectionExpression <- pe.Write writer
 
-                    limit.GetCount ()
+                    limit.GetCount()
                     |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
 
                     consistentRead
@@ -506,7 +506,7 @@ type TableContext<'TRecord>
                     |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
 
                     let! ct = Async.CancellationToken
-                    let! response = client.QueryAsync (request, ct) |> Async.AwaitTaskCorrect
+                    let! response = client.QueryAsync(request, ct) |> Async.AwaitTaskCorrect
                     consumedCapacity.Add response.ConsumedCapacity
 
                     if response.HttpStatusCode <> HttpStatusCode.OK then
@@ -527,7 +527,7 @@ type TableContext<'TRecord>
             do!
                 aux (
                     exclusiveStartKey
-                    |> Option.map (fun k -> template.ToAttributeValues (k, keyCondition.KeyCondition.Value))
+                    |> Option.map (fun k -> template.ToAttributeValues(k, keyCondition.KeyCondition.Value))
                 )
 
             emitMetrics ()
@@ -535,7 +535,7 @@ type TableContext<'TRecord>
             return
                 (downloaded,
                  lastEvaluatedKey
-                 |> Option.map (fun av -> template.ExtractIndexKey (keyCondition.KeyCondition.Value, av)))
+                 |> Option.map (fun av -> template.ExtractIndexKey(keyCondition.KeyCondition.Value, av)))
         }
 
     let queryAsync
@@ -570,8 +570,8 @@ type TableContext<'TRecord>
         =
         async {
 
-            let downloaded = ResizeArray<_> ()
-            let consumedCapacity = ResizeArray<ConsumedCapacity> ()
+            let downloaded = ResizeArray<_>()
+            let consumedCapacity = ResizeArray<ConsumedCapacity>()
 
             let emitMetrics () =
                 maybeReport
@@ -581,8 +581,8 @@ type TableContext<'TRecord>
 
             let rec aux last =
                 async {
-                    let request = ScanRequest (tableName, ReturnConsumedCapacity = returnConsumedCapacity)
-                    let writer = AttributeWriter (request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+                    let request = ScanRequest(tableName, ReturnConsumedCapacity = returnConsumedCapacity)
+                    let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
 
                     match filterCondition with
                     | None -> ()
@@ -592,7 +592,7 @@ type TableContext<'TRecord>
                     | None -> ()
                     | Some pe -> request.ProjectionExpression <- pe.Write writer
 
-                    limit.GetCount ()
+                    limit.GetCount()
                     |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
 
                     consistentRead
@@ -602,7 +602,7 @@ type TableContext<'TRecord>
                     |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
 
                     let! ct = Async.CancellationToken
-                    let! response = client.ScanAsync (request, ct) |> Async.AwaitTaskCorrect
+                    let! response = client.ScanAsync(request, ct) |> Async.AwaitTaskCorrect
 
                     if response.HttpStatusCode <> HttpStatusCode.OK then
                         emitMetrics ()
@@ -665,43 +665,43 @@ type TableContext<'TRecord>
         if not <| isValidTableName tableName then
             invalidArg "tableName" "unsupported DynamoDB table name."
 
-        TableContext<'TRecord> (client, tableName, RecordTemplate.Define<'TRecord> (), metricsCollector)
+        TableContext<'TRecord>(client, tableName, RecordTemplate.Define<'TRecord>(), metricsCollector)
 
 
     /// Creates a new table context instance that uses
     /// a new F# record type. The new F# record type
     /// must define a compatible key schema.
     member _.WithRecordType<'TRecord2>() : TableContext<'TRecord2> =
-        let rd = RecordTemplate.Define<'TRecord2> ()
+        let rd = RecordTemplate.Define<'TRecord2>()
 
         if template.PrimaryKey <> rd.PrimaryKey then
             invalidArg (string typeof<'TRecord2>) "incompatible key schema."
 
-        new TableContext<'TRecord2> (client, tableName, rd, metricsCollector)
+        new TableContext<'TRecord2>(client, tableName, rd, metricsCollector)
 
     /// Creates an identical table context with the specified metricsCollector callback replacing any previously specified one
     member _.WithMetricsCollector(collector: RequestMetrics -> unit) : TableContext<'TRecord> =
-        new TableContext<'TRecord> (client, tableName, template, Some collector)
+        new TableContext<'TRecord>(client, tableName, template, Some collector)
 
     /// <summary>Asynchronously puts a record item in the table.</summary>
     /// <param name="item">Item to be written.</param>
     /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     member _.PutItemAsync(item: 'TRecord, ?precondition: ConditionExpression<'TRecord>) : Async<TableKey> =
         async {
-            let attrValues = template.ToAttributeValues (item)
+            let attrValues = template.ToAttributeValues(item)
 
             let request =
-                PutItemRequest (tableName, attrValues, ReturnValues = ReturnValue.NONE, ReturnConsumedCapacity = returnConsumedCapacity)
+                PutItemRequest(tableName, attrValues, ReturnValues = ReturnValue.NONE, ReturnConsumedCapacity = returnConsumedCapacity)
 
             match precondition with
             | Some pc ->
-                let writer = AttributeWriter (request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+                let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
                 request.ConditionExpression <- pc.Conditional.Write writer
                 request.ReturnValuesOnConditionCheckFailure <- ReturnValuesOnConditionCheckFailure.ALL_OLD
             | _ -> ()
 
             let! ct = Async.CancellationToken
-            let! response = client.PutItemAsync (request, ct) |> Async.AwaitTaskCorrect
+            let! response = client.PutItemAsync(request, ct) |> Async.AwaitTaskCorrect
 
             maybeReport
             |> Option.iter (fun r -> r PutItem [ response.ConsumedCapacity ] 1)
@@ -716,7 +716,7 @@ type TableContext<'TRecord>
     /// <param name="item">Item to be written.</param>
     /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     member t.PutItemAsync(item: 'TRecord, precondition: Expr<'TRecord -> bool>) =
-        t.PutItemAsync (item, template.PrecomputeConditionalExpr precondition)
+        t.PutItemAsync(item, template.PrecomputeConditionalExpr precondition)
 
     /// <summary>
     ///     Asynchronously puts a collection of items to the table as a batch write operation.
@@ -727,9 +727,9 @@ type TableContext<'TRecord>
     member _.BatchPutItemsAsync(items: seq<'TRecord>) : Async<'TRecord[]> =
         async {
             let mkWriteRequest (item: 'TRecord) =
-                let attrValues = template.ToAttributeValues (item)
-                let pr = PutRequest (attrValues)
-                WriteRequest (pr)
+                let attrValues = template.ToAttributeValues(item)
+                let pr = PutRequest(attrValues)
+                WriteRequest(pr)
 
             let items = Seq.toArray items
 
@@ -737,12 +737,12 @@ type TableContext<'TRecord>
                 invalidArg "items" "item length must be less than or equal to 25."
 
             let writeRequests = items |> Seq.map mkWriteRequest |> rlist
-            let pbr = BatchWriteItemRequest (ReturnConsumedCapacity = returnConsumedCapacity)
+            let pbr = BatchWriteItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
             pbr.RequestItems[tableName] <- writeRequests
             let! ct = Async.CancellationToken
 
             let! response =
-                client.BatchWriteItemAsync (pbr, ct)
+                client.BatchWriteItemAsync(pbr, ct)
                 |> Async.AwaitTaskCorrect
 
             let unprocessed =
@@ -778,8 +778,8 @@ type TableContext<'TRecord>
         ) : Async<'TRecord> =
         async {
 
-            let kav = template.ToAttributeValues (key)
-            let request = UpdateItemRequest (Key = kav, TableName = tableName, ReturnConsumedCapacity = returnConsumedCapacity)
+            let kav = template.ToAttributeValues(key)
+            let request = UpdateItemRequest(Key = kav, TableName = tableName, ReturnConsumedCapacity = returnConsumedCapacity)
 
             request.ReturnValues <-
                 if defaultArg returnLatest true then
@@ -787,8 +787,8 @@ type TableContext<'TRecord>
                 else
                     ReturnValue.ALL_OLD
 
-            let writer = AttributeWriter (request.ExpressionAttributeNames, request.ExpressionAttributeValues)
-            request.UpdateExpression <- updater.UpdateOps.Write (writer)
+            let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+            request.UpdateExpression <- updater.UpdateOps.Write(writer)
 
             match precondition with
             | Some pc ->
@@ -799,7 +799,7 @@ type TableContext<'TRecord>
             let! ct = Async.CancellationToken
 
             let! response =
-                client.UpdateItemAsync (request, ct)
+                client.UpdateItemAsync(request, ct)
                 |> Async.AwaitTaskCorrect
 
             maybeReport
@@ -829,7 +829,7 @@ type TableContext<'TRecord>
             precondition
             |> Option.map template.PrecomputeConditionalExpr
 
-        t.UpdateItemAsync (key, updater, ?returnLatest = returnLatest, ?precondition = precondition)
+        t.UpdateItemAsync(key, updater, ?returnLatest = returnLatest, ?precondition = precondition)
 
     /// <summary>Asynchronously updates item with supplied key using provided update operation expression.</summary>
     /// <param name="key">Key of item to be updated.</param>
@@ -849,7 +849,7 @@ type TableContext<'TRecord>
             precondition
             |> Option.map template.PrecomputeConditionalExpr
 
-        t.UpdateItemAsync (key, updater, ?returnLatest = returnLatest, ?precondition = precondition)
+        t.UpdateItemAsync(key, updater, ?returnLatest = returnLatest, ?precondition = precondition)
 
 
     /// <summary>
@@ -870,12 +870,12 @@ type TableContext<'TRecord>
     /// <param name="key">Key to be checked.</param>
     member _.ContainsKeyAsync(key: TableKey) : Async<bool> =
         async {
-            let kav = template.ToAttributeValues (key)
-            let request = GetItemRequest (tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity)
-            request.ExpressionAttributeNames.Add ("#HKEY", template.PrimaryKey.HashKey.AttributeName)
+            let kav = template.ToAttributeValues(key)
+            let request = GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity)
+            request.ExpressionAttributeNames.Add("#HKEY", template.PrimaryKey.HashKey.AttributeName)
             request.ProjectionExpression <- "#HKEY"
             let! ct = Async.CancellationToken
-            let! response = client.GetItemAsync (request, ct) |> Async.AwaitTaskCorrect
+            let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
 
             maybeReport
             |> Option.iter (fun r -> r GetItem [ response.ConsumedCapacity ] 1)
@@ -926,7 +926,7 @@ type TableContext<'TRecord>
     /// <param name="projection">Projection expression to be applied to item.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     member t.GetItemProjectedAsync(key: TableKey, projection: Expr<'TRecord -> 'TProjection>, ?consistentRead: bool) : Async<'TProjection> =
-        t.GetItemProjectedAsync (key, (template.PrecomputeProjectionExpr projection), ?consistentRead = consistentRead)
+        t.GetItemProjectedAsync(key, (template.PrecomputeProjectionExpr projection), ?consistentRead = consistentRead)
 
     /// <summary>
     ///     Asynchronously performs a batch fetch of items with supplied keys.
@@ -974,7 +974,7 @@ type TableContext<'TRecord>
             projection: Expr<'TRecord -> 'TProjection>,
             ?consistentRead: bool
         ) : Async<'TProjection[]> =
-        t.BatchGetItemsProjectedAsync (keys, template.PrecomputeProjectionExpr projection, ?consistentRead = consistentRead)
+        t.BatchGetItemsProjectedAsync(keys, template.PrecomputeProjectionExpr projection, ?consistentRead = consistentRead)
 
 
     /// <summary>Asynchronously deletes item of given key from table.</summary>
@@ -986,11 +986,11 @@ type TableContext<'TRecord>
             let kav = template.ToAttributeValues key
 
             let request =
-                DeleteItemRequest (tableName, kav, ReturnValues = ReturnValue.ALL_OLD, ReturnConsumedCapacity = returnConsumedCapacity)
+                DeleteItemRequest(tableName, kav, ReturnValues = ReturnValue.ALL_OLD, ReturnConsumedCapacity = returnConsumedCapacity)
 
             match precondition with
             | Some pc ->
-                let writer = AttributeWriter (request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+                let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
                 request.ConditionExpression <- pc.Conditional.Write writer
                 request.ReturnValuesOnConditionCheckFailure <- ReturnValuesOnConditionCheckFailure.ALL_OLD
             | None -> ()
@@ -998,7 +998,7 @@ type TableContext<'TRecord>
             let! ct = Async.CancellationToken
 
             let! response =
-                client.DeleteItemAsync (request, ct)
+                client.DeleteItemAsync(request, ct)
                 |> Async.AwaitTaskCorrect
 
             maybeReport
@@ -1018,7 +1018,7 @@ type TableContext<'TRecord>
     /// <param name="key">Key of item to be deleted.</param>
     /// <param name="precondition">Specifies a precondition expression that existing item should satisfy. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     member t.DeleteItemAsync(key: TableKey, precondition: Expr<'TRecord -> bool>) : Async<'TRecord option> =
-        t.DeleteItemAsync (key, template.PrecomputeConditionalExpr precondition)
+        t.DeleteItemAsync(key, template.PrecomputeConditionalExpr precondition)
 
 
     /// <summary>
@@ -1029,23 +1029,23 @@ type TableContext<'TRecord>
     member _.BatchDeleteItemsAsync(keys: seq<TableKey>) =
         async {
             let mkDeleteRequest (key: TableKey) =
-                let kav = template.ToAttributeValues (key)
-                let pr = DeleteRequest (kav)
-                WriteRequest (pr)
+                let kav = template.ToAttributeValues(key)
+                let pr = DeleteRequest(kav)
+                WriteRequest(pr)
 
             let keys = Seq.toArray keys
 
             if keys.Length > 25 then
                 invalidArg "items" "key length must be less than or equal to 25."
 
-            let request = BatchWriteItemRequest (ReturnConsumedCapacity = returnConsumedCapacity)
+            let request = BatchWriteItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
             let deleteRequests = keys |> Seq.map mkDeleteRequest |> rlist
             request.RequestItems[tableName] <- deleteRequests
 
             let! ct = Async.CancellationToken
 
             let! response =
-                client.BatchWriteItemAsync (request, ct)
+                client.BatchWriteItemAsync(request, ct)
                 |> Async.AwaitTaskCorrect
 
             let unprocessed =
@@ -1082,9 +1082,9 @@ type TableContext<'TRecord>
 
             if reqs.Count = 0 || reqs.Count > 100 then
                 raise
-                <| System.ArgumentOutOfRangeException (nameof items, "must be between 1 and 100 items.")
+                <| System.ArgumentOutOfRangeException(nameof items, "must be between 1 and 100 items.")
 
-            let req = TransactWriteItemsRequest (ReturnConsumedCapacity = returnConsumedCapacity, TransactItems = reqs)
+            let req = TransactWriteItemsRequest(ReturnConsumedCapacity = returnConsumedCapacity, TransactItems = reqs)
 
             clientRequestToken
             |> Option.iter (fun x -> req.ClientRequestToken <- x)
@@ -1092,7 +1092,7 @@ type TableContext<'TRecord>
             let! ct = Async.CancellationToken
 
             let! response =
-                client.TransactWriteItemsAsync (req, ct)
+                client.TransactWriteItemsAsync(req, ct)
                 |> Async.AwaitTaskCorrect
 
             maybeReport
@@ -1153,7 +1153,7 @@ type TableContext<'TRecord>
             filterCondition
             |> Option.map template.PrecomputeConditionalExpr
 
-        t.QueryAsync (kc, ?filterCondition = fc, ?limit = limit, ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+        t.QueryAsync(kc, ?filterCondition = fc, ?limit = limit, ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
 
 
     /// <summary>
@@ -1208,7 +1208,7 @@ type TableContext<'TRecord>
             filterCondition
             |> Option.map template.PrecomputeConditionalExpr
 
-        t.QueryProjectedAsync (
+        t.QueryProjectedAsync(
             template.PrecomputeConditionalExpr keyCondition,
             template.PrecomputeProjectionExpr projection,
             ?filterCondition = filterCondition,
@@ -1282,7 +1282,7 @@ type TableContext<'TRecord>
             filterCondition
             |> Option.map template.PrecomputeConditionalExpr
 
-        t.QueryPaginatedAsync (
+        t.QueryPaginatedAsync(
             kc,
             ?filterCondition = fc,
             ?limit = limit,
@@ -1359,7 +1359,7 @@ type TableContext<'TRecord>
             filterCondition
             |> Option.map template.PrecomputeConditionalExpr
 
-        t.QueryProjectedPaginatedAsync (
+        t.QueryProjectedPaginatedAsync(
             template.PrecomputeConditionalExpr keyCondition,
             template.PrecomputeProjectionExpr projection,
             ?filterCondition = filterCondition,
@@ -1395,7 +1395,7 @@ type TableContext<'TRecord>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     member t.ScanAsync(filterCondition: Expr<'TRecord -> bool>, ?limit: int, ?consistentRead: bool) : Async<'TRecord[]> =
         let cond = template.PrecomputeConditionalExpr filterCondition
-        t.ScanAsync (cond, ?limit = limit, ?consistentRead = consistentRead)
+        t.ScanAsync(cond, ?limit = limit, ?consistentRead = consistentRead)
 
 
     /// <summary>
@@ -1440,7 +1440,7 @@ type TableContext<'TRecord>
             filterCondition
             |> Option.map template.PrecomputeConditionalExpr
 
-        t.ScanProjectedAsync (
+        t.ScanProjectedAsync(
             template.PrecomputeProjectionExpr projection,
             ?filterCondition = filterCondition,
             ?limit = limit,
@@ -1491,7 +1491,7 @@ type TableContext<'TRecord>
             ?consistentRead: bool
         ) : Async<PaginatedResult<'TRecord, TableKey>> =
         let cond = template.PrecomputeConditionalExpr filterCondition
-        t.ScanPaginatedAsync (cond, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
+        t.ScanPaginatedAsync(cond, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
 
 
     /// <summary>
@@ -1550,7 +1550,7 @@ type TableContext<'TRecord>
             filterCondition
             |> Option.map template.PrecomputeConditionalExpr
 
-        t.ScanProjectedPaginatedAsync (
+        t.ScanProjectedPaginatedAsync(
             template.PrecomputeProjectionExpr projection,
             ?filterCondition = filterCondition,
             ?limit = limit,
@@ -1610,7 +1610,7 @@ type TableContext<'TRecord>
     /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
     [<System.Obsolete("Please replace with UpdateTableIfRequiredAsync")>]
     member t.UpdateProvisionedThroughputAsync(provisionedThroughput: ProvisionedThroughput) : Async<unit> =
-        t.UpdateTableIfRequiredAsync (Throughput.Provisioned provisionedThroughput)
+        t.UpdateTableIfRequiredAsync(Throughput.Provisioned provisionedThroughput)
         |> Async.Ignore
 
     /// <summary>Asynchronously verify that the table exists and is compatible with record key schema.</summary>
@@ -1622,12 +1622,12 @@ type TableContext<'TRecord>
             let throughput =
                 match provisionedThroughput with
                 | Some p -> p
-                | None -> ProvisionedThroughput (10L, 10L)
+                | None -> ProvisionedThroughput(10L, 10L)
 
-            t.VerifyOrCreateTableAsync (Throughput.Provisioned throughput)
+            t.VerifyOrCreateTableAsync(Throughput.Provisioned throughput)
             |> Async.Ignore
         else
-            t.VerifyTableAsync ()
+            t.VerifyTableAsync()
 
 // Deprecated factory method, to be removed. Replaced with
 // 1. TableContext<'T> ctor (synchronous)
@@ -1644,19 +1644,19 @@ type TableContext internal () =
             ?metricsCollector: RequestMetrics -> unit
         ) =
         async {
-            let context = TableContext<'TRecord> (client, tableName, ?metricsCollector = metricsCollector)
+            let context = TableContext<'TRecord>(client, tableName, ?metricsCollector = metricsCollector)
 
             if createIfNotExists = Some true then
                 let throughput =
                     match provisionedThroughput with
                     | Some p -> p
-                    | None -> ProvisionedThroughput (10L, 10L)
+                    | None -> ProvisionedThroughput(10L, 10L)
 
                 do!
-                    context.VerifyOrCreateTableAsync (Throughput.Provisioned throughput)
+                    context.VerifyOrCreateTableAsync(Throughput.Provisioned throughput)
                     |> Async.Ignore
             elif verifyTable <> Some false then
-                do! context.VerifyTableAsync ()
+                do! context.VerifyTableAsync()
 
             return context
         }
@@ -1681,7 +1681,7 @@ type TableContext internal () =
             ?provisionedThroughput: ProvisionedThroughput,
             ?metricsCollector: RequestMetrics -> unit
         ) =
-        TableContext.CreateAsyncImpl<'TRecord> (
+        TableContext.CreateAsyncImpl<'TRecord>(
             client,
             tableName,
             ?verifyTable = verifyTable,
@@ -1711,7 +1711,7 @@ type TableContext internal () =
             ?provisionedThroughput: ProvisionedThroughput,
             ?metricsCollector: RequestMetrics -> unit
         ) =
-        TableContext.CreateAsyncImpl<'TRecord> (
+        TableContext.CreateAsyncImpl<'TRecord>(
             client,
             tableName,
             ?verifyTable = verifyTable,
@@ -1739,8 +1739,8 @@ module Scripting =
         /// <param name="client">DynamoDB client instance.</param>
         /// <param name="tableName">Table name to target.</param>
         static member Initialize<'TRecord>(client: IAmazonDynamoDB, tableName: string) : TableContext<'TRecord> =
-            let context = TableContext<'TRecord> (client, tableName)
-            context.VerifyTableAsync () |> Async.RunSynchronously
+            let context = TableContext<'TRecord>(client, tableName)
+            context.VerifyTableAsync() |> Async.RunSynchronously
             context
 
         /// Creates a DynamoDB client instance for the specified F# record type, client and table name.<br/>
@@ -1750,10 +1750,10 @@ module Scripting =
         /// <param name="tableName">Table name to target.</param>
         /// <param name="throughput">Throughput to configure if the Table does not yet exist.</param>
         static member Initialize<'TRecord>(client: IAmazonDynamoDB, tableName: string, throughput) : TableContext<'TRecord> =
-            let context = TableContext<'TRecord> (client, tableName)
+            let context = TableContext<'TRecord>(client, tableName)
 
             let _desc =
-                context.VerifyOrCreateTableAsync (throughput)
+                context.VerifyOrCreateTableAsync(throughput)
                 |> Async.RunSynchronously
 
             context
@@ -1766,7 +1766,7 @@ module Scripting =
         /// <param name="item">Item to be written.</param>
         /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         member t.PutItem(item: 'TRecord, ?precondition: ConditionExpression<'TRecord>) =
-            t.PutItemAsync (item, ?precondition = precondition)
+            t.PutItemAsync(item, ?precondition = precondition)
             |> Async.RunSynchronously
 
         /// <summary>
@@ -1775,8 +1775,7 @@ module Scripting =
         /// <param name="item">Item to be written.</param>
         /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         member t.PutItem(item: 'TRecord, precondition: Expr<'TRecord -> bool>) =
-            t.PutItemAsync (item, precondition)
-            |> Async.RunSynchronously
+            t.PutItemAsync(item, precondition) |> Async.RunSynchronously
 
 
         /// <summary>
@@ -1785,7 +1784,7 @@ module Scripting =
         /// </summary>
         /// <returns>Any unprocessed items due to throttling.</returns>
         /// <param name="items">Items to be written.</param>
-        member t.BatchPutItems(items: seq<'TRecord>) = t.BatchPutItemsAsync (items) |> Async.RunSynchronously
+        member t.BatchPutItems(items: seq<'TRecord>) = t.BatchPutItemsAsync(items) |> Async.RunSynchronously
 
 
         /// <summary>
@@ -1802,7 +1801,7 @@ module Scripting =
                 ?precondition: ConditionExpression<'TRecord>,
                 ?returnLatest: bool
             ) =
-            t.UpdateItemAsync (key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
+            t.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
             |> Async.RunSynchronously
 
         /// <summary>
@@ -1819,7 +1818,7 @@ module Scripting =
                 ?precondition: Expr<'TRecord -> bool>,
                 ?returnLatest: bool
             ) =
-            t.UpdateItemAsync (key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
+            t.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
             |> Async.RunSynchronously
 
         /// <summary>
@@ -1836,7 +1835,7 @@ module Scripting =
                 ?precondition: Expr<'TRecord -> bool>,
                 ?returnLatest: bool
             ) =
-            t.UpdateItemAsync (key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
+            t.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
             |> Async.RunSynchronously
 
 
@@ -1844,13 +1843,13 @@ module Scripting =
         ///     Checks whether item of supplied key exists in table.
         /// </summary>
         /// <param name="key">Key to be checked.</param>
-        member t.ContainsKey(key: TableKey) = t.ContainsKeyAsync (key) |> Async.RunSynchronously
+        member t.ContainsKey(key: TableKey) = t.ContainsKeyAsync(key) |> Async.RunSynchronously
 
         /// <summary>
         ///     Fetches item of given key from table.
         /// </summary>
         /// <param name="key">Key of item to be fetched.</param>
-        member r.GetItem(key: TableKey) = r.GetItemAsync (key) |> Async.RunSynchronously
+        member r.GetItem(key: TableKey) = r.GetItemAsync(key) |> Async.RunSynchronously
 
 
         /// <summary>
@@ -1861,7 +1860,7 @@ module Scripting =
         /// <param name="key">Key of item to be fetched.</param>
         /// <param name="projection">Projection expression to be applied to item.</param>
         member t.GetItemProjected(key: TableKey, projection: ProjectionExpression<'TRecord, 'TProjection>) : 'TProjection =
-            t.GetItemProjectedAsync (key, projection)
+            t.GetItemProjectedAsync(key, projection)
             |> Async.RunSynchronously
 
         /// <summary>
@@ -1873,7 +1872,7 @@ module Scripting =
         /// <param name="projection">Projection expression to be applied to item.</param>
         member t.GetItemProjected(key: TableKey, projection: Expr<'TRecord -> 'TProjection>) : 'TProjection =
             // TOCONSIDER implement in terms of Async equivalent as per the rest
-            t.GetItemProjected (key, t.Template.PrecomputeProjectionExpr projection)
+            t.GetItemProjected(key, t.Template.PrecomputeProjectionExpr projection)
 
 
         /// <summary>
@@ -1882,7 +1881,7 @@ module Scripting =
         /// <param name="keys">Keys of items to be fetched.</param>
         /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
         member t.BatchGetItems(keys: seq<TableKey>, ?consistentRead: bool) =
-            t.BatchGetItemsAsync (keys, ?consistentRead = consistentRead)
+            t.BatchGetItemsAsync(keys, ?consistentRead = consistentRead)
             |> Async.RunSynchronously
 
 
@@ -1898,7 +1897,7 @@ module Scripting =
                 projection: ProjectionExpression<'TRecord, 'TProjection>,
                 ?consistentRead: bool
             ) : 'TProjection[] =
-            t.BatchGetItemsProjectedAsync (keys, projection, ?consistentRead = consistentRead)
+            t.BatchGetItemsProjectedAsync(keys, projection, ?consistentRead = consistentRead)
             |> Async.RunSynchronously
 
 
@@ -1914,14 +1913,14 @@ module Scripting =
                 projection: Expr<'TRecord -> 'TProjection>,
                 ?consistentRead: bool
             ) : 'TProjection[] =
-            t.BatchGetItemsProjectedAsync (keys, projection, ?consistentRead = consistentRead)
+            t.BatchGetItemsProjectedAsync(keys, projection, ?consistentRead = consistentRead)
             |> Async.RunSynchronously
 
         /// <summary>Deletes item of given key from table.</summary>
         /// <param name="key">Key of item to be deleted.</param>
         /// <param name="precondition">Precondition to satisfy where item exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         member t.DeleteItem(key: TableKey, ?precondition: ConditionExpression<'TRecord>) =
-            t.DeleteItemAsync (key, ?precondition = precondition)
+            t.DeleteItemAsync(key, ?precondition = precondition)
             |> Async.RunSynchronously
 
         /// <summary>
@@ -1930,7 +1929,7 @@ module Scripting =
         /// <param name="key">Key of item to be deleted.</param>
         /// <param name="precondition">Precondition to satisfy where item exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         member t.DeleteItem(key: TableKey, precondition: Expr<'TRecord -> bool>) =
-            t.DeleteItemAsync (key, precondition)
+            t.DeleteItemAsync(key, precondition)
             |> Async.RunSynchronously
 
 
@@ -1939,7 +1938,7 @@ module Scripting =
         /// </summary>
         /// <returns>Any unprocessed keys due to throttling.</returns>
         /// <param name="keys">Keys of items to be deleted.</param>
-        member t.BatchDeleteItems(keys: seq<TableKey>) = t.BatchDeleteItemsAsync (keys) |> Async.RunSynchronously
+        member t.BatchDeleteItems(keys: seq<TableKey>) = t.BatchDeleteItemsAsync(keys) |> Async.RunSynchronously
 
 
         /// <summary>
@@ -1958,7 +1957,7 @@ module Scripting =
                 ?consistentRead: bool,
                 ?scanIndexForward: bool
             ) : 'TRecord[] =
-            t.QueryAsync (
+            t.QueryAsync(
                 keyCondition,
                 ?filterCondition = filterCondition,
                 ?limit = limit,
@@ -1983,7 +1982,7 @@ module Scripting =
                 ?consistentRead: bool,
                 ?scanIndexForward: bool
             ) : 'TRecord[] =
-            t.QueryAsync (
+            t.QueryAsync(
                 keyCondition,
                 ?filterCondition = filterCondition,
                 ?limit = limit,
@@ -2013,7 +2012,7 @@ module Scripting =
                 ?consistentRead: bool,
                 ?scanIndexForward: bool
             ) : 'TProjection[] =
-            t.QueryProjectedAsync (
+            t.QueryProjectedAsync(
                 keyCondition,
                 projection,
                 ?filterCondition = filterCondition,
@@ -2043,7 +2042,7 @@ module Scripting =
                 ?consistentRead: bool,
                 ?scanIndexForward: bool
             ) : 'TProjection[] =
-            t.QueryProjectedAsync (
+            t.QueryProjectedAsync(
                 keyCondition,
                 projection,
                 ?filterCondition = filterCondition,
@@ -2072,7 +2071,7 @@ module Scripting =
                 ?consistentRead: bool,
                 ?scanIndexForward: bool
             ) : PaginatedResult<'TRecord, IndexKey> =
-            t.QueryPaginatedAsync (
+            t.QueryPaginatedAsync(
                 keyCondition,
                 ?filterCondition = filterCondition,
                 ?limit = limit,
@@ -2100,7 +2099,7 @@ module Scripting =
                 ?consistentRead: bool,
                 ?scanIndexForward: bool
             ) : PaginatedResult<'TRecord, IndexKey> =
-            t.QueryPaginatedAsync (
+            t.QueryPaginatedAsync(
                 keyCondition,
                 ?filterCondition = filterCondition,
                 ?limit = limit,
@@ -2133,7 +2132,7 @@ module Scripting =
                 ?consistentRead: bool,
                 ?scanIndexForward: bool
             ) : PaginatedResult<'TProjection, IndexKey> =
-            t.QueryProjectedPaginatedAsync (
+            t.QueryProjectedPaginatedAsync(
                 keyCondition,
                 projection,
                 ?filterCondition = filterCondition,
@@ -2166,7 +2165,7 @@ module Scripting =
                 ?consistentRead: bool,
                 ?scanIndexForward: bool
             ) : PaginatedResult<'TProjection, IndexKey> =
-            t.QueryProjectedPaginatedAsync (
+            t.QueryProjectedPaginatedAsync(
                 keyCondition,
                 projection,
                 ?filterCondition = filterCondition,
@@ -2185,7 +2184,7 @@ module Scripting =
         /// <param name="limit">Maximum number of items to evaluate.</param>
         /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
         member t.Scan(?filterCondition: ConditionExpression<'TRecord>, ?limit: int, ?consistentRead: bool) : 'TRecord[] =
-            t.ScanAsync (?filterCondition = filterCondition, ?limit = limit, ?consistentRead = consistentRead)
+            t.ScanAsync(?filterCondition = filterCondition, ?limit = limit, ?consistentRead = consistentRead)
             |> Async.RunSynchronously
 
         /// <summary>
@@ -2195,7 +2194,7 @@ module Scripting =
         /// <param name="limit">Maximum number of items to evaluate.</param>
         /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
         member t.Scan(filterCondition: Expr<'TRecord -> bool>, ?limit: int, ?consistentRead: bool) : 'TRecord[] =
-            t.ScanAsync (filterCondition, ?limit = limit, ?consistentRead = consistentRead)
+            t.ScanAsync(filterCondition, ?limit = limit, ?consistentRead = consistentRead)
             |> Async.RunSynchronously
 
 
@@ -2215,7 +2214,7 @@ module Scripting =
                 ?limit: int,
                 ?consistentRead: bool
             ) : 'TProjection[] =
-            t.ScanProjectedAsync (projection, ?filterCondition = filterCondition, ?limit = limit, ?consistentRead = consistentRead)
+            t.ScanProjectedAsync(projection, ?filterCondition = filterCondition, ?limit = limit, ?consistentRead = consistentRead)
             |> Async.RunSynchronously
 
         /// <summary>
@@ -2234,7 +2233,7 @@ module Scripting =
                 ?limit: int,
                 ?consistentRead: bool
             ) : 'TProjection[] =
-            t.ScanProjectedAsync (projection, ?filterCondition = filterCondition, ?limit = limit, ?consistentRead = consistentRead)
+            t.ScanProjectedAsync(projection, ?filterCondition = filterCondition, ?limit = limit, ?consistentRead = consistentRead)
             |> Async.RunSynchronously
 
         /// <summary>
@@ -2251,7 +2250,7 @@ module Scripting =
                 ?exclusiveStartKey: TableKey,
                 ?consistentRead: bool
             ) : PaginatedResult<'TRecord, TableKey> =
-            t.ScanPaginatedAsync (
+            t.ScanPaginatedAsync(
                 ?filterCondition = filterCondition,
                 ?limit = limit,
                 ?exclusiveStartKey = exclusiveStartKey,
@@ -2274,7 +2273,7 @@ module Scripting =
                 ?exclusiveStartKey: TableKey,
                 ?consistentRead: bool
             ) : PaginatedResult<'TRecord, TableKey> =
-            t.ScanPaginatedAsync (filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
+            t.ScanPaginatedAsync(filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
             |> Async.RunSynchronously
 
 
@@ -2296,7 +2295,7 @@ module Scripting =
                 ?exclusiveStartKey: TableKey,
                 ?consistentRead: bool
             ) : PaginatedResult<'TProjection, TableKey> =
-            t.ScanProjectedPaginatedAsync (
+            t.ScanProjectedPaginatedAsync(
                 projection,
                 ?filterCondition = filterCondition,
                 ?limit = limit,
@@ -2323,7 +2322,7 @@ module Scripting =
                 ?exclusiveStartKey: TableKey,
                 ?consistentRead: bool
             ) : PaginatedResult<'TProjection, TableKey> =
-            t.ScanProjectedPaginatedAsync (
+            t.ScanProjectedPaginatedAsync(
                 projection,
                 ?filterCondition = filterCondition,
                 ?limit = limit,
@@ -2338,6 +2337,6 @@ module Scripting =
         member t.UpdateProvisionedThroughput(provisionedThroughput: ProvisionedThroughput) : unit =
             let spec = Throughput.Provisioned provisionedThroughput
 
-            t.UpdateTableIfRequiredAsync (spec)
+            t.UpdateTableIfRequiredAsync(spec)
             |> Async.Ignore
             |> Async.RunSynchronously

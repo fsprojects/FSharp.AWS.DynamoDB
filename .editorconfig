@@ -43,7 +43,7 @@ fsharp_space_before_lowercase_invocation=true
 # false: x.ToString()
 # true: x.ToString ()
 # default false
-fsharp_space_before_uppercase_invocation=true
+fsharp_space_before_uppercase_invocation=false
 
 # false: new Ship(withBeans)
 # true: new Ship (withBeans)

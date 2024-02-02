@@ -17,7 +17,7 @@ module ``Record Generation Tests`` =
         static member RoundTrip<'Record when 'Record: equality>(?tolerateInequality) =
             let tolerateInequality = defaultArg tolerateInequality false
             let mutable isFoundInequality = false
-            let rt = RecordTemplate.Define<'Record> ()
+            let rt = RecordTemplate.Define<'Record>()
 
             let roundTrip (r: 'Record) =
                 try
@@ -40,7 +40,7 @@ module ``Record Generation Tests`` =
                     ->
                     ()
 
-            Check.One (config, roundTrip)
+            Check.One(config, roundTrip)
 
     // Section A. Simple Record schemata
 
@@ -107,76 +107,76 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Generate correct schema for S Record`` () =
-        let rt = RecordTemplate.Define<``S Record``> ()
+        let rt = RecordTemplate.Define<``S Record``>()
         checkRecord rt "A1" ScalarAttributeType.S None
 
     [<Fact>]
     let ``Generate correct schema for N Record`` () =
-        let rt = RecordTemplate.Define<``N Record``> ()
+        let rt = RecordTemplate.Define<``N Record``>()
         checkRecord rt "A1" ScalarAttributeType.N None
 
     [<Fact>]
     let ``Generate correct schema for B Record`` () =
-        let rt = RecordTemplate.Define<``B Record``> ()
+        let rt = RecordTemplate.Define<``B Record``>()
         checkRecord rt "A1" ScalarAttributeType.B None
 
     [<Fact>]
     let ``Generate correct schema for SN Record`` () =
-        let rt = RecordTemplate.Define<``SN Record``> ()
+        let rt = RecordTemplate.Define<``SN Record``>()
         checkRecord rt "A1" ScalarAttributeType.S (Some { AttributeName = "B1"; KeyType = ScalarAttributeType.N })
 
     [<Fact>]
     let ``Generate correct schema for NB Record`` () =
-        let rt = RecordTemplate.Define<``NB Record``> ()
+        let rt = RecordTemplate.Define<``NB Record``>()
         checkRecord rt "A1" ScalarAttributeType.N (Some { AttributeName = "B1"; KeyType = ScalarAttributeType.B })
 
     [<Fact>]
     let ``Generate correct schema for BS Record`` () =
-        let rt = RecordTemplate.Define<``BS Record``> ()
+        let rt = RecordTemplate.Define<``BS Record``>()
         checkRecord rt "A1" ScalarAttributeType.B (Some { AttributeName = "B1"; KeyType = ScalarAttributeType.S })
 
     [<Fact>]
     let ``Generate correct schema for NS Constant HashKey Record`` () =
-        let rt = RecordTemplate.Define<``NS Constant HashKey Record``> ()
+        let rt = RecordTemplate.Define<``NS Constant HashKey Record``>()
         checkRecord rt "HashKey" ScalarAttributeType.N (Some { AttributeName = "B1"; KeyType = ScalarAttributeType.S })
 
     [<Fact>]
     let ``Generate correct schema for BS Constant RangeKey Record`` () =
-        let rt = RecordTemplate.Define<``BS Constant RangeKey Record``> ()
+        let rt = RecordTemplate.Define<``BS Constant RangeKey Record``>()
         checkRecord rt "A1" ScalarAttributeType.B (Some { AttributeName = "RangeKey"; KeyType = ScalarAttributeType.S })
 
     [<Fact>]
     let ``Generate correct schema for SS String representation Record`` () =
-        let rt = RecordTemplate.Define<``SS Record``> ()
-        let rt' = RecordTemplate.Define<``SS String Representation Record``> ()
+        let rt = RecordTemplate.Define<``SS Record``>()
+        let rt' = RecordTemplate.Define<``SS String Representation Record``>()
         test <@ rt.PrimaryKey = rt'.PrimaryKey @>
 
     [<Fact>]
     let ``Generate correct schema for Custom HashKey Name Record`` () =
-        let rt = RecordTemplate.Define<``Custom HashKey Name Record``> ()
+        let rt = RecordTemplate.Define<``Custom HashKey Name Record``>()
         checkRecord rt "CustomHashKeyName" ScalarAttributeType.S None
 
 
     [<Fact>]
-    let ``Attribute value roundtrip for S Record`` () = Test.RoundTrip<``S Record``> ()
+    let ``Attribute value roundtrip for S Record`` () = Test.RoundTrip<``S Record``>()
 
     [<Fact>]
-    let ``Attribute value roundtrip for N Record`` () = Test.RoundTrip<``N Record``> ()
+    let ``Attribute value roundtrip for N Record`` () = Test.RoundTrip<``N Record``>()
 
     [<Fact>]
-    let ``Attribute value roundtrip for B Record`` () = Test.RoundTrip<``B Record``> ()
+    let ``Attribute value roundtrip for B Record`` () = Test.RoundTrip<``B Record``>()
 
     [<Fact>]
-    let ``Attribute value roundtrip for SN Record`` () = Test.RoundTrip<``SN Record``> ()
+    let ``Attribute value roundtrip for SN Record`` () = Test.RoundTrip<``SN Record``>()
 
     [<Fact>]
-    let ``Attribute value roundtrip for NB Record`` () = Test.RoundTrip<``NB Record``> ()
+    let ``Attribute value roundtrip for NB Record`` () = Test.RoundTrip<``NB Record``>()
 
     [<Fact>]
-    let ``Attribute value roundtrip for BS Record`` () = Test.RoundTrip<``BS Record``> ()
+    let ``Attribute value roundtrip for BS Record`` () = Test.RoundTrip<``BS Record``>()
 
     [<Fact>]
-    let ``Attribute value roundtrip for NS constant HashKey Record`` () = Test.RoundTrip<``NS Constant HashKey Record``> ()
+    let ``Attribute value roundtrip for NS constant HashKey Record`` () = Test.RoundTrip<``NS Constant HashKey Record``>()
 
 
     // Section B. Complex Record schemata
@@ -263,16 +263,16 @@ module ``Record Generation Tests`` =
 
 
     [<Fact>]
-    let ``Roundtrip complex record A`` () = Test.RoundTrip<``Complex Record A``> ()
+    let ``Roundtrip complex record A`` () = Test.RoundTrip<``Complex Record A``>()
 
     [<Fact>]
-    let ``Roundtrip complex record B`` () = Test.RoundTrip<``Complex Record B``> ()
+    let ``Roundtrip complex record B`` () = Test.RoundTrip<``Complex Record B``>()
 
     [<Fact>]
-    let ``Roundtrip complex record C`` () = Test.RoundTrip<``Complex Record C``> (tolerateInequality = true)
+    let ``Roundtrip complex record C`` () = Test.RoundTrip<``Complex Record C``>(tolerateInequality = true)
 
     [<Fact>]
-    let ``Roundtrip complex record D`` () = Test.RoundTrip<``Complex Record D``> (tolerateInequality = true)
+    let ``Roundtrip complex record D`` () = Test.RoundTrip<``Complex Record D``>(tolerateInequality = true)
 
 
     // Section C: test errors
@@ -281,7 +281,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Record lacking key attributes should fail`` () =
-        fun () -> RecordTemplate.Define<``Record lacking key attributes``> ()
+        fun () -> RecordTemplate.Define<``Record lacking key attributes``>()
         |> shouldFailwith<_, ArgumentException>
 
 
@@ -292,7 +292,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Record lacking hashkey attribute should fail`` () =
-        fun () -> RecordTemplate.Define<``Record lacking hashkey attribute``> ()
+        fun () -> RecordTemplate.Define<``Record lacking hashkey attribute``>()
         |> shouldFailwith<_, ArgumentException>
 
 
@@ -305,7 +305,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Record containing unsupported attribute type should fail`` () =
-        fun () -> RecordTemplate.Define<``Record lacking hashkey attribute``> ()
+        fun () -> RecordTemplate.Define<``Record lacking hashkey attribute``>()
         |> shouldFailwith<_, ArgumentException>
 
     type ``Record containing key field of unsupported type`` =
@@ -314,7 +314,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Record containing key field of unsupported type should fail`` () =
-        fun () -> RecordTemplate.Define<``Record containing key field of unsupported type``> ()
+        fun () -> RecordTemplate.Define<``Record containing key field of unsupported type``>()
         |> shouldFailwith<_, ArgumentException>
 
 
@@ -326,7 +326,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Record containing multiple HashKey attributes should fail`` () =
-        fun () -> RecordTemplate.Define<``Record containing multiple HashKey attributes``> ()
+        fun () -> RecordTemplate.Define<``Record containing multiple HashKey attributes``>()
         |> shouldFailwith<_, ArgumentException>
 
     [<ConstantHashKey("HashKey", "HashKeyValue")>]
@@ -334,7 +334,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Record containing costant HashKey attribute lacking RangeKey attribute should fail`` () =
-        fun () -> RecordTemplate.Define<``Record containing costant HashKey attribute lacking RangeKey attribute``> ()
+        fun () -> RecordTemplate.Define<``Record containing costant HashKey attribute lacking RangeKey attribute``>()
         |> shouldFailwith<_, ArgumentException>
 
     [<ConstantHashKey("HashKey", "HashKeyValue")>]
@@ -346,7 +346,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Record containing costant HashKey attribute with HashKey attribute should fail`` () =
-        fun () -> RecordTemplate.Define<``Record containing costant HashKey attribute with HashKey attribute``> ()
+        fun () -> RecordTemplate.Define<``Record containing costant HashKey attribute with HashKey attribute``>()
         |> shouldFailwith<_, ArgumentException>
 
 
@@ -423,7 +423,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``GSI Simple HashKey`` () =
-        let template = RecordTemplate.Define<GSI1> ()
+        let template = RecordTemplate.Define<GSI1>()
         test <@ 1 = template.GlobalSecondaryIndices.Length @>
         let gsi = template.GlobalSecondaryIndices[0]
         test <@ None = gsi.RangeKey @>
@@ -438,7 +438,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``GSI Simple Combined key`` () =
-        let template = RecordTemplate.Define<GSI2> ()
+        let template = RecordTemplate.Define<GSI2>()
         test <@ 1 = template.GlobalSecondaryIndices.Length @>
         let gsi = template.GlobalSecondaryIndices[0]
 
@@ -458,17 +458,17 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``GSI should fail if supplying RangeKey only`` () =
-        fun () -> RecordTemplate.Define<GSI3> ()
+        fun () -> RecordTemplate.Define<GSI3>()
         |> shouldFailwith<_, ArgumentException>
 
     [<Fact>]
     let ``GSI should fail if invalid key type`` () =
-        fun () -> RecordTemplate.Define<GSI4> ()
+        fun () -> RecordTemplate.Define<GSI4>()
         |> shouldFailwith<_, ArgumentException>
 
     [<Fact>]
     let ``Sparse GSI`` () =
-        let template = RecordTemplate.Define<GSI5> ()
+        let template = RecordTemplate.Define<GSI5>()
         test <@ 1 = template.GlobalSecondaryIndices.Length @>
         let gsi = template.GlobalSecondaryIndices[0]
         test <@ None = gsi.RangeKey @>
@@ -482,12 +482,12 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``GSI should fail with option primary hash key`` () =
-        fun () -> RecordTemplate.Define<GSI6> ()
+        fun () -> RecordTemplate.Define<GSI6>()
         |> shouldFailwith<_, ArgumentException>
 
     [<Fact>]
     let ``Inverse GSI should be permitted`` () =
-        let template = RecordTemplate.Define<InverseGSI> ()
+        let template = RecordTemplate.Define<InverseGSI>()
 
         test
             <@
@@ -505,7 +505,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``Shared GSI Range Keys should be permitted`` () =
-        let template = RecordTemplate.Define<SameRangeKeyGSI> ()
+        let template = RecordTemplate.Define<SameRangeKeyGSI>()
 
         test
             <@
@@ -547,7 +547,7 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``LSI Simple`` () =
-        let template = RecordTemplate.Define<LSI1> ()
+        let template = RecordTemplate.Define<LSI1>()
         test <@ 1 = template.LocalSecondaryIndices.Length @>
         let lsi = template.LocalSecondaryIndices[0]
         test <@ template.PrimaryKey.HashKey = lsi.HashKey @>
@@ -561,12 +561,12 @@ module ``Record Generation Tests`` =
 
     [<Fact>]
     let ``LSI should fail if no RangeKey is specified`` () =
-        fun () -> RecordTemplate.Define<LSI2> ()
+        fun () -> RecordTemplate.Define<LSI2>()
         |> shouldFailwith<_, ArgumentException>
 
     [<Fact>]
     let ``Sparse LSI`` () =
-        let template = RecordTemplate.Define<LSI3> ()
+        let template = RecordTemplate.Define<LSI3>()
         test <@ 1 = template.LocalSecondaryIndices.Length @>
         let lsi = template.LocalSecondaryIndices[0]
         test <@ template.PrimaryKey.HashKey = lsi.HashKey @>
@@ -581,16 +581,16 @@ module ``Record Generation Tests`` =
     [<Fact>]
     let ``DateTimeOffset pickler encoding should preserve ordering`` () =
         let config = { Config.QuickThrowOnFailure with MaxTest = 1000 }
-        let pickler = DateTimeOffsetPickler ()
+        let pickler = DateTimeOffsetPickler()
         let inline cmp x y = sign (compare x y)
-        Check.One (config, (fun (d1: DateTimeOffset, d2: DateTimeOffset) -> cmp d1 d2 = cmp (pickler.UnParse d1) (pickler.UnParse d2)))
+        Check.One(config, (fun (d1: DateTimeOffset, d2: DateTimeOffset) -> cmp d1 d2 = cmp (pickler.UnParse d1) (pickler.UnParse d2)))
 
     [<Fact>]
     let ``DateTimeOffset pickler encoding should preserve offsets`` () =
         let config = { Config.QuickThrowOnFailure with MaxTest = 1000 }
-        let pickler = DateTimeOffsetPickler ()
+        let pickler = DateTimeOffsetPickler()
 
-        Check.One (
+        Check.One(
             config,
             fun (d: DateTimeOffset) ->
                 let d' = pickler.UnParse d |> pickler.Parse

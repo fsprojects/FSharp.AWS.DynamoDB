@@ -42,7 +42,7 @@ type AttributeId with
                     let ok, nested = av.M.TryGetValue f
                     if not ok then notFound tl else aux result tl nested
                 else
-                    av.Print ()
+                    av.Print()
                     |> sprintf "Expected map, but was '%s'."
                     |> InvalidCastException
                     |> raise
@@ -56,7 +56,7 @@ type AttributeId with
                     else
                         aux result tl av.L.[i]
                 else
-                    av.Print ()
+                    av.Print()
                     |> sprintf "Expected list, but was '%s'."
                     |> InvalidCastException
                     |> raise
@@ -87,13 +87,13 @@ type ProjectionExpr =
         let invalidExpr () = invalidArg "expr" "supplied expression is not a valid projection."
 
         match expr with
-        | Lambda (r, body) when r.Type = recordInfo.Type ->
+        | Lambda(r, body) when r.Type = recordInfo.Type ->
             let (|AttributeGet|_|) expr = QuotedAttribute.TryExtract (fun _ -> None) r recordInfo expr
 
             let (|Ignore|_|) e =
                 match e with
-                | Value (null, t) when t = typeof<unit> -> Some ()
-                | SpecificCall2 <@ ignore @> _ -> Some ()
+                | Value(null, t) when t = typeof<unit> -> Some()
+                | SpecificCall2 <@ ignore @> _ -> Some()
                 | _ -> None
 
             match body with
@@ -107,7 +107,7 @@ type ProjectionExpr =
 
                 let ctor (ro: RestObject) =
                     let mutable av = null
-                    let ok = attr.View (ro, &av)
+                    let ok = attr.View(ro, &av)
 
                     if ok then
                         pickler.UnPickleUntyped av
@@ -129,7 +129,7 @@ type ProjectionExpr =
 
                 // check for conflicting projection attributes
                 match tryFindConflictingPaths attrs with
-                | Some (p1, p2) ->
+                | Some(p1, p2) ->
                     let msg = sprintf "found conflicting paths '%s' and '%s' being accessed in projection expression." p1 p2
                     invalidArg "expr" msg
                 | None -> ()
@@ -141,7 +141,7 @@ type ProjectionExpr =
 
                     for i = 0 to attrs.Length - 1 do
                         let mutable av = null
-                        let ok = attrs.[i].View (ro, &av)
+                        let ok = attrs.[i].View(ro, &av)
 
                         if ok then
                             values.[i] <- picklers.[i].UnPickleUntyped av
@@ -156,7 +156,7 @@ type ProjectionExpr =
         | _ -> invalidExpr ()
 
     member __.Write(writer: AttributeWriter) =
-        let sb = new System.Text.StringBuilder ()
+        let sb = new System.Text.StringBuilder()
         let inline (!) (x: string) = sb.Append x |> ignore
         let mutable isFirst = true
 
@@ -165,11 +165,11 @@ type ProjectionExpr =
 
             !(writer.WriteAttibute attr)
 
-        sb.ToString ()
+        sb.ToString()
 
     member __.GetDebugData() =
-        let aw = new AttributeWriter ()
-        let expr = __.Write (aw)
+        let aw = new AttributeWriter()
+        let expr = __.Write(aw)
 
         let names =
             aw.Names

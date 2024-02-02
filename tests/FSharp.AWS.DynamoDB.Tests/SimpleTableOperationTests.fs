@@ -42,7 +42,7 @@ module SimpleTableTypes =
 
 type ``Simple Table Operation Tests``(fixture: TableFixture) =
 
-    let rand = let r = Random.Shared in fun () -> int64 <| r.Next ()
+    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
 
     let mkItem () =
         { HashKey = guid ()
@@ -52,18 +52,18 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
           Map =
             seq { for _ in 0L .. rand () % 5L -> "K" + guid (), rand () }
             |> Map.ofSeq
-          Unions = [ Choice1Of3 (guid ()); Choice2Of3 (rand ()); Choice3Of3 (Guid.NewGuid().ToByteArray ()) ] }
+          Unions = [ Choice1Of3(guid ()); Choice2Of3(rand ()); Choice3Of3(Guid.NewGuid().ToByteArray()) ] }
 
-    let table = fixture.CreateEmpty<SimpleRecord> ()
+    let table = fixture.CreateEmpty<SimpleRecord>()
 
     [<Fact>]
     let ``Convert to compatible table`` () =
-        let table' = table.WithRecordType<CompatibleRecord> ()
+        let table' = table.WithRecordType<CompatibleRecord>()
         test <@ table.PrimaryKey = table'.PrimaryKey @>
 
     [<Fact>]
     let ``Convert to compatible table 2`` () =
-        let table' = table.WithRecordType<CompatibleRecord2> ()
+        let table' = table.WithRecordType<CompatibleRecord2>()
         test <@ table.PrimaryKey = table'.PrimaryKey @>
 
     [<Fact>]
@@ -101,9 +101,9 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
         let unprocessed = table.BatchPutItems values
 
         let values' =
-            table.BatchGetItems (
+            table.BatchGetItems(
                 values
-                |> Seq.map (fun r -> TableKey.Combined (r.HashKey, r.RangeKey))
+                |> Seq.map (fun r -> TableKey.Combined(r.HashKey, r.RangeKey))
             )
             |> Set.ofArray
 
@@ -116,17 +116,17 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
         table.BatchPutItems values |> ignore
 
         let unprocessed =
-            table.BatchDeleteItems (
+            table.BatchDeleteItems(
                 values
-                |> Seq.map (fun r -> TableKey.Combined (r.HashKey, r.RangeKey))
+                |> Seq.map (fun r -> TableKey.Combined(r.HashKey, r.RangeKey))
             )
 
         test <@ Array.isEmpty unprocessed @>
 
         let values' =
-            table.BatchGetItems (
+            table.BatchGetItems(
                 values
-                |> Seq.map (fun r -> TableKey.Combined (r.HashKey, r.RangeKey))
+                |> Seq.map (fun r -> TableKey.Combined(r.HashKey, r.RangeKey))
             )
 
         test <@ Array.isEmpty values' @>
@@ -155,7 +155,7 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
 
 type ``TransactWriteItems tests``(fixture: TableFixture) =
 
-    let rand = let r = Random.Shared in fun () -> int64 <| r.Next ()
+    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
 
     let mkItem () =
         { HashKey = guid ()
@@ -165,9 +165,9 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
           Map =
             seq { for _ in 0L .. rand () % 5L -> "K" + guid (), rand () }
             |> Map.ofSeq
-          Unions = [ Choice1Of3 (guid ()); Choice2Of3 (rand ()); Choice3Of3 (Guid.NewGuid().ToByteArray ()) ] }
+          Unions = [ Choice1Of3(guid ()); Choice2Of3(rand ()); Choice3Of3(Guid.NewGuid().ToByteArray()) ] }
 
-    let table = fixture.CreateEmpty<SimpleRecord> ()
+    let table = fixture.CreateEmpty<SimpleRecord>()
     let compile = table.Template.PrecomputeConditionalExpr
     let compileUpdate (e: Quotations.Expr<SimpleRecord -> SimpleRecord>) = table.Template.PrecomputeUpdateExpr e
     let doesntExistCondition = compile <@ fun t -> NOT_EXISTS t.Value @>
@@ -178,11 +178,11 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
         async {
             let item = mkItem ()
 
-            let requests = [ TransactWrite.Put (item, Some doesntExistCondition) ]
+            let requests = [ TransactWrite.Put(item, Some doesntExistCondition) ]
 
             do! table.TransactWriteItems requests
 
-            let! itemFound = table.ContainsKeyAsync (table.Template.ExtractKey item)
+            let! itemFound = table.ContainsKeyAsync(table.Template.ExtractKey item)
             true =! itemFound
         }
 
@@ -191,7 +191,7 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
         async {
             let item = mkItem ()
 
-            let requests = [ TransactWrite.Put (item, Some existsCondition) ]
+            let requests = [ TransactWrite.Put(item, Some existsCondition) ]
 
             let mutable failed = false
 
@@ -202,7 +202,7 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
 
             true =! failed
 
-            let! itemFound = table.ContainsKeyAsync (table.Template.ExtractKey item)
+            let! itemFound = table.ContainsKeyAsync(table.Template.ExtractKey item)
             false =! itemFound
         }
 
@@ -214,10 +214,10 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
 
             let requests =
                 [ if shouldFail then
-                      TransactWrite.Check (key, doesntExistCondition)
+                      TransactWrite.Check(key, doesntExistCondition)
                   else
-                      TransactWrite.Check (key, existsCondition)
-                      TransactWrite.Put (item2, None) ]
+                      TransactWrite.Check(key, existsCondition)
+                      TransactWrite.Put(item2, None) ]
 
             let mutable failed = false
 
@@ -228,7 +228,7 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
 
             failed =! shouldFail
 
-            let! item2Found = table.ContainsKeyAsync (table.Template.ExtractKey item2)
+            let! item2Found = table.ContainsKeyAsync(table.Template.ExtractKey item2)
             failed =! not item2Found
         }
 
@@ -239,14 +239,14 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
             let! key = table.PutItemAsync item
 
             let requests =
-                [ TransactWrite.Update (key, Some existsCondition, compileUpdate <@ fun t -> { t with Value = 42 } @>)
-                  TransactWrite.Put (item2, None)
-                  TransactWrite.Put (item3, Some doesntExistCondition)
-                  TransactWrite.Delete (table.Template.ExtractKey item4, Some doesntExistCondition)
-                  TransactWrite.Delete (table.Template.ExtractKey item5, None)
-                  TransactWrite.Check (table.Template.ExtractKey item6, (if shouldFail then existsCondition else doesntExistCondition))
-                  TransactWrite.Update (
-                      TableKey.Combined (item7.HashKey, item7.RangeKey),
+                [ TransactWrite.Update(key, Some existsCondition, compileUpdate <@ fun t -> { t with Value = 42 } @>)
+                  TransactWrite.Put(item2, None)
+                  TransactWrite.Put(item3, Some doesntExistCondition)
+                  TransactWrite.Delete(table.Template.ExtractKey item4, Some doesntExistCondition)
+                  TransactWrite.Delete(table.Template.ExtractKey item5, None)
+                  TransactWrite.Check(table.Template.ExtractKey item6, (if shouldFail then existsCondition else doesntExistCondition))
+                  TransactWrite.Update(
+                      TableKey.Combined(item7.HashKey, item7.RangeKey),
                       None,
                       compileUpdate <@ fun t -> { t with Tuple = (42, 42) } @>
                   ) ]
@@ -268,13 +268,13 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
                     <> (maybeItem |> Option.contains { item with Value = 42 })
                 @>
 
-            let! maybeItem2 = table.TryGetItemAsync (table.Template.ExtractKey item2)
+            let! maybeItem2 = table.TryGetItemAsync(table.Template.ExtractKey item2)
             test <@ shouldFail <> (maybeItem2 |> Option.contains item2) @>
 
-            let! maybeItem3 = table.TryGetItemAsync (table.Template.ExtractKey item3)
+            let! maybeItem3 = table.TryGetItemAsync(table.Template.ExtractKey item3)
             test <@ shouldFail <> (maybeItem3 |> Option.contains item3) @>
 
-            let! maybeItem7 = table.TryGetItemAsync (table.Template.ExtractKey item7)
+            let! maybeItem7 = table.TryGetItemAsync(table.Template.ExtractKey item7)
 
             test
                 <@
@@ -287,12 +287,12 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
 
     let shouldBeRejectedWithArgumentOutOfRangeException requests =
         async {
-            let! e = Async.Catch (table.TransactWriteItems requests)
+            let! e = Async.Catch(table.TransactWriteItems requests)
 
             test
                 <@
                     match e with
-                    | Choice1Of2 () -> false
+                    | Choice1Of2() -> false
                     | Choice2Of2 e -> e :? ArgumentOutOfRangeException
                 @>
         }
@@ -302,6 +302,6 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
 
     [<Fact>]
     let ``Over 100 writes are rejected with AORE`` () =
-        shouldBeRejectedWithArgumentOutOfRangeException [ for _x in 1..101 -> TransactWrite.Put (mkItem (), None) ]
+        shouldBeRejectedWithArgumentOutOfRangeException [ for _x in 1..101 -> TransactWrite.Put(mkItem (), None) ]
 
     interface IClassFixture<TableFixture>

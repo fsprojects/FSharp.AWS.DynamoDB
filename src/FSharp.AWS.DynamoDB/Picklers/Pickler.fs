@@ -87,7 +87,7 @@ type Pickler<'T>() =
 
     override __.Type = typeof<'T>
     override __.DefaultValueUntyped = __.DefaultValue :> obj
-    override __.PickleUntyped o = __.Pickle (o :?> 'T)
+    override __.PickleUntyped o = __.Pickle(o :?> 'T)
     override __.UnPickleUntyped av = __.UnPickle av :> obj
 
 /// Represent a pickler instance that can naturally represent
@@ -119,8 +119,8 @@ type IPicklerResolver =
 //
 
 let inline invalidCast (av: AttributeValue) : 'T =
-    let msg = sprintf "could not convert value %A to type '%O'" (av.Print ()) typeof<'T>
-    raise <| new InvalidCastException (msg)
+    let msg = sprintf "could not convert value %A to type '%O'" (av.Print()) typeof<'T>
+    raise <| new InvalidCastException(msg)
 
 let getElemPickler (pickler: Pickler) = (unbox<ICollectionPickler> pickler).ElementPickler
 
@@ -131,4 +131,4 @@ type UnSupportedType =
             | None -> sprintf "unsupported record field type '%O'" fieldType
             | Some r -> sprintf "unsupported record field type '%O': %s" fieldType r
 
-        raise <| new ArgumentException (message)
+        raise <| new ArgumentException(message)
