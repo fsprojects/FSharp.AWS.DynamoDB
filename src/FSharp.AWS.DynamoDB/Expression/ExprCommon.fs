@@ -26,7 +26,6 @@ type NestedAttribute =
         match nf with
         | FParam i -> sprintf "<$param%d>" i
         | FField f when not <| isValidFieldName f -> sprintf "map keys must be 1 to 64k long (as utf8)." |> invalidArg f
-
         | FField f -> "." + f
         | FIndex i -> sprintf "[%d]" i
 
@@ -46,22 +45,19 @@ type AttributeId =
     member id.Id =
         mkString (fun append ->
             append id.RootId
-
             for nf in id.NestedAttributes do
                 append <| nf.Print())
 
     member id.Name =
         mkString (fun append ->
             append id.RootId
-
             for nf in id.NestedAttributes do
                 append <| nf.Print())
 
-    member id.Tokens =
-        seq {
-            yield id.RootName
-            yield! id.NestedAttributes |> Seq.map (fun nf -> nf.Print())
-        }
+    member id.Tokens = seq {
+        yield id.RootName
+        yield! id.NestedAttributes |> Seq.map (fun nf -> nf.Print())
+    }
 
     member id.IsHashKey =
         List.isEmpty id.NestedAttributes
@@ -85,7 +81,6 @@ type AttributeId =
                | _ -> false)
 
     member id.Append nf = { id with NestedAttributes = id.NestedAttributes @ [ nf ] }
-
     member id.Apply(inputs: obj[]) =
         let applyField nf =
             match nf with
@@ -105,7 +100,6 @@ type AttributeId =
     static member FromKeySchema(schema: TableKeySchema) =
         let rootId = "#HKEY"
         let hkName = schema.HashKey.AttributeName
-
         { RootId = rootId
           RootName = hkName
           NestedAttributes = []
@@ -231,14 +225,11 @@ type QuotedAttribute =
 
             | Choice3Of3(et, ie) :: tail, None ->
                 let pickler = Pickler.resolveUntyped et
-
                 let ctx =
                     match box pickler with
                     | :? IRecordPickler as rc -> Some rc.Properties
                     | _ -> None
-
                 let inline mkAttrPath indexV = mkAttrPath (Item(indexV, pickler, acc)) ctx tail
-
                 match ie with
                 | _ when ie.IsClosed ->
                     match evalRaw ie: obj with
@@ -268,7 +259,6 @@ type AttributeWriter(names: Dictionary<string, string>, values: Dictionary<strin
 
     member __.WriteValue(av: AttributeValue) =
         let ok, found = vcontents.TryGetValue av
-
         if ok then
             found
         else
@@ -284,7 +274,6 @@ type AttributeWriter(names: Dictionary<string, string>, values: Dictionary<strin
 /// Recognizes exprs of shape <@ fun p1 p2 ... -> body @>
 let extractExprParams (recordInfo: RecordTableInfo) (expr: Expr) =
     let vars = new Dictionary<Var, int>()
-
     let rec aux i expr =
         match expr with
         | Lambda(v, body) when v.Type <> recordInfo.Type ->
@@ -293,7 +282,6 @@ let extractExprParams (recordInfo: RecordTableInfo) (expr: Expr) =
         | _ -> expr
 
     let expr' = aux 0 expr
-
     let tryFindIndex e =
         match e with
         | Var v ->
@@ -307,11 +295,9 @@ let extractExprParams (recordInfo: RecordTableInfo) (expr: Expr) =
 // e.g. 'r.Foo.Bar.[0]' and 'r.Foo' are conflicting
 // however 'r.Foo.Bar.[0]' and 'r.Foo.Bar.[1]' are not conflicting
 type private AttributeNode = { Value: string; Children: ResizeArray<AttributeNode> }
-
 /// Detects conflicts in a collection of attribute paths
 let tryFindConflictingPaths (attrs: seq<AttributeId>) =
     let root = new ResizeArray<AttributeNode>()
-
     let tryAppendPath (attr: AttributeId) =
         let tokens = attr.Tokens
         let enum = tokens.GetEnumerator()
@@ -319,10 +305,8 @@ let tryFindConflictingPaths (attrs: seq<AttributeId>) =
         let mutable isNodeAdded = false
         let mutable isLeafFound = false
         let acc = new ResizeArray<_>()
-
         while not isLeafFound && enum.MoveNext() do
             let t = enum.Current
-
             let child =
                 match ctx.FindIndex(fun n -> n.Value = t) with
                 | -1 ->
@@ -333,17 +317,14 @@ let tryFindConflictingPaths (attrs: seq<AttributeId>) =
 
                 | i ->
                     let ch = ctx.[i]
-
                     if ch.Children.Count = 0 then
                         isLeafFound <- true
-
                     ch
 
             acc.Add t
             ctx <- child.Children
 
         let concat xs = String.concat "" xs
-
         if isLeafFound then
             Some(concat tokens, concat acc)
         elif not isNodeAdded then

@@ -103,7 +103,6 @@ type QueryExpr with
 let extractKeyCondition (qExpr: QueryExpr) =
     let hashKeyRef = ref None
     let rangeKeyRef = ref None
-
     let trySet r v =
         if Option.isSome !r then
             false
@@ -133,6 +132,7 @@ let extractKeyCondition (qExpr: QueryExpr) =
             if attr.IsHashKey && cmp = EQ then trySet hashKeyRef attr
             elif attr.IsRangeKey then trySet rangeKeyRef attr
             else false
+
         | Compare _ -> false
 
     if isKeyCond qExpr then
@@ -140,15 +140,15 @@ let extractKeyCondition (qExpr: QueryExpr) =
         | None -> None
         | Some hk ->
 
-            match !rangeKeyRef with
-            | None ->
-                hk.KeySchemata
-                |> Array.tryPick (function
-                    | (ks, KeyType.Hash) -> Some ks
-                    | _ -> None)
-            | Some rk ->
-                Seq.joinBy (fun (ks, kt) (ks', kt') -> kt = KeyType.Hash && kt' = KeyType.Range && ks = ks') hk.KeySchemata rk.KeySchemata
-                |> Seq.tryPick (fun ((a, _), _) -> Some a)
+        match !rangeKeyRef with
+        | None ->
+            hk.KeySchemata
+            |> Array.tryPick (function
+                | (ks, KeyType.Hash) -> Some ks
+                | _ -> None)
+        | Some rk ->
+            Seq.joinBy (fun (ks, kt) (ks', kt') -> kt = KeyType.Hash && kt' = KeyType.Range && ks = ks') hk.KeySchemata rk.KeySchemata
+            |> Seq.tryPick (fun ((a, _), _) -> Some a)
 
     else
         None
@@ -163,7 +163,6 @@ let ensureNotTautological query =
 let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExpression =
     if not expr.IsClosed then
         invalidArg "expr" "supplied query is not a closed expression."
-
     let invalidQuery () = invalidArg "expr" <| sprintf "Supplied expression is not a valid conditional."
 
     let nParams, (|PVar|_|), expr' = extractExprParams recordInfo expr
@@ -190,10 +189,10 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
                     match pickler with
                     | Some c -> c
                     | None -> Pickler.resolveUntyped expr.Type
-
                 match getAttrValue pickler expr with
                 | None -> Undefined
                 | Some av -> Value(wrap av)
+
             | Coerce(e, _)
             | PipeLeft e
             | PipeRight e -> extractOperand pickler e
@@ -203,8 +202,8 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
                     match pickler with
                     | Some p -> p
                     | None -> Pickler.resolveUntyped expr.Type
-
                 Param(i, pickler)
+
             | SpecificProperty <@ fun (s: string) -> s.Length @> (Some(AttributeGet attr), _, []) -> SizeOf attr.Id
             | SpecificProperty <@ fun (l: _ list) -> l.Length @> (Some(AttributeGet attr), _, []) -> SizeOf attr.Id
             | SpecificCall2 <@ List.length @> (None, _, _, [ AttributeGet attr ]) -> SizeOf attr.Id
@@ -219,14 +218,12 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
         ///This should be used when we know the expression is some kind of sequence.
         let (|SequenceGet|_|) (expr: Expr) =
             let op = extractOperand None expr
-
             match op with
             | Value va -> va.AttributeValue.L |> ResizeArray.mapToArray (fun x -> x |> wrap |> Value) |> Some
             | _ -> None
 
         let extractNestedField (expr: Expr) =
             let op = extractOperand None expr
-
             match op with
             | Value av when av.AttributeValue.S <> null -> FField av.AttributeValue.S
             | Value av when av.AttributeValue.N <> null -> FIndex(int av.AttributeValue.N)
@@ -237,14 +234,11 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
             match expr with
             | SpecificCall pat (None, _, args) ->
                 let pickler = args |> List.tryPick (|AttributeGet|_|) |> Option.map (fun attr -> attr.Pickler)
-
                 let operands = args |> List.map (extractOperand pickler)
-
                 let pickler =
                     match pickler with
                     | Some p -> p
                     | None -> Pickler.resolveUntyped args.[0].Type
-
                 Some(pickler, operands)
 
             | _ -> None
@@ -263,18 +257,18 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
                 | GT -> False
             else
 
-                let assignUndefined op =
-                    match op with
-                    | Attribute attr ->
-                        match cmp with
-                        | NE -> Attribute_Exists attr
-                        | EQ -> Attribute_Not_Exists attr
-                        | _ -> True
-                    | _ -> invalidOp "internal error; assigning undefined value to non attribute path."
+            let assignUndefined op =
+                match op with
+                | Attribute attr ->
+                    match cmp with
+                    | NE -> Attribute_Exists attr
+                    | EQ -> Attribute_Not_Exists attr
+                    | _ -> True
+                | _ -> invalidOp "internal error; assigning undefined value to non attribute path."
 
-                if left = Undefined then assignUndefined right
-                elif right = Undefined then assignUndefined left
-                else Compare(cmp, left, right)
+            if left = Undefined then assignUndefined right
+            elif right = Undefined then assignUndefined left
+            else Compare(cmp, left, right)
 
         let rec extractQuery (expr: Expr) =
             match expr with
@@ -284,40 +278,50 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
             | OrElse(left, right) -> QueryExpr.EOr (extractQuery left) (extractQuery right)
             | PipeLeft e
             | PipeRight e -> extractQuery e
+
             | AttributeGet attr -> Compare(EQ, Attribute attr.Id, Value(wrap (AttributeValue(BOOL = true))))
+
             | Comparison <@ (=) @> (p, [ left; right ]) -> extractComparison p EQ left right
             | Comparison <@ (<>) @> (p, [ left; right ]) -> extractComparison p NE left right
             | Comparison <@ (<) @> (p, [ left; right ]) -> extractComparison p LT left right
             | Comparison <@ (>) @> (p, [ left; right ]) -> extractComparison p GT left right
             | Comparison <@ (<=) @> (p, [ left; right ]) -> extractComparison p LE left right
             | Comparison <@ (>=) @> (p, [ left; right ]) -> extractComparison p GE left right
+
             | SpecificCall2 <@ fun (x: string) y -> x.StartsWith y @> (Some(AttributeGet attr), _, _, [ value ]) ->
                 let op = extractOperand None value
                 BeginsWith(attr.Id, op)
+
             | SpecificCall2 <@ fun (x: string) y -> x.Contains y @> (Some(AttributeGet attr), _, _, [ value ]) ->
                 let op = extractOperand None value
                 Contains(attr.Id, op)
+
             | SpecificCall2 <@ Set.contains @> (None, _, _, [ elem; AttributeGet attr ])
             | SpecificCall2 <@ Array.contains @> (None, _, _, [ elem; AttributeGet attr ])
             | SpecificCall2 <@ List.contains @> (None, _, _, [ elem; AttributeGet attr ]) ->
                 let ep = getElemPickler attr.Pickler
                 let op = extractOperand (Some ep) elem
                 Contains(attr.Id, op)
+
             | SpecificCall2 <@ Array.contains @> (None, _, _, [ AttributeGet attr; SequenceGet items ]) -> In(Attribute attr.Id, items)
+
             | SpecificCall2 <@ List.contains @> (None, _, _, [ AttributeGet attr; SequenceGet items ]) -> In(Attribute attr.Id, items)
+
             | SpecificCall2 <@ fun (x: Set<_>) e -> x.Contains e @> (Some(AttributeGet attr), _, _, [ elem ]) ->
                 let ep = getElemPickler attr.Pickler
                 let op = extractOperand (Some ep) elem
                 Contains(attr.Id, op)
+
             | SpecificCall2 <@ Map.containsKey @> (None, _, _, [ key; AttributeGet attr ]) ->
                 let nf = extractNestedField key
                 Attribute_Exists(attr.Id.Append nf)
+
             | SpecificCall2 <@ fun (x: Map<_, _>) y -> x.ContainsKey y @> (Some(AttributeGet attr), _, _, [ key ]) when key.IsClosed ->
                 let nf = extractNestedField key
                 Attribute_Exists(attr.Id.Append nf)
+
             | SpecificCall2 <@ BETWEEN @> (None, _, _, [ value; lower; upper ]) ->
                 let pickler = Pickler.resolveUntyped value.Type
-
                 if pickler.IsScalar then
                     let sc = Some pickler
                     let vOp = extractOperand sc value
@@ -326,17 +330,18 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
                     Between(vOp, lOp, uOp)
                 else
                     invalidArg "expr" "BETWEEN predicate only applies to scalar attributes."
+
             | SpecificCall2 <@ EXISTS @> (None, _, _, [ AttributeGet attr ]) -> Attribute_Exists attr.Id
             | SpecificCall2 <@ NOT_EXISTS @> (None, _, _, [ AttributeGet attr ]) -> Attribute_Not_Exists attr.Id
             | SpecificCall2 <@ Array.isEmpty @> (None, _, _, [ AttributeGet attr ]) -> Attribute_Not_Exists attr.Id
             | SpecificCall2 <@ List.isEmpty @> (None, _, _, [ AttributeGet attr ]) -> Attribute_Not_Exists attr.Id
             | SpecificCall2 <@ Option.isSome @> (None, _, _, [ AttributeGet attr ]) -> Attribute_Exists attr.Id
             | SpecificCall2 <@ Option.isNone @> (None, _, _, [ AttributeGet attr ]) -> Attribute_Not_Exists attr.Id
+
             | _ -> invalidQuery ()
 
         let queryExpr = extractQuery body
         do ensureNotTautological queryExpr
-
         { QueryExpr = queryExpr
           NParams = nParams
           KeyCondition = extractKeyCondition queryExpr }
@@ -346,13 +351,13 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
 /// applies a set of input values to a parametric query expression
 let applyParams (cond: ConditionalExpression) (inputValues: obj[]) =
     let applyAttr (attr: AttributeId) = attr.Apply inputValues
-
     let applyOperand (op: Operand) =
         match op with
         | Param(i, pickler) ->
             match pickler.PickleCoerced inputValues.[i] with
             | Some av -> Value(wrap av)
             | None -> Undefined
+
         | Attribute attr -> Attribute(applyAttr attr)
         | _ -> op
 
@@ -372,7 +377,6 @@ let applyParams (cond: ConditionalExpression) (inputValues: obj[]) =
         | Compare(cmp, l, r) ->
             let l' = applyOperand l
             let r' = applyOperand r
-
             let assignUndefined op =
                 match op with
                 | Attribute attr ->
@@ -394,7 +398,6 @@ let applyParams (cond: ConditionalExpression) (inputValues: obj[]) =
 let writeConditionExpression (writer: AttributeWriter) (cond: ConditionalExpression) =
     let sb = new System.Text.StringBuilder()
     let inline (!) (p: string) = sb.Append p |> ignore
-
     let inline writeOp o =
         match o with
         | Undefined -> invalidOp "internal error: attempting to reference undefined value in query expression."
@@ -413,7 +416,6 @@ let writeConditionExpression (writer: AttributeWriter) (cond: ConditionalExpress
             for i = 0 to ops.Length - 2 do
                 writeOp ops.[i]
                 ! ", "
-
             writeOp ops.[ops.Length - 1]
 
 
@@ -505,7 +507,6 @@ let mkItemNotExistsCondition (schema: TableKeySchema) =
 /// Generates a hash key equality condition for given key schema
 let mkHashKeyEqualityCondition (schema: TableKeySchema) (av: AttributeValue) =
     let hkAttrId = AttributeId.FromKeySchema schema
-
     { QueryExpr = Compare(EQ, Attribute hkAttrId, Value(wrap av))
       KeyCondition = Some schema
       NParams = 0 }
@@ -517,7 +518,6 @@ type ConditionalExpression with
     member cond.Write(writer: AttributeWriter) = writeConditionExpression writer cond
 
     member cond.IsKeyConditionCompatible = Option.isSome cond.KeyCondition
-
     member cond.IndexName =
         match cond.KeyCondition with
         | Some kc -> kc.Type.IndexName
@@ -526,11 +526,8 @@ type ConditionalExpression with
     member cond.GetDebugData() =
         let aw = new AttributeWriter()
         let expr = writeConditionExpression aw cond
-
         let names = aw.Names |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
-
         let values = aw.Values |> Seq.map (fun kv -> kv.Key, kv.Value.Print()) |> Seq.toList
-
         expr, names, values
 
     static member Extract (recordInfo: RecordTableInfo) (expr: Expr) = extractQueryExpr recordInfo expr

@@ -64,12 +64,10 @@ module Extensions =
             let credentialProfileStoreChain = new CredentialProfileStoreChain()
             let profileName = defaultArg profileName "default"
             let ok, creds = credentialProfileStoreChain.TryGetAWSCredentials(profileName)
-
             if ok then
                 creds
             else
                 let credsFile = Path.Combine(getHomePath (), ".aws", "credentials")
-
                 if not <| File.Exists credsFile then
                     sprintf "Could not locate stored credentials profile '%s'." profileName |> invalidOp
 

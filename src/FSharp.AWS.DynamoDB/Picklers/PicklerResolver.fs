@@ -112,7 +112,6 @@ module private ResolverImpl =
     type CachedResolver private () as self =
         static let globalCache = ConcurrentDictionary<Type, Lazy<Pickler>>()
         let stack = Stack<Type>()
-
         let resolve t =
             try
                 if stack.Contains t then
@@ -132,7 +131,6 @@ module private ResolverImpl =
 
         static member Resolve(t: Type) =
             let ok, found = globalCache.TryGetValue t
-
             if ok then
                 found.Value
             else

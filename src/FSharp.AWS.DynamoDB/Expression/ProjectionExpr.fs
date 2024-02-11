@@ -54,10 +54,8 @@ type AttributeId with
             | FParam _ :: _ -> sprintf "internal error; unexpected attribute path '%s'." id.Name |> invalidOp
 
         let ok, prop = ro.TryGetValue id.RootName
-
         if ok then
             let cell = ref null
-
             if aux cell id.NestedAttributes prop then
                 value <- cell.Value
                 true
@@ -73,7 +71,6 @@ type ProjectionExpr =
 
     static member Extract (recordInfo: RecordTableInfo) (expr: Expr<'TRecord -> 'Tuple>) =
         let invalidExpr () = invalidArg "expr" "supplied expression is not a valid projection."
-
         match expr with
         | Lambda(r, body) when r.Type = recordInfo.Type ->
             let (|AttributeGet|_|) expr = QuotedAttribute.TryExtract (fun _ -> None) r recordInfo expr
@@ -92,11 +89,9 @@ type ProjectionExpr =
             | AttributeGet qa ->
                 let pickler = qa.Pickler
                 let attr = qa.Id
-
                 let ctor (ro: RestObject) =
                     let mutable av = null
                     let ok = attr.View(ro, &av)
-
                     if ok then
                         pickler.UnPickleUntyped av
                     else
@@ -126,11 +121,9 @@ type ProjectionExpr =
 
                 let ctor (ro: RestObject) =
                     let values = Array.zeroCreate<obj> attrs.Length
-
                     for i = 0 to attrs.Length - 1 do
                         let mutable av = null
                         let ok = attrs.[i].View(ro, &av)
-
                         if ok then
                             values.[i] <- picklers.[i].UnPickleUntyped av
                         else
@@ -147,7 +140,6 @@ type ProjectionExpr =
         let sb = new System.Text.StringBuilder()
         let inline (!) (x: string) = sb.Append x |> ignore
         let mutable isFirst = true
-
         for attr in __.Attributes do
             if isFirst then isFirst <- false else ! ", "
 
@@ -158,7 +150,5 @@ type ProjectionExpr =
     member __.GetDebugData() =
         let aw = new AttributeWriter()
         let expr = __.Write(aw)
-
         let names = aw.Names |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
-
         expr, names

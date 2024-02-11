@@ -176,7 +176,7 @@ fsharp_multi_line_lambda_closing_newline=false
 
 # allows the 'else'-branch to be aligned at same level as 'else' if the ret type allows it
 # default false
-fsharp_experimental_keep_indent_in_branch=false
+fsharp_experimental_keep_indent_in_branch=true
 
 # whether a bar is placed before DU
 # false: type MyDU = Short of int
@@ -186,7 +186,7 @@ fsharp_bar_before_discriminated_union_declaration=false
 
 # multiline, nested expressions must be surrounded by blank lines
 # default true
-fsharp_blank_lines_around_nested_multiline_expressions=true
+fsharp_blank_lines_around_nested_multiline_expressions=false
 
 # max number of consecutive blank lines to keep 
 # default 100

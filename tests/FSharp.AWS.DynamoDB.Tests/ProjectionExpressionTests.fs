@@ -76,7 +76,6 @@ type ``Projection Expression Tests``(fixture: TableFixture) =
     static let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
 
     let bytes () = Guid.NewGuid().ToByteArray()
-
     let mkItem () =
         { HashKey = guid ()
           RangeKey = guid ()

@@ -30,7 +30,6 @@ type PropertyMetadata =
 
     static member FromPropertyInfo (resolver: IPicklerResolver) (attrId: int) (prop: PropertyInfo) =
         let attributes = prop.GetAttributes()
-
         let pickler =
             match
                 attributes

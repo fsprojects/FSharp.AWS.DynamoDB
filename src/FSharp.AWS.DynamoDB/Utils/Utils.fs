@@ -19,10 +19,8 @@ module internal Utils =
 
     let inline cdict (kvs: seq<KeyValuePair<'K, 'V>>) =
         let d = new Dictionary<'K, 'V>()
-
         for kv in kvs do
             d.Add(kv.Key, kv.Value)
-
         d
 
     let inline isNull o = obj.ReferenceEquals(o, null)
@@ -86,7 +84,6 @@ module internal Utils =
         /// including the supplied declaring type and method type arguments
         member m.GetUnderlyingMethodDefinition() : MethodInfo * Type[] * Type[] =
             let dt = m.DeclaringType
-
             if dt.IsGenericType then
                 let gt = dt.GetGenericTypeDefinition()
                 let gas = dt.GetGenericArguments()
@@ -116,7 +113,6 @@ module internal Utils =
 
         member p.GetUnderlyingProperty() : PropertyInfo * Type[] =
             let dt = p.DeclaringType
-
             if dt.IsGenericType then
                 let gt = dt.GetGenericTypeDefinition()
                 let gas = dt.GetGenericArguments()
@@ -174,7 +170,6 @@ module internal Utils =
                 match input with
                 | Call(obj, mI', args) ->
                     let gm', ta, ma = mI'.GetUnderlyingMethodDefinition()
-
                     if gm = gm' then
                         Some(obj, Array.toList ta, Array.toList ma, args)
                     else
@@ -232,7 +227,6 @@ module internal Utils =
         match e with
         | NewUnionCase(uci, [ h; t ]) ->
             let dt = uci.DeclaringType
-
             if dt.IsGenericType && dt.GetGenericTypeDefinition() = typedefof<_ list> then
                 Some(h, t)
             else
@@ -259,7 +253,6 @@ module internal Utils =
                 task.ContinueWith(fun (t: Task<'T>) ->
                     if t.IsFaulted then
                         let e = t.Exception
-
                         if e.InnerExceptions.Count = 1 then
                             ec e.InnerExceptions[0]
                         else
@@ -282,7 +275,6 @@ module internal Utils =
                 task.ContinueWith(fun (task: Task) ->
                     if task.IsFaulted then
                         let e = task.Exception
-
                         if e.InnerExceptions.Count = 1 then
                             ec e.InnerExceptions[0]
                         else
@@ -295,13 +287,12 @@ module internal Utils =
 
     [<RequireQualifiedAccess>]
     module Seq =
-        let joinBy (pred: 'T -> 'S -> bool) (ts: seq<'T>) (ss: seq<'S>) : seq<'T * 'S> =
-            seq {
-                for t in ts do
-                    for s in ss do
-                        if pred t s then
-                            yield (t, s)
-            }
+        let joinBy (pred: 'T -> 'S -> bool) (ts: seq<'T>) (ss: seq<'S>) : seq<'T * 'S> = seq {
+            for t in ts do
+                for s in ss do
+                    if pred t s then
+                        yield (t, s)
+        }
 
     /// Gets the home path for the current user
     let getHomePath () =
@@ -314,8 +305,6 @@ module internal Utils =
     module ResizeArray =
         let mapToArray f (list: ResizeArray<_>) =
             let newList = Array.zeroCreate list.Count
-
             for i in 0 .. list.Count - 1 do
                 newList.[i] <- f list.[i]
-
             newList

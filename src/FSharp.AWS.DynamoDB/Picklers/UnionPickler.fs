@@ -23,12 +23,9 @@ type UnionPickler<'U>(resolver: IPicklerResolver) =
     let caseAttr = "Union_Case"
     let ucis = FSharpType.GetUnionCases(typeof<'U>, true)
     let tagReader = FSharpValue.PreComputeUnionTagReader(typeof<'U>, true)
-
     let mkUCD uci =
         let ctor = FSharpValue.PreComputeUnionConstructorInfo(uci, true)
-
         let props = uci.GetFields() |> Array.mapi (PropertyMetadata.FromPropertyInfo resolver)
-
         { UCI = uci; CaseCtor = ctor; Properties = props }
 
     let cases = ucis |> Array.map mkUCD
@@ -38,10 +35,8 @@ type UnionPickler<'U>(resolver: IPicklerResolver) =
         let tag = tagReader union
         let case = cases.[tag]
         values.Add(caseAttr, AttributeValue(case.UCI.Name))
-
         for prop in case.Properties do
             let field = prop.PropertyInfo.GetValue union
-
             match prop.Pickler.PickleUntyped field with
             | None -> ()
             | Some av -> values.Add(prop.Name, av)
@@ -50,10 +45,8 @@ type UnionPickler<'U>(resolver: IPicklerResolver) =
 
     member __.ToUnion(ro: RestObject) : 'U =
         let notFound name = raise <| new KeyNotFoundException(sprintf "attribute %A not found." name)
-
         let tag =
             let ok, av = ro.TryGetValue caseAttr
-
             if ok then
                 match av.S with
                 | null -> invalidCast av
@@ -68,11 +61,9 @@ type UnionPickler<'U>(resolver: IPicklerResolver) =
 
         | Some case ->
             let values = Array.zeroCreate<obj> case.Properties.Length
-
             for i = 0 to values.Length - 1 do
                 let prop = case.Properties.[i]
                 let ok, av = ro.TryGetValue prop.Name
-
                 if ok then values.[i] <- prop.Pickler.UnPickleUntyped av
                 elif prop.NoDefaultValue then notFound prop.Name
                 else values.[i] <- prop.Pickler.DefaultValueUntyped
@@ -81,7 +72,6 @@ type UnionPickler<'U>(resolver: IPicklerResolver) =
 
     override __.PicklerType = PicklerType.Union
     override __.PickleType = PickleType.Map
-
     override __.DefaultValue = invalidOp <| sprintf "default values not supported for unions."
 
     override __.Pickle(union: 'U) =

@@ -141,7 +141,6 @@ type UpdateOperation with
 let extractRecordExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : IntermediateUpdateExprs =
     if not expr.IsClosed then
         invalidArg "expr" "supplied update expression contains free variables."
-
     let invalidExpr () = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
     let nParams, pRecognizer, expr' = extractExprParams recordInfo expr
@@ -158,7 +157,6 @@ let extractRecordExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Inter
 
         let tryExtractValueExpr (i: int) (assignment: Expr) =
             let rp = recordInfo.Properties.[i]
-
             match assignment with
             | PropertyGet(Some(Var y), prop, []) when r = y && rp.PropertyInfo = prop -> None
             | Var v when bindings.ContainsKey v -> Some(Root(rp, recordInfo.GetPropertySchemata rp.Name), bindings.[v])
@@ -180,7 +178,6 @@ let extractRecordExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Inter
 let extractOpExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : IntermediateUpdateExprs =
     if not expr.IsClosed then
         invalidArg "expr" "supplied update expression contains free variables."
-
     let invalidExpr () = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
 
     let nParams, (|PVar|_|), expr' = extractExprParams recordInfo expr
@@ -202,7 +199,6 @@ let extractOpExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Intermedi
         let attrs = new ResizeArray<QuotedAttribute>()
         let assignments = new ResizeArray<QuotedAttribute * Expr>()
         let updateOps = new ResizeArray<UpdateOperation>()
-
         let rec extract e =
             match e with
             | SpecificCall2 <@ (&&&) @> (None, _, _, [ l; r ]) ->
@@ -253,7 +249,6 @@ let extractOpExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Intermedi
 /// Completes conversion from intermediate update expression to final update operations
 let extractUpdateOps (exprs: IntermediateUpdateExprs) =
     let invalidExpr () = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
-
     let (|PVar|_|) = exprs.ParamRecognizer
     let (|AttributeGet|_|) (e: Expr) = QuotedAttribute.TryExtract (|PVar|_|) exprs.RVar exprs.RecordInfo e
 
@@ -261,7 +256,6 @@ let extractUpdateOps (exprs: IntermediateUpdateExprs) =
         match expr |> evalRaw |> pickler.PickleCoerced with
         | None -> Undefined
         | Some av -> Value(wrap av)
-
 
     let rec extractOperand (pickler: Pickler) (expr: Expr) =
         match expr with
@@ -274,7 +268,6 @@ let extractUpdateOps (exprs: IntermediateUpdateExprs) =
 
     let extractNestedField (expr: Expr) =
         let op = extractOperand (Pickler.resolveUntyped expr.Type) expr
-
         match op with
         | Param(i, _) -> FParam i
         | Value av when av.AttributeValue.S <> null -> FField av.AttributeValue.S
@@ -356,10 +349,8 @@ let extractUpdateOps (exprs: IntermediateUpdateExprs) =
         |> Seq.map (fun uop ->
             if uop.Attribute.IsHashKey && uop.Attribute.IsPrimaryKey then
                 invalidArg "expr" "update expression cannot update hash key."
-
             if uop.Attribute.IsRangeKey && uop.Attribute.IsPrimaryKey then
                 invalidArg "expr" "update expression cannot update range key."
-
             uop)
         |> Seq.sortBy (fun uop -> uop.Id, uop.Attribute.Id)
         |> Seq.toArray
@@ -372,7 +363,6 @@ let extractUpdateOps (exprs: IntermediateUpdateExprs) =
 /// applies a set of input values to parametric update operations
 let applyParams (uops: UpdateOperations) (inputValues: obj[]) =
     let applyAttr (attr: AttributeId) = attr.Apply inputValues
-
     let applyOperand (op: Operand) =
         match op with
         | Param(i, pickler) ->
@@ -456,7 +446,6 @@ let writeUpdateExpression (writer: AttributeWriter) (uops: UpdateOperations) =
 
     let isFirstGp =
         let lastId = ref -1
-
         fun (uo: UpdateOperation) ->
             if lastId.Value = -1 then
                 lastId := uo.Id
@@ -505,11 +494,8 @@ type UpdateOperations with
     member uops.GetDebugData() =
         let aw = new AttributeWriter()
         let expr = writeUpdateExpression aw uops
-
         let names = aw.Names |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
-
         let values = aw.Values |> Seq.map (fun kv -> kv.Key, kv.Value.Print()) |> Seq.toList
-
         expr, names, values
 
     static member ExtractUpdateExpr (recordInfo: RecordTableInfo) (expr: Expr) =

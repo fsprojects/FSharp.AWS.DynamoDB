@@ -30,12 +30,10 @@ type PrimaryKeyStructure =
 type TableKeySchemata(schemata: TableKeySchema[]) =
     let schemata = schemata |> Array.sortBy (fun s -> s.Type)
     member __.Schemata = schemata
-
     override __.Equals y =
         match y with
         | :? TableKeySchemata as kss -> schemata = kss.Schemata
         | _ -> false
-
     override __.GetHashCode() = hash schemata
     member private __.StructuredFormatDisplay = sprintf "%A" schemata
     override __.ToString() = __.StructuredFormatDisplay
@@ -62,11 +60,9 @@ type PrimaryKeyStructure with
     /// Converts given TableKey to AttributeValue form
     static member ToAttributeValues(keyStructure: PrimaryKeyStructure, key: TableKey) =
         let dict = new Dictionary<string, AttributeValue>()
-
         let extractKey name (pickler: Pickler) (value: obj) =
             if isNull value then
                 invalidArg name "Key value was not specified."
-
             let av = pickler.PickleUntyped value |> Option.get
             dict.Add(name, av)
 
@@ -98,7 +94,6 @@ type PrimaryKeyStructure with
     /// Extracts key from given record instance
     static member ExtractKey(keyStructure: PrimaryKeyStructure, record: 'Record) =
         let inline getValue (rp: PropertyMetadata) = rp.PropertyInfo.GetValue(record)
-
         match keyStructure with
         | HashKeyOnly hkp -> let hashKey = getValue hkp in TableKey.Hash hashKey
         | DefaultHashKey(_, hashKey, _, rkp) ->
@@ -116,10 +111,8 @@ type PrimaryKeyStructure with
     static member ExtractKey(keyStructure: PrimaryKeyStructure, attributeValues: Dictionary<string, AttributeValue>) =
         let inline getValue (rp: PropertyMetadata) =
             let notFound () = raise <| KeyNotFoundException(sprintf "attribute %A not found." rp.Name)
-
             let ok, av = attributeValues.TryGetValue rp.Name
             if ok then rp.Pickler.UnPickleUntyped av else notFound ()
-
         match keyStructure with
         | HashKeyOnly hkp -> let hashKey = getValue hkp in TableKey.Hash hashKey
         | DefaultHashKey(_, hashKey, _, rkp) ->
@@ -188,7 +181,6 @@ type RecordTableInfo with
 
 
         let primaryKey = ref None
-
         let extractKeySchema (kst: KeySchemaType) (attributes: seq<PropertyMetadata * KeyType * KeySchemaType>) =
             let groupedAttrs =
                 attributes
@@ -217,7 +209,6 @@ type RecordTableInfo with
                         invalidArg (string typeof<'T>) "Default HashKey attribute contains conflicting name."
 
                     let pickler = Pickler.resolveUntyped hkca.HashKeyType
-
                     DefaultHashKey(hkca.Name, hkca.HashKey, pickler, rk) |> setResult
 
                 | None, Some rkca, [| (KeyType.Hash, hk) |] ->
@@ -228,7 +219,6 @@ type RecordTableInfo with
                         invalidArg (string typeof<'T>) "Default RangeKey attribute contains conflicting name."
 
                     let pickler = Pickler.resolveUntyped rkca.HashKeyType
-
                     DefaultRangeKey(rkca.Name, rkca.RangeKey, pickler, hk) |> setResult
 
                 | None, None, [| (KeyType.Hash, hk) |] -> HashKeyOnly(hk) |> setResult
@@ -274,31 +264,27 @@ type RecordTableInfo with
         | None -> "Does not specify a HashKey attribute." |> invalidArg (string typeof<'T>)
         | Some(pkStruct, pkSchema) ->
 
-            let propSchema =
-                schemata
-                |> Seq.collect (fun attr ->
-                    seq {
-                        yield (attr.HashKey, KeyType.Hash, attr)
+        let propSchema =
+            schemata
+            |> Seq.collect (fun attr -> seq {
+                yield (attr.HashKey, KeyType.Hash, attr)
+                match attr.RangeKey with
+                | Some rk -> yield (rk, KeyType.Range, attr)
+                | None -> ()
+            })
+            |> Seq.groupBy (fun (a, _, _) -> a.AttributeName)
+            |> Seq.map (fun (name, kss) ->
+                let schemata = kss |> Seq.map (fun (_, isHashKey, ks) -> ks, isHashKey) |> Seq.toArray
+                name, schemata)
+            |> Map.ofSeq
 
-                        match attr.RangeKey with
-                        | Some rk -> yield (rk, KeyType.Range, attr)
-                        | None -> ()
-                    })
-                |> Seq.groupBy (fun (a, _, _) -> a.AttributeName)
-                |> Seq.map (fun (name, kss) ->
-                    let schemata = kss |> Seq.map (fun (_, isHashKey, ks) -> ks, isHashKey) |> Seq.toArray
-
-                    name, schemata)
-                |> Map.ofSeq
-
-            { Type = typeof<'T>
-              Pickler = pickler :> Pickler
-              Properties = pickler.Properties
-
-              PrimaryKeyStructure = pkStruct
-              PrimaryKeySchema = pkSchema
-              PropertySchemata = propSchema
-              Schemata = new TableKeySchemata(schemata) }
+        { Type = typeof<'T>
+          Pickler = pickler :> Pickler
+          Properties = pickler.Properties
+          PrimaryKeyStructure = pkStruct
+          PrimaryKeySchema = pkSchema
+          PropertySchemata = propSchema
+          Schemata = new TableKeySchemata(schemata) }
 
     member info.GetPropertySchemata(propName: string) = defaultArg (info.PropertySchemata.TryFind propName) [||]
 
@@ -311,12 +297,9 @@ type RecordTableInfo with
         ) =
         let inline getValue (ks: KeyAttributeSchema) =
             let notFound () = raise <| KeyNotFoundException(sprintf "attribute %A not found." ks.AttributeName)
-
             let meta = recordInfo.Properties |> Array.find (fun p -> p.Name = ks.AttributeName)
-
             let ok, av = attributeValues.TryGetValue ks.AttributeName
             if ok then meta.Pickler.UnPickleUntyped av else notFound ()
-
         match indexKeySchema with
         | { HashKey = hk; RangeKey = Some rk; Type = PrimaryKey } ->
             let hash = getValue hk
@@ -338,13 +321,10 @@ type RecordTableInfo with
     /// Converts given IndexKey to AttributeValue form
     static member IndexKeyToAttributeValues(indexKeySchema: TableKeySchema, recordInfo: RecordTableInfo, key: IndexKey) =
         let dict = PrimaryKeyStructure.ToAttributeValues(recordInfo.PrimaryKeyStructure, key.PrimaryKey)
-
         let extractKey (ks: KeyAttributeSchema) (value: obj) =
             if isNull value then
                 invalidArg ks.AttributeName "Key value was not specified."
-
             let meta = recordInfo.Properties |> Array.find (fun p -> p.Name = ks.AttributeName)
-
             let av = meta.Pickler.PickleUntyped value |> Option.get
             dict.[ks.AttributeName] <- av
 
@@ -364,7 +344,6 @@ type TableKeySchemata with
     static member OfTableDescription(td: TableDescription) : TableKeySchemata =
         let mkKeySchema (kse: KeySchemaElement) =
             let ad = td.AttributeDefinitions |> Seq.find (fun ad -> ad.AttributeName = kse.AttributeName)
-
             { AttributeName = kse.AttributeName; KeyType = ad.AttributeType }
 
         let primaryKey =
@@ -413,37 +392,28 @@ type TableKeySchemata with
         let inline mkKSE n t = KeySchemaElement(n, t)
 
         let keyAttrs = new Dictionary<string, KeyAttributeSchema>()
-
         for tks in schema.Schemata do
             keyAttrs.[tks.HashKey.AttributeName] <- tks.HashKey
-
             tks.RangeKey |> Option.iter (fun rk -> keyAttrs.[rk.AttributeName] <- rk)
 
             match tks.Type with
             | PrimaryKey ->
                 ctr.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
-
                 tks.RangeKey |> Option.iter (fun rk -> ctr.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
 
             | GlobalSecondaryIndex name ->
                 let gsi = new GlobalSecondaryIndex()
                 gsi.IndexName <- name
-
                 gsi.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
-
                 tks.RangeKey |> Option.iter (fun rk -> gsi.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
-
                 gsi.Projection <- Projection(ProjectionType = ProjectionType.ALL)
                 ctr.GlobalSecondaryIndexes.Add gsi
 
             | LocalSecondaryIndex name ->
                 let lsi = new LocalSecondaryIndex()
                 lsi.IndexName <- name
-
                 lsi.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
-
                 tks.RangeKey |> Option.iter (fun rk -> lsi.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
-
                 lsi.Projection <- Projection(ProjectionType = ProjectionType.ALL)
                 ctr.LocalSecondaryIndexes.Add lsi
 

@@ -16,7 +16,6 @@ type ListPickler<'List, 'T when 'List :> seq<'T>>(ctor: seq<'T> -> 'List, nullV:
     override __.PickleType = PickleType.List
     override __.PicklerType = PicklerType.Value
     override __.DefaultValue = ctor [||]
-
     override __.PickleCoerced obj =
         match obj with
         | null -> Some <| AttributeValue(NULL = true)
@@ -26,7 +25,6 @@ type ListPickler<'List, 'T when 'List :> seq<'T>>(ctor: seq<'T> -> 'List, nullV:
             | Some av -> Some <| AttributeValue(L = rlist [| av |])
         | _ ->
             let rl = unbox<seq<'T>> obj |> Seq.choose tp.Pickle |> rlist
-
             if rl.Count = 0 then
                 None
             else
@@ -49,7 +47,6 @@ type BytesSetPickler() =
     override __.PickleType = PickleType.BytesSet
     override __.PicklerType = PicklerType.Value
     override __.DefaultValue = Set.empty
-
     override __.PickleCoerced obj =
         match obj with
         | null -> Some <| AttributeValue(NULL = true)
@@ -90,14 +87,12 @@ type NumSetPickler<'T when 'T: comparison>(tp: NumRepresentablePickler<'T>) =
     override __.DefaultValue = Set.empty
     override __.PickleType = PickleType.NumberSet
     override __.PicklerType = PicklerType.Value
-
     override __.PickleCoerced obj =
         match obj with
         | null -> Some <| AttributeValue(NULL = true)
         | :? 'T as t -> Some <| AttributeValue(NS = rlist [| tp.UnParse t |])
         | _ ->
             let rl = obj |> unbox<seq<'T>> |> Seq.map tp.UnParse |> rlist
-
             if rl.Count = 0 then
                 None
             else
@@ -120,14 +115,12 @@ type StringSetPickler<'T when 'T: comparison>(tp: StringRepresentablePickler<'T>
     override __.DefaultValue = Set.empty
     override __.PickleType = PickleType.StringSet
     override __.PicklerType = PicklerType.Value
-
     override __.PickleCoerced obj =
         match obj with
         | null -> AttributeValue(NULL = true) |> Some
         | :? 'T as t -> AttributeValue(SS = rlist [| tp.UnParse t |]) |> Some
         | _ ->
             let rl = obj |> unbox<seq<'T>> |> Seq.map tp.UnParse |> rlist
-
             if rl.Count = 0 then
                 None
             else
@@ -159,7 +152,6 @@ type MapPickler<'Value>(vp: Pickler<'Value>) =
     override __.PickleType = PickleType.Map
     override __.PicklerType = PicklerType.Value
     override __.DefaultValue = Map.empty
-
     override __.Pickle map =
         if isNull map then
             AttributeValue(NULL = true) |> Some

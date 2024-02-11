@@ -23,14 +23,12 @@ type RecordTemplate<'TRecord> internal () =
 
     let pickler = Pickler.resolve<'TRecord> () :?> RecordPickler<'TRecord>
     let recordInfo = RecordTableInfo.FromRecordPickler pickler
-
     let hkeyCond =
         ConditionalExpression.TryExtractHashKeyCondition recordInfo
         |> Option.map (fun cond -> new ConditionExpression<'TRecord>(cond))
 
     /// Key schema used by the current record
     member _.PrimaryKey = recordInfo.PrimaryKeySchema
-
     /// Global Secondary index key schemata
     member _.GlobalSecondaryIndices =
         recordInfo.Schemata.Schemata
@@ -38,7 +36,6 @@ type RecordTemplate<'TRecord> internal () =
             match ks.Type with
             | GlobalSecondaryIndex _ -> true
             | _ -> false)
-
     /// Local Secondary index key schemata
     member _.LocalSecondaryIndices =
         recordInfo.Schemata.Schemata

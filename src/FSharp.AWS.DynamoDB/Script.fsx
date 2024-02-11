@@ -16,12 +16,10 @@ open FSharp.AWS.DynamoDB.Scripting // non-Async overloads
 
 #if USE_CLOUD
 open Amazon.DynamoDBv2
-
 let ok, creds =
     Amazon.Runtime.CredentialManagement
         .CredentialProfileStoreChain()
         .TryGetAWSCredentials("default")
-
 let ddb =
     if ok then
         new AmazonDynamoDBClient(creds) :> IAmazonDynamoDB
@@ -105,14 +103,12 @@ for i = 1 to 1000 do
 
 // Real: 00:01:35.912, CPU: 00:00:01.921, GC gen0: 27, gen1: 3, gen2: 1
 let uexpr = table.Template.PrecomputeUpdateExpr <@ fun r -> { r with Value2 = Some 42 } @>
-
 for i = 1 to 1000 do
     let _ = table.UpdateItem(key, uexpr)
     ()
 
 // Real: 00:01:35.107, CPU: 00:00:02.078, GC gen0: 26, gen1: 2, gen2: 0
 let uexpr2 = table.Template.PrecomputeUpdateExpr <@ fun v r -> { r with Value2 = v } @>
-
 for i = 1 to 1000 do
     let _ = table.UpdateItem(key, uexpr2 (Some 42))
     ()
@@ -127,76 +123,69 @@ type internal CounterEntry =
 /// Represents a single Item in a Counters Table
 type Counter internal (table: TableContext<CounterEntry>, key: TableKey) =
 
-    static member internal Start(table: TableContext<CounterEntry>) =
-        async {
-            let initialEntry = { Id = Guid.NewGuid(); Value = 0L }
-            let! key = table.PutItemAsync(initialEntry)
-            return Counter(table, key)
-        }
+    static member internal Start(table: TableContext<CounterEntry>) = async {
+        let initialEntry = { Id = Guid.NewGuid(); Value = 0L }
+        let! key = table.PutItemAsync(initialEntry)
+        return Counter(table, key)
+    }
 
-    member _.Value =
-        async {
-            let! current = table.GetItemAsync(key)
-            return current.Value
-        }
+    member _.Value = async {
+        let! current = table.GetItemAsync(key)
+        return current.Value
+    }
 
-    member _.Incr() =
-        async {
-            let! updated = table.UpdateItemAsync(key, <@ fun (e: CounterEntry) -> { e with Value = e.Value + 1L } @>)
-            return updated.Value
-        }
+    member _.Incr() = async {
+        let! updated = table.UpdateItemAsync(key, <@ fun (e: CounterEntry) -> { e with Value = e.Value + 1L } @>)
+        return updated.Value
+    }
 
 /// Wrapper that creates/verifies the table only once per call to Create()
 /// This does assume that your application will be sufficiently privileged to create tables on the fly
 type EasyCounters private (table: TableContext<CounterEntry>) =
 
     // We only want to do the initialization bit once per instance of our application
-    static member Create(client: IAmazonDynamoDB, tableName: string) : Async<EasyCounters> =
-        async {
-            let table = TableContext<CounterEntry>(client, tableName)
-            // Create the table if necessary. Verifies schema is correct if it has already been created
-            // NOTE the hard coded initial throughput provisioning - arguably this belongs outside of your application logic
-            let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
-            let! _desc = table.VerifyOrCreateTableAsync(Throughput.Provisioned throughput)
-            return EasyCounters(table)
-        }
+    static member Create(client: IAmazonDynamoDB, tableName: string) : Async<EasyCounters> = async {
+        let table = TableContext<CounterEntry>(client, tableName)
+        // Create the table if necessary. Verifies schema is correct if it has already been created
+        // NOTE the hard coded initial throughput provisioning - arguably this belongs outside of your application logic
+        let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
+        let! _desc = table.VerifyOrCreateTableAsync(Throughput.Provisioned throughput)
+        return EasyCounters(table)
+    }
 
     member _.StartCounter() : Async<Counter> = Counter.Start table
 
 /// Variant of EasyCounters that splits the provisioning step from the (optional) validation that the table is present
 type SimpleCounters private (table: TableContext<CounterEntry>) =
 
-    static member Provision(client: IAmazonDynamoDB, tableName: string, readCapacityUnits, writeCapacityUnits) =
-        async {
-            let table = TableContext<CounterEntry>(client, tableName)
-            let provisionedThroughput = ProvisionedThroughput(readCapacityUnits, writeCapacityUnits)
-            let throughput = Throughput.Provisioned provisionedThroughput
-            // normally, RCU/WCU provisioning only happens first time the Table is created and is then considered an external concern
-            // here we use `UpdateTableIfRequiredAsync` to reset it each time we deploy the app
-            let! desc = table.VerifyOrCreateTableAsync(throughput)
-            return! table.UpdateTableIfRequiredAsync(throughput, currentTableDescription = desc)
-        }
+    static member Provision(client: IAmazonDynamoDB, tableName: string, readCapacityUnits, writeCapacityUnits) = async {
+        let table = TableContext<CounterEntry>(client, tableName)
+        let provisionedThroughput = ProvisionedThroughput(readCapacityUnits, writeCapacityUnits)
+        let throughput = Throughput.Provisioned provisionedThroughput
+        // normally, RCU/WCU provisioning only happens first time the Table is created and is then considered an external concern
+        // here we use `UpdateTableIfRequiredAsync` to reset it each time we deploy the app
+        let! desc = table.VerifyOrCreateTableAsync(throughput)
+        return! table.UpdateTableIfRequiredAsync(throughput, currentTableDescription = desc)
+    }
 
-    static member ProvisionOnDemand(client: IAmazonDynamoDB, tableName: string) =
-        async {
-            let table = TableContext<CounterEntry>(client, tableName)
-            let throughput = Throughput.OnDemand
-            let! desc = table.VerifyOrCreateTableAsync(throughput)
-            // as per the Provision, above, we reset to OnDemand, if it got reconfigured since it was originally created
-            return! table.UpdateTableIfRequiredAsync(throughput, currentTableDescription = desc)
-        }
+    static member ProvisionOnDemand(client: IAmazonDynamoDB, tableName: string) = async {
+        let table = TableContext<CounterEntry>(client, tableName)
+        let throughput = Throughput.OnDemand
+        let! desc = table.VerifyOrCreateTableAsync(throughput)
+        // as per the Provision, above, we reset to OnDemand, if it got reconfigured since it was originally created
+        return! table.UpdateTableIfRequiredAsync(throughput, currentTableDescription = desc)
+    }
 
     /// We only want to do the initialization bit once per instance of our application
     /// Similar to EasyCounters.Create in that it ensures the table is provisioned correctly
     /// However it will never actually create the table
-    static member CreateWithVerify(client: IAmazonDynamoDB, tableName: string) : Async<SimpleCounters> =
-        async {
-            let table = TableContext<CounterEntry>(client, tableName)
-            // This validates the Table has been created correctly
-            // (in general this is a good idea, but it is an optional step so it can be skipped, i.e. see Create() below)
-            do! table.VerifyTableAsync()
-            return SimpleCounters(table)
-        }
+    static member CreateWithVerify(client: IAmazonDynamoDB, tableName: string) : Async<SimpleCounters> = async {
+        let table = TableContext<CounterEntry>(client, tableName)
+        // This validates the Table has been created correctly
+        // (in general this is a good idea, but it is an optional step so it can be skipped, i.e. see Create() below)
+        do! table.VerifyTableAsync()
+        return SimpleCounters(table)
+    }
 
     /// Assumes the table has been provisioned externally via Provision()
     static member Create(client: IAmazonDynamoDB, tableName: string) : SimpleCounters =
@@ -206,7 +195,6 @@ type SimpleCounters private (table: TableContext<CounterEntry>) =
     member _.StartCounter() : Async<Counter> = Counter.Start table
 
 let e = EasyCounters.Create(ddb, "testing") |> Async.RunSynchronously
-
 let e1 = e.StartCounter() |> Async.RunSynchronously
 let e2 = e.StartCounter() |> Async.RunSynchronously
 e1.Incr() |> Async.RunSynchronously
@@ -225,7 +213,6 @@ s1.Incr() |> Async.RunSynchronously
 
 // Alternately, we can have the app do an extra call (and have some asynchronous initialization work) to check the table is ready
 let v = SimpleCounters.CreateWithVerify(ddb, "testing-not-present") |> Async.RunSynchronously // Throws, as table not present
-
 let v2 = v.StartCounter() |> Async.RunSynchronously
 v2.Incr() |> Async.RunSynchronously
 

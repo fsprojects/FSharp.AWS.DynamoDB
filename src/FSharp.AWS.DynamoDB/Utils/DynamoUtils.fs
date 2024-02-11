@@ -20,7 +20,6 @@ type AttributeValueComparer() =
         else
             let mutable areEqual = true
             let mutable i = 0
-
             while areEqual && i < ra.Count do
                 areEqual <- ra.[i] = ra'.[i]
                 i <- i + 1
@@ -53,16 +52,13 @@ type AttributeValueComparer() =
                |> Seq.forall (fun kv ->
                    let ok, found = av'.M.TryGetValue kv.Key
                    if ok then areEqualAttributeValues kv.Value found else false)
-
         else
             true
 
     static let getSeqHash (eh: 'T -> int) (ts: seq<'T>) =
         let mutable h = 13
-
         for t in ts do
             h <- combineHash h (eh t)
-
         h
 
     static let rec getAttributeValueHashCode (av: AttributeValue) =
@@ -100,7 +96,6 @@ type AttributeValueComparer() =
 [<Struct; CustomEquality; NoComparison>]
 type AttributeValueEqWrapper(av: AttributeValue) =
     member __.AttributeValue = av
-
     override __.Equals(o) =
         match o with
         | :? AttributeValueEqWrapper as av' -> AttributeValueComparer.Equals(av, av')
@@ -134,20 +129,16 @@ type AttributeValue with
             sprintf "{ SN = %A }" (Seq.toArray av.NS)
         elif av.BS.Count > 0 then
             av.BS |> Seq.map (fun bs -> bs.ToArray()) |> Seq.toArray |> sprintf "{ BS = %A }"
-
         elif av.IsLSet then
             av.L |> Seq.map (fun av -> av.Print()) |> Seq.toArray |> sprintf "{ L = %A }"
-
         elif av.IsMSet then
             av.M |> Seq.map (fun kv -> (kv.Key, kv.Value.Print())) |> Seq.toArray |> sprintf "{ M = %A }"
-
         else
             "{ }"
 
 // DynamoDB Name limitations, see:
 // http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Limits.html
 let private tableNameRegex = Regex("^[\w\-_\.]*$", RegexOptions.Compiled)
-
 let isValidTableName (tableName: string) =
     if tableName.Length < 3 || tableName.Length > 255 then false
     elif not <| tableNameRegex.IsMatch tableName then false

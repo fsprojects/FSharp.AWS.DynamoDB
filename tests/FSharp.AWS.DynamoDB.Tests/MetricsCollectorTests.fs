@@ -27,7 +27,6 @@ type MetricsRecord =
       LocalAttribute: int }
 
 let rand = let r = Random.Shared in fun () -> r.Next() |> int64
-
 let mkItem (hk: string) (gshk: string) (i: int) : MetricsRecord =
     { HashKey = hk
       RangeKey = i
@@ -59,24 +58,22 @@ type Tests(fixture: TableFixture) =
     let sut = rawTable.WithMetricsCollector(collector.Collect)
 
     [<Fact>]
-    let ``Collect Metrics on TryGetItem`` () =
-        async {
-            let! result =
-                let nonExistentHk = guid ()
-                sut.TryGetItemAsync(key = TableKey.Combined(nonExistentHk, 0))
+    let ``Collect Metrics on TryGetItem`` () = async {
+        let! result =
+            let nonExistentHk = guid ()
+            sut.TryGetItemAsync(key = TableKey.Combined(nonExistentHk, 0))
+        None =! result
 
-            None =! result
-
-            test
-                <@
-                    match collector.Metrics with
-                    | [ { ItemCount = 0
-                          Operation = GetItem
-                          TableName = ExpectedTableName
-                          ConsumedCapacity = TotalCu cu } ] -> cu > 0
-                    | _ -> false
-                @>
-        }
+        test
+            <@
+                match collector.Metrics with
+                | [ { ItemCount = 0
+                      Operation = GetItem
+                      TableName = ExpectedTableName
+                      ConsumedCapacity = TotalCu cu } ] -> cu > 0
+                | _ -> false
+            @>
+    }
 
     [<Fact>]
     let ``Collect Metrics on PutItem`` () =
@@ -96,61 +93,55 @@ type Tests(fixture: TableFixture) =
     let compile = rawTable.Template.PrecomputeConditionalExpr
 
     [<Fact>]
-    let ``Collect Metrics on Transactional PutItem`` () =
-        async {
-            let item = mkItem (guid ()) (guid ()) 0
-            let _ = sut.PutItem item
-
-            let simpleCu =
-                trap
-                    <@
-                        match collector.Metrics with
-                        | [ { ConsumedCapacity = TotalCu cu } ] -> cu
-                        | x -> failwithf "Unexpected %A" x
-                    @>
-
-            collector.Clear()
-
-            let item = mkItem (guid ()) (guid ()) 0
-            let requests = [ TransactWrite.Put(item, Some(compile <@ fun t -> NOT_EXISTS t.RangeKey @>)) ]
-
-            do! sut.TransactWriteItems requests
-
-            test
+    let ``Collect Metrics on Transactional PutItem`` () = async {
+        let item = mkItem (guid ()) (guid ()) 0
+        let _ = sut.PutItem item
+        let simpleCu =
+            trap
                 <@
                     match collector.Metrics with
-                    | [ { ItemCount = 1
-                          Operation = TransactWriteItems
-                          TableName = ExpectedTableName
-                          ConsumedCapacity = TotalCu cu } ] -> cu >= simpleCu * 2. // doing it transactionally costs at least double
-                    | _ -> false
+                    | [ { ConsumedCapacity = TotalCu cu } ] -> cu
+                    | x -> failwithf "Unexpected %A" x
                 @>
+        collector.Clear()
 
-            let! itemFound = sut.ContainsKeyAsync(sut.Template.ExtractKey item)
-            test <@ itemFound @>
-        }
+        let item = mkItem (guid ()) (guid ()) 0
+        let requests = [ TransactWrite.Put(item, Some(compile <@ fun t -> NOT_EXISTS t.RangeKey @>)) ]
+
+        do! sut.TransactWriteItems requests
+
+        test
+            <@
+                match collector.Metrics with
+                | [ { ItemCount = 1
+                      Operation = TransactWriteItems
+                      TableName = ExpectedTableName
+                      ConsumedCapacity = TotalCu cu } ] -> cu >= simpleCu * 2. // doing it transactionally costs at least double
+                | _ -> false
+            @>
+
+        let! itemFound = sut.ContainsKeyAsync(sut.Template.ExtractKey item)
+        test <@ itemFound @>
+    }
 
     [<Fact>]
-    let ``No Metrics on Canceled PutItem`` () =
-        async {
-            let collector = TestCollector()
-            let sut = rawTable.WithMetricsCollector(collector.Collect)
+    let ``No Metrics on Canceled PutItem`` () = async {
+        let collector = TestCollector()
+        let sut = rawTable.WithMetricsCollector(collector.Collect)
 
-            let item = mkItem (guid ()) (guid ()) 0
+        let item = mkItem (guid ()) (guid ()) 0
 
-            // The check will fail, which triggers a throw from the underlying AWS SDK; there's no way to extract the consumption info in that case
-            let requests = [ TransactWrite.Put(item, Some(compile <@ fun t -> EXISTS t.RangeKey @>)) ]
+        // The check will fail, which triggers a throw from the underlying AWS SDK; there's no way to extract the consumption info in that case
+        let requests = [ TransactWrite.Put(item, Some(compile <@ fun t -> EXISTS t.RangeKey @>)) ]
 
-            let mutable failed = false
-
-            try
-                do! sut.TransactWriteItems requests
-            with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed ->
-                failed <- true
-
-            true =! failed
-            [] =! collector.Metrics
-        }
+        let mutable failed = false
+        try
+            do! sut.TransactWriteItems requests
+        with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed ->
+            failed <- true
+        true =! failed
+        [] =! collector.Metrics
+    }
 
     interface IClassFixture<TableFixture>
 
@@ -235,7 +226,6 @@ type BulkMutationTests(fixture: TableFixture) =
     let items =
         let hk, gsk = guid (), guid ()
         [| for i in 0..24 -> mkItem hk gsk i |]
-
     do
         for item in items do
             rawTable.PutItem item |> ignore
@@ -281,11 +271,9 @@ type ManyReadOnlyItemsFixture() =
     let table = base.CreateEmpty<MetricsRecord>()
 
     let hk = guid ()
-
     do
         let gsk = guid ()
         let items = [| for i in 0..99 -> mkItem hk gsk i |]
-
         for item in items do
             table.PutItem item |> ignore
 

@@ -73,7 +73,6 @@ type ``Update Expression Tests``(fixture: TableFixture) =
 
     let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
     let bytes () = Guid.NewGuid().ToByteArray()
-
     let mkItem () =
         { HashKey = guid ()
           RangeKey = guid ()
@@ -103,7 +102,6 @@ type ``Update Expression Tests``(fixture: TableFixture) =
     let ``Attempt to update HashKey`` () =
         let item = mkItem ()
         let key = table.PutItem item
-
         fun () -> table.UpdateItem(key, <@ fun (r: R) -> { r with HashKey = guid () } @>)
         |> shouldFailwith<_, ArgumentException>
 
@@ -111,7 +109,6 @@ type ``Update Expression Tests``(fixture: TableFixture) =
     let ``Attempt to update RangeKey`` () =
         let item = mkItem ()
         let key = table.PutItem item
-
         fun () -> table.UpdateItem(key, <@ fun (r: R) -> { r with RangeKey = guid () } @>)
         |> shouldFailwith<_, ArgumentException>
 
@@ -357,7 +354,6 @@ type ``Update Expression Tests``(fixture: TableFixture) =
     let ``Combined update with successful precondition`` () =
         let item = mkItem ()
         let key = table.PutItem item
-
         let item' =
             table.UpdateItem(key, <@ fun (r: R) -> { r with Value = r.Value + 1L } @>, precondition = <@ fun r -> r.Value = item.Value @>)
 
@@ -367,7 +363,6 @@ type ``Update Expression Tests``(fixture: TableFixture) =
     let ``Combined update with failed precondition`` () =
         let item = mkItem ()
         let key = table.PutItem item
-
         fun () ->
             table.UpdateItem(
                 key,
@@ -384,7 +379,6 @@ type ``Update Expression Tests``(fixture: TableFixture) =
     let ``SET an attribute`` () =
         let item = mkItem ()
         let key = table.PutItem item
-
         let item' =
             table.UpdateItem(
                 key,
@@ -433,7 +427,6 @@ type ``Update Expression Tests``(fixture: TableFixture) =
     let ``Detect overlapping paths`` () =
         let item = mkItem ()
         let key = table.PutItem item
-
         fun () -> table.UpdateItem(key, <@ fun r -> SET r.NestedList[0].NV "foo" &&& REMOVE r.NestedList @>)
 
         |> shouldFailwith<_, ArgumentException>
@@ -461,7 +454,6 @@ type ``Update Expression Tests``(fixture: TableFixture) =
         let v2 = [ for _ in 1..10 -> rand () ]
         let result = table.UpdateItem(key, cond v1 v2)
         test <@ v1 = result.Value @>
-
         for v in v2 do
             test <@ result.IntSet.Contains v @>
 
@@ -481,14 +473,12 @@ type ``Update Expression Tests``(fixture: TableFixture) =
         let cond = table.Template.PrecomputeUpdateExpr <@ fun vs r -> SET r.List vs &&& ADD r.IntSet vs @>
         let result = table.UpdateItem(key, cond values)
         test <@ values = result.List @>
-
         for v in values do
             test <@ result.IntSet.Contains v @>
 
     [<Fact>]
     let ``Parametric Updater with invalid param usage`` () =
         let template = table.Template
-
         fun () -> template.PrecomputeUpdateExpr <@ fun v (r: R) -> { r with Value = List.head v } @>
         |> shouldFailwith<_, ArgumentException>
 

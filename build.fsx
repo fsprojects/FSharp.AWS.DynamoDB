@@ -67,7 +67,6 @@ let exec cmd args dir =
     let proc =
         CreateProcess.fromRawCommandLine cmd args
         |> CreateProcess.ensureExitCodeWithMessage (sprintf "Error while running '%s' with args: %s" cmd args)
-
     (if isNullOrWhiteSpace dir then
          proc
      else
@@ -165,7 +164,6 @@ Target.create "ReleaseGitHub" (fun _ ->
     Git.Commit.exec "" (sprintf "Bump version to %s" release.NugetVersion)
     Git.Branches.pushBranch "" remote (Git.Information.getBranchName "")
 
-
     Git.Branches.tag "" release.NugetVersion
     Git.Branches.pushTag "" remote release.NugetVersion
 
@@ -176,14 +174,12 @@ Target.create "ReleaseGitHub" (fun _ ->
             | _ -> failwith "please set the GITHUB_TOKEN environment variable to a github personal access token with repo access."
 
         GitHub.createClientWithToken token
-
     let files = !!(nugetDir </> "*.nupkg")
 
     // release on github
     let cl =
         client
         |> GitHub.draftNewRelease gitOwner gitName release.NugetVersion (release.SemVer.PreRelease <> None) release.Notes
-
     (cl, files)
     ||> Seq.fold (fun acc e -> acc |> GitHub.uploadFile e)
     |> GitHub.publishDraft
@@ -194,12 +190,10 @@ Target.create "Push" (fun _ ->
         match getBuildParam "NUGET_KEY" with
         | s when not (isNullOrWhiteSpace s) -> s
         | _ -> UserInput.getUserPassword "NuGet Key: "
-
     let pushParams =
         { NuGet.NuGet.NuGetPushParams.Create() with
             ApiKey = Some key
             Source = Some "https://api.nuget.org/v3/index.json" }
-
     DotNet.nugetPush (fun o -> o.WithPushParams pushParams) (sprintf "%s**.*.nupkg" nugetDir))
 
 // --------------------------------------------------------------------------------------

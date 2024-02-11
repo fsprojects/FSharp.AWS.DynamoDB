@@ -94,15 +94,14 @@ and UpdateExpression =
         | [| expr |] -> expr
         | _ ->
 
-            let uops = exprs |> Array.collect (fun e -> e.UpdateOps.UpdateOps)
+        let uops = exprs |> Array.collect (fun e -> e.UpdateOps.UpdateOps)
+        match uops |> Seq.map (fun o -> o.Attribute) |> tryFindConflictingPaths with
+        | None -> ()
+        | Some(p1, p2) ->
+            let msg = sprintf "found conflicting paths '%s' and '%s' being accessed in update expression." p1 p2
+            invalidArg "expr" msg
 
-            match uops |> Seq.map (fun o -> o.Attribute) |> tryFindConflictingPaths with
-            | None -> ()
-            | Some(p1, p2) ->
-                let msg = sprintf "found conflicting paths '%s' and '%s' being accessed in update expression." p1 p2
-                invalidArg "expr" msg
-
-            new UpdateExpression<'TRecord>({ UpdateOps = uops; NParams = 0 })
+        new UpdateExpression<'TRecord>({ UpdateOps = uops; NParams = 0 })
 
 /// Represents a projection expression for a given record type
 [<Sealed; AutoSerializable(false)>]

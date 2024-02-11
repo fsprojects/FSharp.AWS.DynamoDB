@@ -46,11 +46,9 @@ type LocalSecondaryIndexAttribute private (indexName: string option) =
 [<Sealed; AttributeUsage(AttributeTargets.Class, AllowMultiple = false)>]
 type ConstantHashKeyAttribute(name: string, hashkey: obj) =
     inherit Attribute()
-
     do
         if isNull name then
             raise <| ArgumentNullException("name")
-
         if isNull hashkey then
             raise <| ArgumentNullException("hashkey")
 
@@ -63,11 +61,9 @@ type ConstantHashKeyAttribute(name: string, hashkey: obj) =
 [<Sealed; AttributeUsage(AttributeTargets.Class, AllowMultiple = false)>]
 type ConstantRangeKeyAttribute(name: string, rangeKey: obj) =
     inherit Attribute()
-
     do
         if isNull name then
             raise <| ArgumentNullException("name")
-
         if isNull rangeKey then
             raise <| ArgumentNullException("rangeKey")
 
@@ -85,11 +81,9 @@ type StringRepresentationAttribute() =
 [<AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
 type CustomNameAttribute(name: string) =
     inherit Attribute()
-
     do
         if isNull name then
             raise <| ArgumentNullException("name")
-
     member _.Name = name
 
 /// Specifies that record deserialization should fail if not corresponding attribute
@@ -148,7 +142,6 @@ type TableKey private (hashKey: obj, rangeKey: obj) =
     member _.RangeKey = rangeKey
     member _.IsRangeKeySpecified = notNull rangeKey
     member _.IsHashKeySpecified = notNull hashKey
-
     member private _.Format =
         match rangeKey with
         | null -> sprintf "{ HashKey = %A }" hashKey
@@ -170,21 +163,18 @@ type TableKey private (hashKey: obj, rangeKey: obj) =
     static member Hash<'HashKey>(hashKey: 'HashKey) =
         if isNull hashKey then
             raise <| ArgumentNullException("hashKey")
-
         TableKey(hashKey, null)
 
     /// Defines a table key using provided RangeKey
     static member Range<'RangeKey>(rangeKey: 'RangeKey) =
         if isNull rangeKey then
             raise <| ArgumentNullException("rangeKey")
-
         TableKey(null, rangeKey)
 
     /// Defines a table key using combined HashKey and RangeKey
     static member Combined<'HashKey, 'RangeKey>(hashKey: 'HashKey, rangeKey: 'RangeKey) =
         if isNull hashKey then
             raise <| ArgumentNullException("hashKey")
-
         TableKey(hashKey, rangeKey)
 
 /// Query (start/last evaluated) key identifier
@@ -194,7 +184,6 @@ type IndexKey private (hashKey: obj, rangeKey: obj, primaryKey: TableKey) =
     member _.RangeKey = rangeKey
     member _.IsRangeKeySpecified = notNull rangeKey
     member _.PrimaryKey = primaryKey
-
     member private _.Format =
         match (hashKey, rangeKey) with
         | null, null -> sprintf "{ Primary = %A }" primaryKey
@@ -214,14 +203,12 @@ type IndexKey private (hashKey: obj, rangeKey: obj, primaryKey: TableKey) =
     static member Hash<'HashKey>(hashKey: 'HashKey, primaryKey: TableKey) =
         if isNull hashKey then
             raise <| ArgumentNullException("hashKey")
-
         IndexKey(hashKey, null, primaryKey)
 
     /// Defines an index key using combined HashKey, RangeKey and primary TableKey
     static member Combined<'HashKey, 'RangeKey>(hashKey: 'HashKey, rangeKey: 'RangeKey, primaryKey: TableKey) =
         if isNull hashKey then
             raise <| ArgumentNullException("hashKey")
-
         IndexKey(hashKey, rangeKey, primaryKey)
 
     // Defines an index key using just the primary TableKey
@@ -234,7 +221,6 @@ type PaginatedResult<'TRecord, 'Key> =
 
     interface System.Collections.IEnumerable with
         member x.GetEnumerator() = x.Records.GetEnumerator()
-
     interface System.Collections.Generic.IEnumerable<'TRecord> with
         member x.GetEnumerator() = (x.Records :> System.Collections.Generic.IEnumerable<'TRecord>).GetEnumerator()
 

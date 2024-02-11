@@ -33,7 +33,6 @@ type StringPickler() =
     override _.IsComparable = true
 
     override _.DefaultValue = null
-
     override _.Pickle s =
         if isNull s then
             AttributeValue(NULL = true)
@@ -59,7 +58,6 @@ type CharPickler() =
 
     override _.DefaultValue = char 0
     override _.Pickle c = AttributeValue(string c) |> Some
-
     override _.UnPickle a = if not <| isNull a.S then Char.Parse(a.S) else invalidCast a
 
     override _.Parse s = Char.Parse s
@@ -90,7 +88,6 @@ let inline mkNumericalPickler< ^N
                 match o with
                 | :? ^N as n -> n
                 | other -> string other |> parseNum
-
             x.Pickle n }
 
 type DoublePickler() =
@@ -114,7 +111,6 @@ type DoublePickler() =
             match o with
             | :? double as n -> n
             | other -> string other |> parse
-
         x.Pickle n
 
 type ByteArrayPickler() =
@@ -127,7 +123,6 @@ type ByteArrayPickler() =
     override _.UnParse b = Convert.ToBase64String b
 
     override _.DefaultValue = [||]
-
     override _.Pickle bs =
         if isNull bs then Some <| AttributeValue(NULL = true)
         elif bs.Length = 0 then None
@@ -145,7 +140,6 @@ type MemoryStreamPickler() =
     override _.PicklerType = PicklerType.Value
 
     override _.DefaultValue = null
-
     override _.Pickle m =
         if isNull m then Some <| AttributeValue(NULL = true)
         elif m.Length = 0L then None
@@ -197,7 +191,6 @@ type TimeSpanPickler() =
     override _.UnParse t = string t.Ticks
     override _.DefaultValue = TimeSpan.Zero
     override _.Pickle t = AttributeValue(N = string t.Ticks) |> Some
-
     override _.UnPickle a =
         if not <| isNull a.N then
             TimeSpan.FromTicks(int64 a.N)
@@ -212,7 +205,6 @@ type EnumerationPickler<'E, 'U when 'E: enum<'U> and 'E: struct and 'E :> ValueT
 
     override _.DefaultValue = Unchecked.defaultof<'E>
     override _.Pickle e = AttributeValue(S = e.ToString()) |> Some
-
     override _.UnPickle a =
         if notNull a.S then
             Enum.Parse(typeof<'E>, a.S) :?> 'E
@@ -228,13 +220,11 @@ type NullablePickler<'T when 'T: (new: unit -> 'T) and 'T :> ValueType and 'T: s
     override _.PicklerType = PicklerType.Wrapper
     override _.IsComparable = tp.IsComparable
     override _.DefaultValue = Nullable<'T>()
-
     override _.Pickle n =
         if n.HasValue then
             tp.Pickle n.Value
         else
             AttributeValue(NULL = true) |> Some
-
     override _.UnPickle a =
         if a.NULL then
             Nullable<'T>()
@@ -247,14 +237,11 @@ type OptionPickler<'T>(tp: Pickler<'T>) =
     override _.PicklerType = PicklerType.Wrapper
     override _.IsComparable = tp.IsComparable
     override _.DefaultValue = None
-
     override _.Pickle topt =
         match topt with
         | None -> None
         | Some t -> tp.Pickle t
-
     override _.UnPickle a = if a.NULL then None else Some(tp.UnPickle a)
-
     override x.PickleCoerced obj =
         match obj with
         | :? 'T as t -> tp.Pickle t
@@ -288,7 +275,6 @@ type SerializerAttributePickler<'T>(serializer: IPropertySerializer, resolver: I
 
     override _.PickleType = picklePickler.PickleType
     override _.PicklerType = PicklerType.Serialized
-
     override _.DefaultValue = raise <| NotSupportedException("Default values not supported in serialized types.")
 
     override _.Pickle value =

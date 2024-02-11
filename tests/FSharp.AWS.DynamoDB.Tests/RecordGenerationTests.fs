@@ -18,15 +18,12 @@ module ``Record Generation Tests`` =
             let tolerateInequality = defaultArg tolerateInequality false
             let mutable isFoundInequality = false
             let rt = RecordTemplate.Define<'Record>()
-
             let roundTrip (r: 'Record) =
                 try
                     let r' = rt.ToAttributeValues r |> rt.OfAttributeValues
-
                     if tolerateInequality then
                         if not isFoundInequality && r <> r' then
                             isFoundInequality <- true
-
                             sprintf "Error when equality testing %O:\nExpected: %A\nActual: %A" typeof<'Record> r r'
                             |> Console.WriteLine
                     else
@@ -46,11 +43,9 @@ module ``Record Generation Tests`` =
     type ``S Record`` =
         { [<HashKey>]
           A1: string }
-
     type ``N Record`` =
         { [<HashKey>]
           A1: uint16 }
-
     type ``B Record`` =
         { [<HashKey>]
           A1: byte[] }
@@ -60,19 +55,16 @@ module ``Record Generation Tests`` =
           A1: string
           [<RangeKey>]
           B1: int64 }
-
     type ``NB Record`` =
         { [<HashKey>]
           A1: uint16
           [<RangeKey>]
           B1: byte[] }
-
     type ``BS Record`` =
         { [<HashKey>]
           A1: byte[]
           [<RangeKey>]
           B1: string }
-
     type ``SS Record`` =
         { [<HashKey>]
           A1: string
@@ -354,7 +346,6 @@ module ``Record Generation Tests`` =
     [<Fact>]
     let ``Generated picklers should be singletons`` () =
         let actual = Array.Parallel.init 100 (fun _ -> Pickler.resolve<FooRecord> ()) |> Seq.distinct |> Seq.length
-
         test <@ 1 = actual @>
 
 
@@ -423,7 +414,6 @@ module ``Record Generation Tests`` =
         test <@ 1 = template.GlobalSecondaryIndices.Length @>
         let gsi = template.GlobalSecondaryIndices[0]
         test <@ None = gsi.RangeKey @>
-
         test
             <@
                 match gsi.Type with
@@ -437,14 +427,12 @@ module ``Record Generation Tests`` =
         let template = RecordTemplate.Define<GSI2>()
         test <@ 1 = template.GlobalSecondaryIndices.Length @>
         let gsi = template.GlobalSecondaryIndices[0]
-
         test
             <@
                 match gsi.RangeKey with
                 | Some ks -> ks.AttributeName = "SR"
                 | None -> false
             @>
-
         test
             <@
                 match gsi.Type with
@@ -468,7 +456,6 @@ module ``Record Generation Tests`` =
         test <@ 1 = template.GlobalSecondaryIndices.Length @>
         let gsi = template.GlobalSecondaryIndices[0]
         test <@ None = gsi.RangeKey @>
-
         test
             <@
                 match gsi.Type with
@@ -484,14 +471,12 @@ module ``Record Generation Tests`` =
     [<Fact>]
     let ``Inverse GSI should be permitted`` () =
         let template = RecordTemplate.Define<InverseGSI>()
-
         test
             <@
                 match template.PrimaryKey.RangeKey with
                 | Some k -> k.AttributeName = "RangeKey"
                 | None -> false
             @>
-
         test
             <@
                 match template.GlobalSecondaryIndices[0].RangeKey with
@@ -502,21 +487,18 @@ module ``Record Generation Tests`` =
     [<Fact>]
     let ``Shared GSI Range Keys should be permitted`` () =
         let template = RecordTemplate.Define<SameRangeKeyGSI>()
-
         test
             <@
                 match template.GlobalSecondaryIndices[0].RangeKey with
                 | Some k -> k.AttributeName = "GSIRange"
                 | None -> false
             @>
-
         test
             <@
                 match template.GlobalSecondaryIndices[1].RangeKey with
                 | Some k -> k.AttributeName = "GSIRange"
                 | None -> false
             @>
-
         test <@ template.GlobalSecondaryIndices[0].RangeKey = template.GlobalSecondaryIndices[1].RangeKey @>
 
     type LSI1 =
@@ -547,7 +529,6 @@ module ``Record Generation Tests`` =
         test <@ 1 = template.LocalSecondaryIndices.Length @>
         let lsi = template.LocalSecondaryIndices[0]
         test <@ template.PrimaryKey.HashKey = lsi.HashKey @>
-
         test
             <@
                 match lsi.RangeKey with
@@ -566,7 +547,6 @@ module ``Record Generation Tests`` =
         test <@ 1 = template.LocalSecondaryIndices.Length @>
         let lsi = template.LocalSecondaryIndices[0]
         test <@ template.PrimaryKey.HashKey = lsi.HashKey @>
-
         test
             <@
                 match lsi.RangeKey with
@@ -585,13 +565,11 @@ module ``Record Generation Tests`` =
     let ``DateTimeOffset pickler encoding should preserve offsets`` () =
         let config = { Config.QuickThrowOnFailure with MaxTest = 1000 }
         let pickler = DateTimeOffsetPickler()
-
         Check.One(
             config,
             fun (d: DateTimeOffset) ->
                 let d' = pickler.UnParse d |> pickler.Parse
                 let expectedDateTime, expectedOffset = d.DateTime, d.Offset
                 let actualDateTime, actualOffset = d'.DateTime, d'.Offset
-
                 test <@ expectedDateTime = actualDateTime && expectedOffset = actualOffset @>
         )
