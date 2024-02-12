@@ -212,6 +212,11 @@ type RequestMetrics =
       ConsumedCapacity: ConsumedCapacity list
       ItemCount: int }
 
+type StreamRecord<'TRecord> =
+    | Insert of 'TRecord
+    | Modify of {| Old: 'TRecord; New : 'TRecord |}
+    | Remove of 'TRecord
+
 /// Scan/query limit type (internal only)
 type private LimitType =
     | All
@@ -2096,3 +2101,14 @@ module Scripting =
         member t.UpdateProvisionedThroughput(provisionedThroughput: ProvisionedThroughput) : unit =
             let spec = Throughput.Provisioned provisionedThroughput
             t.UpdateTableIfRequiredAsync(spec) |> Async.Ignore |> Async.RunSynchronously
+
+
+        member t.ParseStreamRecord(record : Record) : StreamRecord<'TRecord> =
+            match record.EventName with
+                | n when n = OperationType.INSERT -> 
+                    Insert (t.Template.OfAttributeValues record.Dynamodb.NewImage)
+                | n when n = OperationType.MODIFY -> 
+                    Modify {| New = t.Template.OfAttributeValues record.Dynamodb.NewImage; Old = t.Template.OfAttributeValues record.Dynamodb.NewImage |}
+                | n when n = OperationType.REMOVE -> 
+                    Remove (t.Template.OfAttributeValues record.Dynamodb.OldImage)
+                | n -> failwithf "Unexpected OperationType %s" n.Value
