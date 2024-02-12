@@ -1,16 +1,12 @@
 ﻿[<AutoOpen>]
 module internal FSharp.AWS.DynamoDB.UnionPickler
 
-open System
-open System.Text.RegularExpressions
-open System.Collections
 open System.Collections.Generic
 open System.IO
 open System.Reflection
 
 open Microsoft.FSharp.Reflection
 
-open Amazon.Util
 open Amazon.DynamoDBv2.Model
 
 open FSharp.AWS.DynamoDB
@@ -19,27 +15,22 @@ open FSharp.AWS.DynamoDB
 //  Pickler implementation for F# Union types
 //
 
-type private UnionCaseData = 
-    { 
-        UCI : UnionCaseInfo
-        CaseCtor : MethodInfo
-        Properties : PropertyMetadata []
-    }
+type private UnionCaseData = { UCI: UnionCaseInfo; CaseCtor: MethodInfo; Properties: PropertyMetadata[] }
 
-type UnionPickler<'U>(resolver : IPicklerResolver) =
+type UnionPickler<'U>(resolver: IPicklerResolver) =
     inherit Pickler<'U>()
-    
+
     let caseAttr = "Union_Case"
     let ucis = FSharpType.GetUnionCases(typeof<'U>, true)
     let tagReader = FSharpValue.PreComputeUnionTagReader(typeof<'U>, true)
     let mkUCD uci =
         let ctor = FSharpValue.PreComputeUnionConstructorInfo(uci, true)
         let props = uci.GetFields() |> Array.mapi (PropertyMetadata.FromPropertyInfo resolver)
-        { UCI = uci ; CaseCtor = ctor ; Properties = props }
-    
+        { UCI = uci; CaseCtor = ctor; Properties = props }
+
     let cases = ucis |> Array.map mkUCD
 
-    member __.OfUnion (union : 'U) : RestObject =
+    member __.OfUnion(union: 'U) : RestObject =
         let values = new RestObject()
         let tag = tagReader union
         let case = cases.[tag]
@@ -48,23 +39,23 @@ type UnionPickler<'U>(resolver : IPicklerResolver) =
             let field = prop.PropertyInfo.GetValue union
             match prop.Pickler.PickleUntyped field with
             | None -> ()
-            | Some av -> values.Add(prop.Name, av)            
+            | Some av -> values.Add(prop.Name, av)
 
         values
 
-    member __.ToUnion (ro : RestObject) : 'U =
+    member __.ToUnion(ro: RestObject) : 'U =
         let notFound name = raise <| new KeyNotFoundException(sprintf "attribute %A not found." name)
         let tag =
             let ok, av = ro.TryGetValue caseAttr
             if ok then
-                match av.S with 
+                match av.S with
                 | null -> invalidCast av
                 | tag -> tag
             else
                 notFound caseAttr
 
         match cases |> Array.tryFind (fun c -> c.UCI.Name = tag) with
-        | None -> 
+        | None ->
             let msg = sprintf "union case name %A does not correspond to type '%O'." tag typeof<'U>
             raise <| new InvalidDataException(msg)
 
@@ -83,10 +74,8 @@ type UnionPickler<'U>(resolver : IPicklerResolver) =
     override __.PickleType = PickleType.Map
     override __.DefaultValue = invalidOp <| sprintf "default values not supported for unions."
 
-    override __.Pickle (union : 'U) =
-        let ro = __.OfUnion union 
+    override __.Pickle(union: 'U) =
+        let ro = __.OfUnion union
         Some <| AttributeValue(M = ro)
 
-    override __.UnPickle a =
-        if a.IsMSet then __.ToUnion a.M
-        else invalidCast a
+    override __.UnPickle a = if a.IsMSet then __.ToUnion a.M else invalidCast a

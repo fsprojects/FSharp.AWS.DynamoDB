@@ -1,8 +1,6 @@
 ﻿namespace FSharp.AWS.DynamoDB
 
 open System
-open System.IO
-open System.Runtime.Serialization.Formatters.Binary
 
 open Amazon.DynamoDBv2
 
@@ -23,34 +21,36 @@ type RangeKeyAttribute() =
 /// Declares that the carrying property should contain the HashKey
 /// for a global secondary index.
 [<Sealed; AttributeUsage(AttributeTargets.Property, AllowMultiple = true)>]
-type GlobalSecondaryHashKeyAttribute(indexName : string) =
+type GlobalSecondaryHashKeyAttribute(indexName: string) =
     inherit Attribute()
     member _.IndexName = indexName
 
 /// Declares that the carrying property should contain the RangeKey
 /// for a global secondary index.
 [<Sealed; AttributeUsage(AttributeTargets.Property, AllowMultiple = true)>]
-type GlobalSecondaryRangeKeyAttribute(indexName : string) =
+type GlobalSecondaryRangeKeyAttribute(indexName: string) =
     inherit Attribute()
     member _.IndexName = indexName
 
 /// Declares the carrying property as local secondary index
 /// in the table schema.
 [<Sealed; AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
-type LocalSecondaryIndexAttribute private (indexName : string option) =
+type LocalSecondaryIndexAttribute private (indexName: string option) =
     inherit Attribute()
-    new () = LocalSecondaryIndexAttribute(None)
-    new (indexName : string) = LocalSecondaryIndexAttribute(Some indexName)
+    new() = LocalSecondaryIndexAttribute(None)
+    new(indexName: string) = LocalSecondaryIndexAttribute(Some indexName)
     member internal _.IndexName = indexName
 
 /// Declares a constant HashKey attribute for the given record.
 /// Records carrying this attribute should specify a RangeKey field.
 [<Sealed; AttributeUsage(AttributeTargets.Class, AllowMultiple = false)>]
-type ConstantHashKeyAttribute(name : string, hashkey : obj) =
+type ConstantHashKeyAttribute(name: string, hashkey: obj) =
     inherit Attribute()
     do
-        if isNull name then raise <| ArgumentNullException("name")
-        if isNull hashkey then raise <| ArgumentNullException("hashkey")
+        if isNull name then
+            raise <| ArgumentNullException("name")
+        if isNull hashkey then
+            raise <| ArgumentNullException("hashkey")
 
     member _.Name = name
     member _.HashKey = hashkey
@@ -59,11 +59,13 @@ type ConstantHashKeyAttribute(name : string, hashkey : obj) =
 /// Declares a constant RangeKey attribute for the given record.
 /// Records carrying this attribute should specify a HashKey field.
 [<Sealed; AttributeUsage(AttributeTargets.Class, AllowMultiple = false)>]
-type ConstantRangeKeyAttribute(name : string, rangeKey : obj) =
+type ConstantRangeKeyAttribute(name: string, rangeKey: obj) =
     inherit Attribute()
     do
-        if isNull name then raise <| ArgumentNullException("name")
-        if isNull rangeKey then raise <| ArgumentNullException("rangeKey")
+        if isNull name then
+            raise <| ArgumentNullException("name")
+        if isNull rangeKey then
+            raise <| ArgumentNullException("rangeKey")
 
     member _.Name = name
     member _.RangeKey = rangeKey
@@ -77,9 +79,11 @@ type StringRepresentationAttribute() =
 
 /// Specify a custom DynamoDB attribute name for the given record field.
 [<AttributeUsage(AttributeTargets.Property, AllowMultiple = false)>]
-type CustomNameAttribute(name : string) =
+type CustomNameAttribute(name: string) =
     inherit Attribute()
-    do if isNull name then raise <| ArgumentNullException("name")
+    do
+        if isNull name then
+            raise <| ArgumentNullException("name")
     member _.Name = name
 
 /// Specifies that record deserialization should fail if not corresponding attribute
@@ -91,9 +95,9 @@ type NoDefaultValueAttribute() =
 /// Declares that the given property should be serialized using the given
 /// Serialization/Deserialization methods before being uploaded to the table.
 type internal IPropertySerializer =
-    abstract PickleType : Type
-    abstract Serialize   : value:'T -> obj
-    abstract Deserialize : pickle:obj -> 'T
+    abstract PickleType: Type
+    abstract Serialize: value: 'T -> obj
+    abstract Deserialize: pickle: obj -> 'T
 
 /// Declares that the given property should be serialized using the given
 /// Serialization/Deserialization methods before being uploaded to the table.
@@ -101,28 +105,24 @@ type internal IPropertySerializer =
 type PropertySerializerAttribute<'PickleType>() =
     inherit Attribute()
     /// Serializes a value to the given pickle type
-    abstract Serialize   :  'T -> 'PickleType
+    abstract Serialize: 'T -> 'PickleType
     /// Deserializes a value from the given pickle type
-    abstract Deserialize : 'PickleType -> 'T
+    abstract Deserialize: 'PickleType -> 'T
 
     interface IPropertySerializer with
         member _.PickleType = typeof<'PickleType>
         member x.Serialize value = x.Serialize value :> obj
-        member x.Deserialize pickle = x.Deserialize (pickle :?> 'PickleType)
+        member x.Deserialize pickle = x.Deserialize(pickle :?> 'PickleType)
 
 /// Metadata on a table key attribute
-type KeyAttributeSchema =
-    {
-        AttributeName : string
-        KeyType : ScalarAttributeType
-    }
+type KeyAttributeSchema = { AttributeName: string; KeyType: ScalarAttributeType }
 
 /// Identifies type of DynamoDB table key schema
 type KeySchemaType =
     | PrimaryKey
-    | GlobalSecondaryIndex of indexName:string
-    | LocalSecondaryIndex of indexName:string
-with
+    | GlobalSecondaryIndex of indexName: string
+    | LocalSecondaryIndex of indexName: string
+
     member kst.IndexName =
         match kst with
         | GlobalSecondaryIndex name
@@ -131,15 +131,13 @@ with
 
 /// DynamoDB table key schema description
 type TableKeySchema =
-    {
-        HashKey : KeyAttributeSchema
-        RangeKey : KeyAttributeSchema option
-        Type : KeySchemaType
-    }
+    { HashKey: KeyAttributeSchema
+      RangeKey: KeyAttributeSchema option
+      Type: KeySchemaType }
 
 /// Table entry key identifier
 [<Struct; CustomEquality; NoComparison; StructuredFormatDisplay("{Format}")>]
-type TableKey private (hashKey : obj, rangeKey : obj) =
+type TableKey private (hashKey: obj, rangeKey: obj) =
     member _.HashKey = hashKey
     member _.RangeKey = rangeKey
     member _.IsRangeKeySpecified = notNull rangeKey
@@ -162,23 +160,26 @@ type TableKey private (hashKey : obj, rangeKey : obj) =
     override tk.GetHashCode() = hash2 hashKey rangeKey
 
     /// Defines a table key using provided HashKey
-    static member Hash<'HashKey>(hashKey : 'HashKey) =
-        if isNull hashKey then raise <| ArgumentNullException("hashKey")
+    static member Hash<'HashKey>(hashKey: 'HashKey) =
+        if isNull hashKey then
+            raise <| ArgumentNullException("hashKey")
         TableKey(hashKey, null)
 
     /// Defines a table key using provided RangeKey
-    static member Range<'RangeKey>(rangeKey : 'RangeKey) =
-        if isNull rangeKey then raise <| ArgumentNullException("rangeKey")
+    static member Range<'RangeKey>(rangeKey: 'RangeKey) =
+        if isNull rangeKey then
+            raise <| ArgumentNullException("rangeKey")
         TableKey(null, rangeKey)
 
     /// Defines a table key using combined HashKey and RangeKey
-    static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey) =
-        if isNull hashKey then raise <| ArgumentNullException("hashKey")
+    static member Combined<'HashKey, 'RangeKey>(hashKey: 'HashKey, rangeKey: 'RangeKey) =
+        if isNull hashKey then
+            raise <| ArgumentNullException("hashKey")
         TableKey(hashKey, rangeKey)
 
 /// Query (start/last evaluated) key identifier
 [<Struct; CustomEquality; NoComparison; StructuredFormatDisplay("{Format}")>]
-type IndexKey private (hashKey : obj, rangeKey : obj, primaryKey: TableKey) =
+type IndexKey private (hashKey: obj, rangeKey: obj, primaryKey: TableKey) =
     member _.HashKey = hashKey
     member _.RangeKey = rangeKey
     member _.IsRangeKeySpecified = notNull rangeKey
@@ -199,29 +200,29 @@ type IndexKey private (hashKey : obj, rangeKey : obj, primaryKey: TableKey) =
     override _.GetHashCode() = hash3 hashKey rangeKey primaryKey
 
     /// Defines an index key using provided HashKey and primary TableKey
-    static member Hash<'HashKey>(hashKey : 'HashKey, primaryKey: TableKey) =
-        if isNull hashKey then raise <| ArgumentNullException("hashKey")
+    static member Hash<'HashKey>(hashKey: 'HashKey, primaryKey: TableKey) =
+        if isNull hashKey then
+            raise <| ArgumentNullException("hashKey")
         IndexKey(hashKey, null, primaryKey)
 
     /// Defines an index key using combined HashKey, RangeKey and primary TableKey
-    static member Combined<'HashKey, 'RangeKey>(hashKey : 'HashKey, rangeKey : 'RangeKey, primaryKey: TableKey) =
-        if isNull hashKey then raise <| ArgumentNullException("hashKey")
+    static member Combined<'HashKey, 'RangeKey>(hashKey: 'HashKey, rangeKey: 'RangeKey, primaryKey: TableKey) =
+        if isNull hashKey then
+            raise <| ArgumentNullException("hashKey")
         IndexKey(hashKey, rangeKey, primaryKey)
 
     // Defines an index key using just the primary TableKey
-    static member Primary(primaryKey: TableKey) =
-        IndexKey(null, null, primaryKey)
+    static member Primary(primaryKey: TableKey) = IndexKey(null, null, primaryKey)
 
 /// Pagination result type
 type PaginatedResult<'TRecord, 'Key> =
-    {
-        Records : 'TRecord[]
-        LastEvaluatedKey : 'Key option
-    }
+    { Records: 'TRecord[]
+      LastEvaluatedKey: 'Key option }
+
     interface System.Collections.IEnumerable with
-        member x.GetEnumerator() = x.Records.GetEnumerator ()
+        member x.GetEnumerator() = x.Records.GetEnumerator()
     interface System.Collections.Generic.IEnumerable<'TRecord> with
-        member x.GetEnumerator() = (x.Records :> System.Collections.Generic.IEnumerable<'TRecord>).GetEnumerator ()
+        member x.GetEnumerator() = (x.Records :> System.Collections.Generic.IEnumerable<'TRecord>).GetEnumerator()
 
 
 #nowarn "1182"
@@ -231,16 +232,13 @@ type PaginatedResult<'TRecord, 'Key> =
 module ConditionalOperators =
 
     /// Decides whether parameter lies within given range
-    let BETWEEN (x : 'T) (lower : 'T) (upper : 'T) : bool =
-        lower <= x && x <= upper
+    let BETWEEN (x: 'T) (lower: 'T) (upper: 'T) : bool = lower <= x && x <= upper
 
     /// Checks whether a record attribute exists in DynamoDB
-    let EXISTS (attr : 'T) : bool =
-        invalidOp "EXISTS predicate reserved for quoted condition expressions."
+    let EXISTS (attr: 'T) : bool = invalidOp "EXISTS predicate reserved for quoted condition expressions."
 
     /// Checks whether a record attribute does not exist in DynamoDB
-    let NOT_EXISTS (attr : 'T) : bool =
-        invalidOp "NOT_EXISTS predicate reserved for quoted condition expressions."
+    let NOT_EXISTS (attr: 'T) : bool = invalidOp "NOT_EXISTS predicate reserved for quoted condition expressions."
 
 /// Update expression special operators
 [<AutoOpen>]
@@ -249,21 +247,17 @@ module UpdateOperators =
     /// Table Update operation placeholder type
     type UpdateOp =
         /// Combines two update operations into one
-        static member (&&&) (left : UpdateOp, right : UpdateOp) : UpdateOp =
+        static member (&&&)(left: UpdateOp, right: UpdateOp) : UpdateOp =
             invalidOp "Update combiner reserved for quoted update expressions."
 
     /// Assigns a record attribute path to given value
-    let SET (path : 'T) (value : 'T) : UpdateOp =
-        invalidOp "SET operation reserved for quoted update expressions."
+    let SET (path: 'T) (value: 'T) : UpdateOp = invalidOp "SET operation reserved for quoted update expressions."
 
     /// Removes a record attribute path from entry
-    let REMOVE (path : 'T) : UpdateOp =
-        invalidOp "REMOVE operation reserved for quoted update expressions."
+    let REMOVE (path: 'T) : UpdateOp = invalidOp "REMOVE operation reserved for quoted update expressions."
 
     /// Adds given set of values to set attribute path
-    let ADD (path : Set<'T>) (values : seq<'T>) : UpdateOp =
-        invalidOp "ADD operation reserved for quoted update expressions."
+    let ADD (path: Set<'T>) (values: seq<'T>) : UpdateOp = invalidOp "ADD operation reserved for quoted update expressions."
 
     /// Deletes given set of values to set attribute path
-    let DELETE (path : Set<'T>) (values : seq<'T>) : UpdateOp =
-        invalidOp "DELETE operation reserved for quoted update expressions."
+    let DELETE (path: Set<'T>) (values: seq<'T>) : UpdateOp = invalidOp "DELETE operation reserved for quoted update expressions."

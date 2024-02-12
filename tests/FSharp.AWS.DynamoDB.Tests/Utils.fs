@@ -17,12 +17,9 @@ module Utils =
 
     let guid () = Guid.NewGuid().ToString("N")
 
-    let getRandomTableName() =
-        sprintf "fsdynamodb-%s" <| guid ()
+    let getRandomTableName () = sprintf "fsdynamodb-%s" <| guid ()
 
-    let shouldFailwith<'T, 'Exn when 'Exn :> exn>(f : unit -> 'T) =
-        <@ f () |>  ignore @>
-        |> raises<'Exn>
+    let shouldFailwith<'T, 'Exn when 'Exn :> exn> (f: unit -> 'T) = <@ f () |> ignore @> |> raises<'Exn>
 
     let getDynamoDBAccount () =
         let credentials = BasicAWSCredentials("Fake", "Fake")
@@ -34,14 +31,16 @@ module Utils =
     type FsCheckGenerators =
         static member MemoryStream =
             Arb.generate<byte[] option>
-            |> Gen.map (function None -> null | Some bs -> new MemoryStream(bs))
+            |> Gen.map (function
+                | None -> null
+                | Some bs -> new MemoryStream(bs))
             |> Arb.fromGen
 
 
     type TableFixture() =
 
-        let client = getDynamoDBAccount()
-        let tableName = getRandomTableName()
+        let client = getDynamoDBAccount ()
+        let tableName = getRandomTableName ()
 
         member _.Client = client
         member _.TableName = tableName
@@ -51,7 +50,5 @@ module Utils =
             Scripting.TableContext.Initialize<'TRecord>(client, tableName, Throughput.Provisioned throughput)
 
         interface IAsyncLifetime with
-            member _.InitializeAsync() =
-                System.Threading.Tasks.Task.CompletedTask
-            member _.DisposeAsync() =
-                client.DeleteTableAsync(tableName)
+            member _.InitializeAsync() = System.Threading.Tasks.Task.CompletedTask
+            member _.DisposeAsync() = client.DeleteTableAsync(tableName)
