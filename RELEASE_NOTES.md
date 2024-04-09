@@ -1,3 +1,7 @@
+### 0.13.1-beta
+* Remove erroneous `Dotnet.ReproducibleBuilds` package dependency
+* Add explicit `FSharp.Core` dependency (`>= 4.7.2`)
+
 ### 0.12.0-beta
 * Added support for `Array.contains` and `List.contains` to compare an attribute against multiple values (thanks @faldor20)
 * Added `AllowMultiple = true` for `GlobalSecondaryIndex*` Attributes to allow indices to share an attribute
