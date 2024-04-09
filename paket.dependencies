@@ -3,11 +3,14 @@ source https://api.nuget.org/v3/index.json
 storage: none
 framework: net80, netstandard20, netstandard21
 
+# copy_local: true because this is a build-time dependency only
+nuget Dotnet.ReproducibleBuilds copy_local: true
+
 nuget Unquote ~> 6.1.0
 nuget FSharp.Core >= 4.7.2 lowest_matching: true
 
 nuget AWSSDK.DynamoDBv2 ~> 3.7.5
-nuget DotNet.ReproducibleBuilds
+
 github eiriktsarpalis/TypeShape:10.0.0 src/TypeShape/TypeShape.fs
 
 group Test
