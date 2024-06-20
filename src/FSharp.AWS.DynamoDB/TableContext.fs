@@ -2,13 +2,17 @@
 
 open System.Collections.Generic
 open System.Net
+open System.Threading
+open System.Threading.Tasks
 
 open Microsoft.FSharp.Quotations
+open FSharp.Control
 
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
 open FSharp.AWS.DynamoDB.ExprCommon
+
 
 /// Exception raised by DynamoDB in case where write preconditions are not satisfied
 type ConditionalCheckFailedException = Amazon.DynamoDBv2.Model.ConditionalCheckFailedException
@@ -212,11 +216,6 @@ type RequestMetrics =
       ConsumedCapacity: ConsumedCapacity list
       ItemCount: int }
 
-type StreamRecord<'TRecord> =
-    | Insert of 'TRecord
-    | Modify of {| Old: 'TRecord; New : 'TRecord |}
-    | Remove of 'TRecord
-
 /// Scan/query limit type (internal only)
 type private LimitType =
     | All
@@ -306,7 +305,12 @@ module Precondition =
 [<Sealed; AutoSerializable(false)>]
 type TableContext<'TRecord>
     internal
-    (client: IAmazonDynamoDB, tableName: string, template: RecordTemplate<'TRecord>, metricsCollector: (RequestMetrics -> unit) option) =
+    (
+        client: IAmazonDynamoDB,
+        tableName: string,
+        template: RecordTemplate<'TRecord>,
+        metricsCollector: (RequestMetrics -> unit) option
+    ) =
 
     let reportMetrics collector (operation: Operation) (consumedCapacity: ConsumedCapacity list) (itemCount: int) =
         collector
@@ -541,6 +545,7 @@ type TableContext<'TRecord>
             return downloaded
         }
 
+ 
     /// DynamoDB client instance used for the table operations
     member _.Client = client
     /// DynamoDB table name targeted by the context
@@ -1527,6 +1532,18 @@ module Scripting =
             let _desc = context.VerifyOrCreateTableAsync(throughput) |> Async.RunSynchronously
             context
 
+        /// Creates a DynamoDB client instance for the specified F# record type, client and table name.<br/>
+        /// Either validates the table exists and has the correct schema, or creates a fresh one, as per <c>VerifyOrCreateTableAsync</c>.<br/>
+        /// See other overload for <c>VerifyTableAsync</c> semantics.
+        /// <param name="client">DynamoDB client instance.</param>
+        /// <param name="tableName">Table name to target.</param>
+        /// <param name="throughput">Throughput to configure if the table does not yet exist.</param>
+        /// <param name="streaming">Streaming configuration applied if the table does not yet exist.</param>
+        static member Initialize<'TRecord>(client: IAmazonDynamoDB, tableName: string, throughput, streaming) : TableContext<'TRecord> =
+            let context = TableContext<'TRecord>(client, tableName)
+            let _desc = context.VerifyOrCreateTableAsync(throughput, streaming) |> Async.RunSynchronously
+            context
+
     type TableContext<'TRecord> with
 
         /// <summary>
@@ -2102,13 +2119,3 @@ module Scripting =
             let spec = Throughput.Provisioned provisionedThroughput
             t.UpdateTableIfRequiredAsync(spec) |> Async.Ignore |> Async.RunSynchronously
 
-
-        member t.ParseStreamRecord(record : Record) : StreamRecord<'TRecord> =
-            match record.EventName with
-                | n when n = OperationType.INSERT -> 
-                    Insert (t.Template.OfAttributeValues record.Dynamodb.NewImage)
-                | n when n = OperationType.MODIFY -> 
-                    Modify {| New = t.Template.OfAttributeValues record.Dynamodb.NewImage; Old = t.Template.OfAttributeValues record.Dynamodb.NewImage |}
-                | n when n = OperationType.REMOVE -> 
-                    Remove (t.Template.OfAttributeValues record.Dynamodb.OldImage)
-                | n -> failwithf "Unexpected OperationType %s" n.Value
