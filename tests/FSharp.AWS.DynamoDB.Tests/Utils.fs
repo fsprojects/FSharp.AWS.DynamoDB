@@ -2,6 +2,7 @@
 
 open System
 open System.IO
+open System.Collections.Generic
 
 open FsCheck
 open Swensen.Unquote
@@ -10,11 +11,12 @@ open Xunit
 open FSharp.AWS.DynamoDB
 
 open Amazon.DynamoDBv2
+open Amazon.DynamoDBv2.Model
 open Amazon.Runtime
 
 [<AutoOpen>]
 module Utils =
-
+    
     let guid () = Guid.NewGuid().ToString("N")
 
     let getRandomTableName () = sprintf "fsdynamodb-%s" <| guid ()
@@ -27,6 +29,16 @@ module Utils =
 
         new AmazonDynamoDBClient(credentials, config) :> IAmazonDynamoDB
 
+
+    let clearAttribute (table : TableContext<'T>) (key : TableKey) (attribute : string) =
+        let keyAttr = table.Template.ToAttributeValues key
+        table.Client.UpdateItemAsync(
+            new UpdateItemRequest(
+                TableName = table.TableName,
+                Key = keyAttr,
+                AttributeUpdates = Dictionary(Map.ofSeq [ attribute, new AttributeValueUpdate(Action = AttributeAction.DELETE) ])
+            )
+        ) |> Async.AwaitTask |> Async.RunSynchronously |> ignore
 
     type FsCheckGenerators =
         static member MemoryStream =
