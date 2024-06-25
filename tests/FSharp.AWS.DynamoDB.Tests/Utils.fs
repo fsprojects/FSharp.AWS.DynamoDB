@@ -16,7 +16,7 @@ open Amazon.Runtime
 
 [<AutoOpen>]
 module Utils =
-    
+
     let guid () = Guid.NewGuid().ToString("N")
 
     let getRandomTableName () = sprintf "fsdynamodb-%s" <| guid ()
@@ -30,7 +30,7 @@ module Utils =
         new AmazonDynamoDBClient(credentials, config) :> IAmazonDynamoDB
 
 
-    let clearAttribute (table : TableContext<'T>) (key : TableKey) (attribute : string) =
+    let clearAttribute (table: TableContext<'T>) (key: TableKey) (attribute: string) =
         let keyAttr = table.Template.ToAttributeValues key
         table.Client.UpdateItemAsync(
             new UpdateItemRequest(
@@ -38,7 +38,10 @@ module Utils =
                 Key = keyAttr,
                 AttributeUpdates = Dictionary(Map.ofSeq [ attribute, new AttributeValueUpdate(Action = AttributeAction.DELETE) ])
             )
-        ) |> Async.AwaitTask |> Async.RunSynchronously |> ignore
+        )
+        |> Async.AwaitTask
+        |> Async.RunSynchronously
+        |> ignore
 
     type FsCheckGenerators =
         static member MemoryStream =

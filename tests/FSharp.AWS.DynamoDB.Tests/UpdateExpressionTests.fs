@@ -255,7 +255,7 @@ type ``Update Expression Tests``(fixture: TableFixture) =
         let item = { mkItem () with Optional = Some(guid ()) }
         let key = table.PutItem item
         let item' = table.UpdateItem(key, <@ fun (r: R) -> { r with Optional = defaultArg r.Optional "<undefined>" |> Some } @>)
-        test <@item.Optional = item'.Optional @>
+        test <@ item.Optional = item'.Optional @>
 
     [<Fact>]
     let ``Update using defaultArg combinator on the same non-optional attribute (None)`` () =
