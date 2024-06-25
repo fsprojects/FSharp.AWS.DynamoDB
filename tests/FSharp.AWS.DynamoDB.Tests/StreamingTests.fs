@@ -8,6 +8,7 @@ open Xunit
 open FSharp.AWS.DynamoDB
 open FSharp.AWS.DynamoDB.Scripting
 open Amazon.DynamoDBv2
+open System.Collections.Concurrent
 
 [<AutoOpen>]
 module StreamingTests =
@@ -33,12 +34,14 @@ type ``Streaming Tests``(fixture: TableFixture) =
 
     [<Fact>]
     let ``Parse New Item from stream`` () =
+        let recordQueue = ConcurrentQueue<StreamRecord<StreamingRecord>>()
+        let streamArn = streams.ListStreamsAsync() |> Async.AwaitTask |> Async.RunSynchronously |> Seq.head
         let value = mkItem ()
         let key = table.PutItem value
         let value' = table.GetItem key
-        let task = streams.TempReadAllRecords()
-        task.Wait()
-        let records = task.Result
+        let task = streams.StartReadingAsync(streamArn, fun record -> recordQueue.Enqueue record) |> Async.AwaitTask |> Async.RunSynchronously
+        Async.Sleep 1000 |> Async.RunSynchronously
+        let records = recordQueue.ToArray()
         test <@ 1 = Array.length records @>
         test <@ records[0].Operation = Insert @>
         test <@ records[0].Old = None @>
