@@ -295,7 +295,9 @@ let extractUpdateOps (exprs: IntermediateUpdateExprs) =
         | SpecificCall2 <@ List.append @> (None, _, _, [ left; right ]) ->
             UpdateValue.EList_Append (extractOperand pickler left) (extractOperand pickler right)
 
-        | SpecificCall2 <@ defaultArg @> (None, _, _, [ AttributeGet attr; operand ]) ->
+        | SpecificCall2 <@ defaultArg @> (None, _, _, [ AttributeGet attr; operand ])
+        | Some'(SpecificCall2 <@ defaultArg @> (None, _, _, [ AttributeGet attr; operand ]))
+        | SpecificCall2 <@ defaultArg @> (None, _, _, [ Some'(AttributeGet attr); operand ]) ->
             match extractOperand attr.Pickler operand with
             | Undefined -> invalidExpr ()
             | op -> If_Not_Exists(attr.Id, op)
