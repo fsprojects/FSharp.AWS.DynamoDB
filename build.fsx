@@ -24,7 +24,7 @@ System.Environment.GetCommandLineArgs()
 #r "nuget: Fake.IO.FileSystem"
 #r "nuget: Fake.Api.GitHub"
 #r "nuget: Octokit"
-#r "nuget: MSBuild.StructuredLogger, Version=2.1.820"
+#r "nuget: MSBuild.StructuredLogger, Version=2.2.243"
 
 open Fake.Core
 open Fake.DotNet
