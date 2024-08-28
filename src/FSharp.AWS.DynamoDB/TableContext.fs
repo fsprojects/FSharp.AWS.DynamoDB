@@ -230,60 +230,8 @@ type private LimitType =
     static member AllOrCount(l: int option) = l |> Option.map Count |> Option.defaultValue All
     static member DefaultOrCount(l: int option) = l |> Option.map Count |> Option.defaultValue Default
 
-/// <summary>Represents an individual request that can be included in the <c>TransactItems</c> of a <c>TransactWriteItems</c> call.</summary>
-[<RequireQualifiedAccess>]
-type TransactWrite<'TRecord> =
-    /// Specify a Check to be run on a specified item.
-    /// If the condition does not hold, the overall TransactWriteItems request will be Canceled.
-    | Check of key: TableKey * condition: ConditionExpression<'TRecord>
-    /// Specify a PutItem operation to be performed, inserting or replacing an item in the Table.
-    /// If the (optional) precondition does not hold, the overall TransactWriteItems request will be Canceled.
-    | Put of item: 'TRecord * precondition: ConditionExpression<'TRecord> option
-    /// Specify an UpdateItem operation to be performed, applying an updater expression on the item identified by the specified `key`, if it exists.
-    /// If the item exists and the (optional) precondition does not hold, the overall TransactWriteItems request will be Canceled.
-    | Update of key: TableKey * precondition: ConditionExpression<'TRecord> option * updater: UpdateExpression<'TRecord>
-    /// Specify a DeleteItem operation to be performed, removing the item identified by the specified `key` if it exists.
-    /// If the item exists and the (optional) precondition does not hold, the overall TransactWriteItems request will be Canceled.
-    | Delete of key: TableKey * precondition: ConditionExpression<'TRecord> option
-
 /// Helpers for building a <c>TransactWriteItemsRequest</c> to supply to <c>TransactWriteItems</c>
 module TransactWriteItemsRequest =
-
-    let private toTransactWriteItem<'TRecord>
-        tableName
-        (template: RecordTemplate<'TRecord>)
-        : TransactWrite<'TRecord> -> TransactWriteItem =
-        function
-        | TransactWrite.Check(key, cond) ->
-            let req = ConditionCheck(TableName = tableName, Key = template.ToAttributeValues key)
-            let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
-            req.ConditionExpression <- cond.Conditional.Write writer
-            TransactWriteItem(ConditionCheck = req)
-        | TransactWrite.Put(item, maybeCond) ->
-            let req = Put(TableName = tableName, Item = template.ToAttributeValues item)
-            maybeCond
-            |> Option.iter (fun cond ->
-                let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
-                req.ConditionExpression <- cond.Conditional.Write writer)
-            TransactWriteItem(Put = req)
-        | TransactWrite.Update(key, maybeCond, updater) ->
-            let req = Update(TableName = tableName, Key = template.ToAttributeValues key)
-            let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
-            req.UpdateExpression <- updater.UpdateOps.Write(writer)
-            maybeCond |> Option.iter (fun cond -> req.ConditionExpression <- cond.Conditional.Write writer)
-            TransactWriteItem(Update = req)
-        | TransactWrite.Delete(key, maybeCond) ->
-            let req = Delete(TableName = tableName, Key = template.ToAttributeValues key)
-            maybeCond
-            |> Option.iter (fun cond ->
-                let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
-                req.ConditionExpression <- cond.Conditional.Write writer)
-            TransactWriteItem(Delete = req)
-    let internal toTransactItems<'TRecord> tableName template items =
-        Seq.map (toTransactWriteItem<'TRecord> tableName template) items |> rlist
-
-    /// <summary>Exception filter to identify whether a <c>TransactWriteItems</c> call has failed due to
-    /// one or more of the supplied <c>precondition</c> checks failing.</summary>
     let (|TransactionCanceledConditionalCheckFailed|_|): exn -> unit option =
         function
         | :? TransactionCanceledException as e when e.CancellationReasons.Exists(fun x -> x.Code = "ConditionalCheckFailed") -> Some()
@@ -296,6 +244,40 @@ module Precondition =
         function
         | :? ConditionalCheckFailedException -> Some()
         | _ -> None
+
+type TransactWriter<'TRecord> internal (tableName: string, template: RecordTemplate<'TRecord>) =
+    member _.Put(item: 'TRecord, precondition: option<ConditionExpression<'TRecord>>) : TransactWriteItem =
+        let req = Put(TableName = tableName, Item = template.ToAttributeValues item)
+        precondition
+        |> Option.iter (fun cond ->
+            let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
+            req.ConditionExpression <- cond.Conditional.Write writer)
+        TransactWriteItem(Put = req)
+    member _.Check(key: TableKey, condition: ConditionExpression<'TRecord>) : TransactWriteItem =
+        let req = ConditionCheck(TableName = tableName, Key = template.ToAttributeValues key)
+        let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
+        req.ConditionExpression <- condition.Conditional.Write writer
+        TransactWriteItem(ConditionCheck = req)
+    member _.Update
+        (
+            key: TableKey,
+            precondition: option<ConditionExpression<'TRecord>>,
+            updater: UpdateExpression<'TRecord>
+
+        ) : TransactWriteItem =
+        let req = Update(TableName = tableName, Key = template.ToAttributeValues key)
+        let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
+        req.UpdateExpression <- updater.UpdateOps.Write(writer)
+        precondition |> Option.iter (fun cond -> req.ConditionExpression <- cond.Conditional.Write writer)
+        TransactWriteItem(Update = req)
+    member _.Delete(key: TableKey, precondition: option<ConditionExpression<'TRecord>>) : TransactWriteItem =
+        let req = Delete(TableName = tableName, Key = template.ToAttributeValues key)
+        precondition
+        |> Option.iter (fun cond ->
+            let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
+            req.ConditionExpression <- cond.Conditional.Write writer)
+        TransactWriteItem(Delete = req)
+
 
 /// DynamoDB client object for performing table operations in the context of given F# record representations
 [<Sealed; AutoSerializable(false)>]
@@ -548,6 +530,8 @@ type TableContext<'TRecord>
     member _.LocalSecondaryIndices = template.LocalSecondaryIndices
     /// Record-induced table template
     member _.Template = template
+    /// Transaction writer for the specified record type
+    member _.TransactWrite = TransactWriter<'TRecord>(tableName, template)
 
 
     /// <summary>
@@ -910,16 +894,15 @@ type TableContext<'TRecord>
     /// Throws <c>ArgumentOutOfRangeException</c> if item count is not between 1 and 100 as required by underlying API.<br/>
     /// Use <c>TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed</c> to identify any Precondition Check failures.</param>
     /// <param name="clientRequestToken">The <c>ClientRequestToken</c> to supply as an idempotency key (10 minute window).</param>
-    member _.TransactWriteItems(items: seq<TransactWrite<'TRecord>>, ?clientRequestToken) : Async<unit> = async {
-        let reqs = TransactWriteItemsRequest.toTransactItems tableName template items
-        if reqs.Count = 0 || reqs.Count > 100 then
+    member _.TransactWriteItems(items: seq<TransactWriteItem>, ?clientRequestToken) : Async<unit> = async {
+        if (Seq.length items) = 0 || (Seq.length items) > 100 then
             raise <| System.ArgumentOutOfRangeException(nameof items, "must be between 1 and 100 items.")
-        let req = TransactWriteItemsRequest(ReturnConsumedCapacity = returnConsumedCapacity, TransactItems = reqs)
+        let req = TransactWriteItemsRequest(ReturnConsumedCapacity = returnConsumedCapacity, TransactItems = (ResizeArray items))
         clientRequestToken |> Option.iter (fun x -> req.ClientRequestToken <- x)
         let! ct = Async.CancellationToken
         let! response = client.TransactWriteItemsAsync(req, ct) |> Async.AwaitTaskCorrect
         maybeReport
-        |> Option.iter (fun r -> r TransactWriteItems (Seq.toList response.ConsumedCapacity) reqs.Count)
+        |> Option.iter (fun r -> r TransactWriteItems (Seq.toList response.ConsumedCapacity) (Seq.length items))
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "TransactWriteItems request returned error %O" response.HttpStatusCode
     }

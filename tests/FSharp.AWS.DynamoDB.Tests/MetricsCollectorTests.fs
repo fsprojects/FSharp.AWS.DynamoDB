@@ -106,7 +106,7 @@ type Tests(fixture: TableFixture) =
         collector.Clear()
 
         let item = mkItem (guid ()) (guid ()) 0
-        let requests = [ TransactWrite.Put(item, Some(compile <@ fun t -> NOT_EXISTS t.RangeKey @>)) ]
+        let requests = [ sut.TransactWrite.Put(item, Some(compile <@ fun t -> NOT_EXISTS t.RangeKey @>)) ]
 
         do! sut.TransactWriteItems requests
 
@@ -132,7 +132,7 @@ type Tests(fixture: TableFixture) =
         let item = mkItem (guid ()) (guid ()) 0
 
         // The check will fail, which triggers a throw from the underlying AWS SDK; there's no way to extract the consumption info in that case
-        let requests = [ TransactWrite.Put(item, Some(compile <@ fun t -> EXISTS t.RangeKey @>)) ]
+        let requests = [ sut.TransactWrite.Put(item, Some(compile <@ fun t -> EXISTS t.RangeKey @>)) ]
 
         let mutable failed = false
         try
