@@ -230,8 +230,10 @@ type private LimitType =
     static member AllOrCount(l: int option) = l |> Option.map Count |> Option.defaultValue All
     static member DefaultOrCount(l: int option) = l |> Option.map Count |> Option.defaultValue Default
 
-/// Helpers for building a <c>TransactWriteItemsRequest</c> to supply to <c>TransactWriteItems</c>
+/// Helpers for working with <c>TransactWriteItemsRequest</c>
 module TransactWriteItemsRequest =
+    /// <summary>Exception filter to identify whether a <c>TransactWriteItems</c> call has failed due to
+    /// one or more of the supplied <c>precondition</c> checks failing.</summary>
     let (|TransactionCanceledConditionalCheckFailed|_|): exn -> unit option =
         function
         | :? TransactionCanceledException as e when e.CancellationReasons.Exists(fun x -> x.Code = "ConditionalCheckFailed") -> Some()
@@ -530,7 +532,7 @@ type TableContext<'TRecord>
     member _.LocalSecondaryIndices = template.LocalSecondaryIndices
     /// Record-induced table template
     member _.Template = template
-    /// Transaction writer for the specified record type
+    /// Represents an individual request that can be included in the <c>TransactItems</c> of a <c>TransactWriteItems</c> call.</summary>
     member _.TransactWrite = TransactWriter<'TRecord>(tableName, template)
 
 
