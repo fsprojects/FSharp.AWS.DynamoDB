@@ -26,10 +26,9 @@ type RecordPickler<'T>(ctor: obj[] -> obj, properties: PropertyMetadata[]) =
             let field = prop.PropertyInfo.GetValue value
             match prop.Pickler.PickleUntyped field with
             | None -> ()
-            | Some av ->
-                let exists, value = values.TryGetValue prop.Name
-                if not exists then
-                    values.Add(prop.Name, av)
+            | Some av when not (values.ContainsKey prop.Name) -> values.Add(prop.Name, av)
+            | Some _ -> ()
+
         values
 
     member __.ToRecord(ro: RestObject) : 'T =
