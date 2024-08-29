@@ -30,10 +30,8 @@ module ``Record Generation Tests`` =
                         test <@ r' = r @>
                 with
                 // account for random inputs not supported by the library
-                | :? InvalidOperationException as e when e.Message = "empty strings not supported by DynamoDB." -> ()
                 | :? ArgumentException as e when
-                    e.Message.Contains "unsupported key name" && e.Message.Contains "should be 1 to 64k long (as utf8)"
-                    ->
+                    e.Message.Contains "unsupported key name" && e.Message.Contains "should be 1 to 64k long (as utf8)" ->
                     ()
 
             Check.One(config, roundTrip)

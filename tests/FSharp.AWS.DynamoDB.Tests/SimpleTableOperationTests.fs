@@ -18,6 +18,8 @@ module SimpleTableTypes =
           [<RangeKey>]
           RangeKey: string
 
+          EmptyString: string
+
           Value: int64
 
           Tuple: int64 * int64
@@ -46,6 +48,7 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
     let mkItem () =
         { HashKey = guid ()
           RangeKey = guid ()
+          EmptyString = ""
           Value = rand ()
           Tuple = rand (), rand ()
           Map = seq { for _ in 0L .. rand () % 5L -> "K" + guid (), rand () } |> Map.ofSeq
@@ -139,6 +142,7 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
     let mkItem () =
         { HashKey = guid ()
           RangeKey = guid ()
+          EmptyString = ""
           Value = rand ()
           Tuple = rand (), rand ()
           Map = seq { for _ in 0L .. rand () % 5L -> "K" + guid (), rand () } |> Map.ofSeq
