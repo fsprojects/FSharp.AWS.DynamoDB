@@ -9,6 +9,7 @@ open FSharp.AWS.DynamoDB
 open FSharp.AWS.DynamoDB.Scripting
 open Amazon.DynamoDBv2
 open System.Collections.Concurrent
+open System.Threading.Tasks
 
 [<AutoOpen>]
 module StreamingTests =
@@ -28,23 +29,29 @@ type ``Streaming Tests``(fixture: TableFixture) =
         { HashKey = guid ()
           RangeKey = guid ()
           StringValue = guid ()
-          IntValue = rand ()  }
+          IntValue = rand () }
 
-    let (table, streams) = fixture.CreateEmptyWithStreaming<StreamingRecord>(StreamViewType.NEW_AND_OLD_IMAGES)
+    let (table, stream) = fixture.CreateEmptyWithStreaming<StreamingRecord>(StreamViewType.NEW_AND_OLD_IMAGES)
 
     [<Fact>]
     let ``Parse New Item from stream`` () =
-        let recordQueue = ConcurrentQueue<StreamRecord<StreamingRecord>>()
-        let streamArn = streams.ListStreamsAsync() |> Async.AwaitTask |> Async.RunSynchronously |> Seq.head
-        let value = mkItem ()
-        let key = table.PutItem value
-        let value' = table.GetItem key
-        let task = streams.StartReadingAsync(streamArn, fun record -> recordQueue.Enqueue record) |> Async.AwaitTask |> Async.RunSynchronously
-        Async.Sleep 1000 |> Async.RunSynchronously
-        let records = recordQueue.ToArray()
-        test <@ 1 = Array.length records @>
-        test <@ records[0].Operation = Insert @>
-        test <@ records[0].Old = None @>
-        test <@ records[0].New = Some value' @>
+        task {
+            let recordQueue = ConcurrentQueue<StreamRecord<StreamingRecord>>()
+            let! streams = stream.ListStreamsAsync()
+            let streamArn = streams |> Seq.head
+            let value = mkItem ()
+            let key = table.PutItem value
+            let value' = table.GetItem key
+            let processRecord r =
+                recordQueue.Enqueue r
+                Task.CompletedTask
+            use disp = stream.StartReadingAsync(streamArn, processRecord)
+            do! Async.Sleep 1000
+            let records = recordQueue.ToArray()
+            test <@ 1 = Array.length records @>
+            test <@ records[0].Operation = Insert @>
+            test <@ records[0].Old = None @>
+            test <@ records[0].New = Some value' @>
+        }
         
     interface IClassFixture<TableFixture>

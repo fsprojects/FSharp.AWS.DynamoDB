@@ -1,7 +1,6 @@
 namespace FSharp.AWS.DynamoDB
 
 open System
-open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
 
@@ -28,9 +27,9 @@ type ReadStreamFrom =
     | Newest
     | Positions of StreamPosition list
 
-type private Enumerator<'TRecord>(initialIterator : string, fetchNext: string -> Task<('TRecord [] * string option)>) =
+type private Enumerator<'TRecord>(initialIterator: string, fetchNext: string -> Task<('TRecord[] * string option)>) =
     let mutable iterator = initialIterator
-    let mutable records: 'TRecord [] = Array.empty
+    let mutable records: 'TRecord[] = Array.empty
     let mutable index = 0
 
     interface IAsyncEnumerator<'TRecord> with
@@ -41,20 +40,22 @@ type private Enumerator<'TRecord>(initialIterator : string, fetchNext: string ->
                 index <- index + 1
                 ValueTask<bool>(true)
             else
-                let nextTask = 
+                let nextTask =
                     (fetchNext iterator)
-                        .ContinueWith((fun (task: Task<('TRecord [] * string option)>) ->
-                            match task.Result with
-                            | (_, None) ->
-                                records <- Array.empty
-                                index <- 0
-                                false
-                            | (recs, Some nextIterator) ->
-                                records <- recs
-                                iterator <- nextIterator
-                                index <- 0
-                                true
-                        ), TaskContinuationOptions.OnlyOnRanToCompletion)
+                        .ContinueWith(
+                            (fun (task: Task<('TRecord[] * string option)>) ->
+                                match task.Result with
+                                | (_, None) ->
+                                    records <- Array.empty
+                                    index <- 0
+                                    false
+                                | (recs, Some nextIterator) ->
+                                    records <- recs
+                                    iterator <- nextIterator
+                                    index <- 0
+                                    true),
+                            TaskContinuationOptions.OnlyOnRanToCompletion
+                        )
                 ValueTask<bool>(nextTask)
 
         member _.DisposeAsync() = ValueTask()
@@ -64,118 +65,92 @@ type private ShardTree =
     | Node of Shard * ShardTree list
 
 module private ShardTree =
-    let shard (tree : ShardTree) =
+    let shard (tree: ShardTree) =
         match tree with
-        | Leaf shard | Node (shard, _) -> shard
+        | Leaf shard
+        | Node(shard, _) -> shard
 
-    let find (shardId : string) (tree : ShardTree) = 
+    let find (shardId: string) (tree: ShardTree) =
         let rec findInner t =
             match t with
-            | Leaf s | Node (s, _) when s.ShardId = shardId -> Some(t)
-            | Node (_, children) -> children |> Seq.choose (findInner) |> Seq.tryHead
+            | Leaf s
+            | Node(s, _) when s.ShardId = shardId -> Some(t)
+            | Node(_, children) -> children |> Seq.choose (findInner) |> Seq.tryHead
             | Leaf _ -> None
-            
+
         findInner tree
 
-    let nextShards (shardId : string) (trees : ShardTree list) =
+    let nextShards (shardId: string) (trees: ShardTree list) =
         match trees |> List.choose (find shardId) |> List.tryHead with
-        | Some (Node (_, children)) -> children
+        | Some(Node(_, children)) -> children
         | _ -> []
 
 module private Shard =
-    /// <summary>
-    /// Returns the 'oldest' shard in a stream, according to the logic:
-    /// First shard which has no parent ID
-    /// First shard which has a parent ID not returned in the description
-    /// First shard in the list
-    /// </summary>
-    /// <param name="shards">sequence of `Shard` objects from the `StreamDescription`</param>
-    let oldest (shards : Shard seq) =
-        shards
-        |> Seq.tryFind (fun s -> String.IsNullOrEmpty(s.ParentShardId))
-        |> Option.orElseWith (fun () ->
-            shards
-            |> Seq.tryFind (fun s1 -> not (shards |> Seq.exists (fun s2 -> s1.ParentShardId = s2.ShardId))))
-        |> Option.orElseWith (fun () -> shards |> Seq.tryHead)
 
-    /// <summary>
-    /// Returns the 'newest' shard in a stream, according to the logic:
-    /// First shard which has no child IDs
-    /// First shard which has an empty `EndingSequenceNumber` (is still being actively written to)
-    /// First shard in the list
-    /// </summary>
-    /// <param name="shards">sequence of `Shard` objects from the `StreamDescription`</param>
-    // TODO: Should this ONLY return active streams?
-    let newest (shards : Shard seq) =
-        shards
-        |> Seq.tryFind (fun s1 -> not (shards |> Seq.exists (fun s2 -> s1.ShardId = s2.ParentShardId)))
-        |> Option.orElseWith (fun () ->
-            shards
-            |> Seq.tryFind (fun s -> String.IsNullOrEmpty(s.SequenceNumberRange.EndingSequenceNumber)))
-        |> Option.orElseWith (fun () -> shards |> Seq.tryHead)
-    
     /// <summary>
     /// Returns all of the root shards (with no parent) in the stream
     /// </summary>
-    /// <param name="stream">`StreamDescription` returned for the stream ARN</param>
-    let roots (shards : Shard seq) =
-        shards |> Seq.filter (fun s -> 
-            String.IsNullOrEmpty(s.ParentShardId) 
-                || not (shards |> Seq.exists (fun c -> c.ShardId = s.ParentShardId)))
+    /// <param name="shards">sequence of `Shard` objects from the `StreamDescription`</param>
+    let roots (shards: Shard seq) =
+        shards
+        |> Seq.filter (fun s ->
+            String.IsNullOrEmpty(s.ParentShardId)
+            || not (shards |> Seq.exists (fun c -> c.ShardId = s.ParentShardId)))
 
     /// <summary>
     /// Returns all of the leaf shards (with no children) in the stream
     /// </summary>
-    /// <param name="stream">`StreamDescription` returned for the stream ARN</param>
-    let leaves (shards : Shard seq) =
-        shards |> Seq.filter (fun s -> not (shards |> Seq.exists (fun c -> c.ParentShardId = s.ShardId)))
-
-    let ancestors (shardId : string) (shards : Shard seq) =
-        let rec ancestorsInner (shardId : string) =
-            match shards |> Seq.tryFind (fun s -> s.ShardId = shardId) with
-            | None -> []
-            | Some s -> 
-                match s.ParentShardId with
-                | null | "" -> []
-                | parent -> parent :: ancestorsInner parent
-
-        ancestorsInner shardId
+    /// <param name="shards">sequence of `Shard` objects from the `StreamDescription`</param>
+    let leaves (shards: Shard seq) = shards |> Seq.filter (fun s -> not (shards |> Seq.exists (fun c -> c.ParentShardId = s.ShardId)))
 
     /// <summary>
-    /// Build trees of the shard hierarchy in the stream.
-    /// Nodes will usually have a single child, but can have multiple children if the shard has been split.
+    /// Returns all of the open shards (with no ending sequence number) in the stream
     /// </summary>
     /// <param name="shards">sequence of `Shard` objects from the `StreamDescription`</param>
-    let toTrees (shards : Shard seq): ShardTree list =
-        let children = 
-            shards 
-                |> Seq.filter (fun s -> not (String.IsNullOrEmpty(s.ParentShardId)))
-                |> Seq.groupBy _.ParentShardId 
-                |> Map.ofSeq
+    let openShards (shards: Shard seq) = shards |> Seq.filter (fun s -> String.IsNullOrEmpty(s.SequenceNumberRange.EndingSequenceNumber))
 
-        let rec buildTree (shard: Shard) =
-            match children |> Map.tryFind shard.ShardId with
-            | None -> Leaf shard
-            | Some cs -> Node(shard, cs |> Seq.map buildTree |> Seq.toList)
+    /// <summary>
+    /// Returns the ancestor shard ids of a shard in the stream
+    /// </summary>
+    /// <param name="shardId">shard id of the shard to find ancestors for</param>
+    /// <param name="shards">sequence of `Shard` objects from the `StreamDescription`</param>
+    let ancestors (shards: Shard seq) (shardId: string) =
+        let rec ancestorsInner (shardId: string) =
+            match shards |> Seq.tryFind (fun s -> s.ShardId = shardId) with
+            | None -> []
+            | Some s ->
+                match s.ParentShardId with
+                | null
+                | "" -> []
+                | parent -> parent :: ancestorsInner parent
 
-        roots shards |> Seq.map buildTree |> Seq.toList
-        
+        ancestorsInner shardId |> Seq.distinct
 
-type private ShardMsg = 
-    | UpdatedShardPosition of StreamPosition 
-    | EndOfShard of string 
+    /// <summary>
+    /// Returns true if the shard id is in the list of shards
+    /// </summary>
+    /// <param name="shards">sequence of `Shard` objects from the `StreamDescription`</param>
+    /// <param name="shardId">shard id to check for</param>
+    let containsShardId (shards: Shard seq) (shardId: string) = shards |> Seq.exists (fun s -> s.ShardId = shardId)
+
+type private ShardMsg =
+    | UpdatedShardPosition of StreamPosition
+    | EndOfShard of string
     | ShardsUpdated of Shard seq
 
-type private ShardProcessingState = 
+type private ShardProcessingState =
     | NotStarted
     | Processing of StreamPosition
     | Completed
 
-type private StreamState = { Shards: Shard list; StreamProgress: Map<string, ShardProcessingState>; ShardWorkers: Map<string, MailboxProcessor<unit>> }
+type private StreamState =
+    { Shards: Shard list
+      StreamProgress: Map<string, ShardProcessingState>
+      ShardWorkers: Map<string, MailboxProcessor<unit>> }
 
 module private Map =
     let union (replaceWith: Map<'K, 'V>) (original: Map<'K, 'V>) =
-         Map.fold (fun acc key value -> Map.add key value acc) original replaceWith
+        Map.fold (fun acc key value -> Map.add key value acc) original replaceWith
 
 module private StreamState =
     let empty = { Shards = []; StreamProgress = Map.empty; ShardWorkers = Map.empty }
@@ -183,22 +158,51 @@ module private StreamState =
     /// <summary>
     /// Initializes the stream state with the initial list of shards. Supports the following start positions:
     /// - Oldest: Start processing from the start of the oldest shards available (note 24h retention)
-    /// - Newest: Start processing from the start of the currently open shards
-    /// - Positions: Start processing from the given positions (not currently supported)
+    /// - Newest: Start processing from the end of the currently open shards
+    /// - Positions: Start processing from the given positions
     /// </summary>
     /// <param name="shards">List of shards in the stream</param>
     /// <param name="start">`ReadStreamFrom` start position</param>
-    let init (shards: Shard seq) (start : ReadStreamFrom) =
+    let init (shards: Shard seq) (start: ReadStreamFrom) =
         let shards = shards |> Seq.toList
-        let progress = 
+        let progress =
             match start with
             | Oldest -> shards |> Seq.map (fun s -> (s.ShardId, NotStarted)) |> Map.ofSeq
-            | Newest -> 
-                let leaves = Shard.leaves shards |> Seq.map (fun s -> (s.ShardId, NotStarted)) // TODO: Check to see if stream is closed
-                let oldShards = shards |> Seq.filter (fun s -> not (leaves |> Seq.exists (fun (id, _) -> id = s.ShardId))) |> Seq.map (fun s -> (s.ShardId, Completed))
-                leaves |> Seq.append oldShards |> Map.ofSeq
+
+            | Newest ->
+                let openShards =
+                    Shard.openShards shards
+                    |> Seq.map (fun s ->
+                        (s.ShardId,
+                         Processing
+                             { ShardId = s.ShardId
+                               SequenceNumber = Some s.SequenceNumberRange.EndingSequenceNumber }))
+                    |> Map.ofSeq
+                let closedShards =
+                    shards
+                    |> Seq.filter (fun s -> not (openShards |> Map.containsKey s.ShardId))
+                    |> Seq.map (fun s -> (s.ShardId, Completed))
+                    |> Map.ofSeq
+                closedShards |> Map.union openShards
+
             | Positions pos ->
-                failwithf "Not supported yet"
+                let inProgress =
+                    pos
+                    |> Seq.filter (fun p -> Shard.containsShardId shards p.ShardId)
+                    |> Seq.map (fun p -> (p.ShardId, Processing p))
+                    |> Map.ofSeq
+                let completed =
+                    inProgress
+                    |> Map.keys
+                    |> Seq.collect (Shard.ancestors shards)
+                    |> Seq.map (fun s -> (s, Completed))
+                    |> Map.ofSeq
+                let notStarted =
+                    shards
+                    |> Seq.filter (fun s -> not (inProgress |> Map.containsKey s.ShardId) && not (completed |> Map.containsKey s.ShardId))
+                    |> Seq.map (fun s -> (s.ShardId, NotStarted))
+                    |> Map.ofSeq
+                inProgress |> Map.union completed |> Map.union notStarted
 
         { Shards = shards; StreamProgress = progress; ShardWorkers = Map.empty }
 
@@ -209,31 +213,35 @@ module private StreamState =
     /// <param name="state">Current state of the stream</param>
     /// <returns>Updated state</returns>
     let updateShards (shards: Shard seq) (state: StreamState) =
-        let newProgress = shards |> Seq.filter (fun s -> not (state.StreamProgress |> Map.containsKey s.ShardId)) 
-                                 |> Seq.map (fun s -> (s.ShardId, NotStarted))
+        // TODO: Prune old ShardIds from StreamProgress. What should happen if the shard has disappeard but not been processed?
+        let newProgress =
+            shards
+            |> Seq.filter (fun s -> not (state.StreamProgress |> Map.containsKey s.ShardId))
+            |> Seq.map (fun s -> (s.ShardId, NotStarted))
 
-        { state with Shards = shards |> Seq.toList; StreamProgress = state.StreamProgress |> Map.toSeq |> Seq.append newProgress |> Map.ofSeq }
-
-    /// <summary>
-    /// Registers a new shard worker and marks the shard as processing
-    /// </summary>
-    /// <param name="shardId">ShardId of the newly started shard</param>
-    /// <param name="worker">Shard worker</param>
-    /// <param name="state">Current state of the stream</param>
-    /// <returns>Updated state</returns>
-    let startShard (shardId: string) (worker: MailboxProcessor<unit>) (state: StreamState) =
-        { state with StreamProgress = state.StreamProgress |> Map.add shardId (Processing { ShardId = shardId; SequenceNumber = None });  ShardWorkers = state.ShardWorkers |> Map.add shardId worker }
+        { state with
+            Shards = shards |> Seq.toList
+            StreamProgress = state.StreamProgress |> Map.toSeq |> Seq.append newProgress |> Map.ofSeq }
 
     /// <summary>
-    /// Registers the new shard workers and marks the shards as processing
+    /// Registers the new shard workers and marks the shards as processing if necessary
     /// </summary>
     /// <param name="shardId">ShardId of the newly started shard</param>
     /// <param name="worker">Shard worker</param>
     /// <param name="state">Current state of the stream</param>
     /// <returns>Updated state</returns>
     let startShards (workers: Map<String, MailboxProcessor<unit>>) (state: StreamState) =
-        let updatedProgress = workers |> Map.map (fun sId _ -> Processing { ShardId = sId; SequenceNumber = None })
-        { state with StreamProgress = state.StreamProgress |> Map.union updatedProgress ;  ShardWorkers = state.ShardWorkers |> Map.union workers }
+        let updatedProgress =
+            workers
+            |> Map.map (fun s _ ->
+                match state.StreamProgress |> Map.tryFind s with
+                | Some NotStarted
+                | None -> Processing { ShardId = s; SequenceNumber = None }
+                | Some p -> p) // TODO: Log some asserts here (eg if completed)
+
+        { state with
+            StreamProgress = state.StreamProgress |> Map.union updatedProgress
+            ShardWorkers = state.ShardWorkers |> Map.union workers }
 
     /// <summary>
     /// Updates the position of a shard in the stream
@@ -242,140 +250,165 @@ module private StreamState =
     /// <param name="state">Current state of the stream</param>
     /// <returns>Updated state</returns>
     let updatedShardPosition (position: StreamPosition) (state: StreamState) =
-        { state with StreamProgress = state.StreamProgress |> Map.add position.ShardId (Processing position) }
-
-    let completeShard (shardId: string) (state: StreamState) =
-        { state with StreamProgress = state.StreamProgress |> Map.add shardId Completed; ShardWorkers = state.ShardWorkers |> Map.remove(shardId) }
+        { state with
+            StreamProgress = state.StreamProgress |> Map.add position.ShardId (Processing position) }
 
     /// <summary>
-    /// Returns all shards ready to be processed - with no parent shard or parent shard completed
+    /// Marks a shard as completed and removes the worker
+    /// </summary>
+    /// <param name="shardId">ShardId of the completed shard</param>
+    /// <param name="state">Current state of the stream</param>
+    /// <returns>Updated state</returns>
+    let completeShard (shardId: string) (state: StreamState) =
+        { state with
+            StreamProgress = state.StreamProgress |> Map.add shardId Completed
+            ShardWorkers = state.ShardWorkers |> Map.remove (shardId) }
+
+    /// <summary>
+    /// Returns all shards ready to be processed:
+    /// - `NotStarted` with no parent shard or parent shard completed
+    /// - `Processing` with no worker
     /// </summary>
     /// <param name="state">Current state of the stream</param>
-    /// <returns>List of shards ready to start processing</returns>
-    let nextShards (state : StreamState) =
-        state.Shards 
-        |> List.filter (fun s -> state.StreamProgress |> Map.tryFind s.ShardId |> Option.exists ((=) NotStarted))
-        |> List.filter (fun s ->
-            // Filter shards with a parent that hasn’t been completed
-            match state.StreamProgress |> Map.tryFind s.ParentShardId with 
-            | Some Completed | None -> true 
-            | Some NotStarted | Some (Processing _) -> false)
-    
-/// DynamoDB client object for intrepreting Dynamo streams sharing the same F# record representations as the `TableContext`
+    /// <returns>List of shards ready to start processing, with the sequence number to start from</returns>
+    let nextShards (state: StreamState) =
+        state.Shards
+        |> List.choose (fun s ->
+            match state.StreamProgress |> Map.tryFind s.ShardId with
+            | Some NotStarted ->
+                match state.StreamProgress |> Map.tryFind s.ParentShardId with
+                | Some Completed
+                | None -> Some(s, None)
+                | Some NotStarted
+                | Some(Processing _) -> None
+            | Some(Processing pos) ->
+                match state.ShardWorkers |> Map.tryFind s.ShardId with
+                | Some _ -> None
+                | None -> Some(s, pos.SequenceNumber)
+            | _ -> None)
+
+
+/// DynamoDB client object for interpreting Dynamo streams sharing the same F# record representations as the `TableContext`
 [<Sealed; AutoSerializable(false)>]
 type StreamContext<'TRecord> internal (client: IAmazonDynamoDBStreams, tableName: string, template: RecordTemplate<'TRecord>) =
 
-    [<Literal>] 
+    [<Literal>]
     let idleTimeBetweenReadsMilliseconds = 1000
-    [<Literal>] 
+    [<Literal>]
     let maxRecords = 1000
     [<Literal>]
     let listShardsCacheAgeMilliseconds = 10000
 
-    let listStreams (ct: CancellationToken) : Task<string list> =
-        task {
-            let req = ListStreamsRequest(TableName = tableName, Limit = 100)
-            let! response = client.ListStreamsAsync(req, ct)
-            return response.Streams |> Seq.map _.StreamArn |> Seq.toList
-        }
+    let listStreams (ct: CancellationToken) : Task<string list> = task {
+        let req = ListStreamsRequest(TableName = tableName, Limit = 100)
+        let! response = client.ListStreamsAsync(req, ct)
+        return response.Streams |> Seq.map _.StreamArn |> Seq.toList
+    }
 
-    let describeStream (streamArn: string) (ct: CancellationToken) =
-        task {
-            let! response = client.DescribeStreamAsync(DescribeStreamRequest(StreamArn = streamArn), ct)
-            return response.StreamDescription
-        }
-
+    let describeStream (streamArn: string) (ct: CancellationToken) = task {
+        let! response = client.DescribeStreamAsync(DescribeStreamRequest(StreamArn = streamArn), ct)
+        return response.StreamDescription
+    }
 
     // TODO: what does this return if no more records in shard?
-    let getShardIterator (streamArn: string) (iteratorType: ShardIteratorType) (position: StreamPosition) (ct: CancellationToken) =
-        task {
-            let req = GetShardIteratorRequest(
-                    StreamArn = streamArn,
-                    ShardId = position.ShardId,
-                    ShardIteratorType = iteratorType)
-            position.SequenceNumber |> Option.iter (fun n -> req.SequenceNumber <- n)
-            let! response = client.GetShardIteratorAsync(req, ct)
-            return response.ShardIterator
-        }
+    let getShardIterator (streamArn: string) (iteratorType: ShardIteratorType) (position: StreamPosition) (ct: CancellationToken) = task {
+        let req = GetShardIteratorRequest(StreamArn = streamArn, ShardId = position.ShardId, ShardIteratorType = iteratorType)
+        position.SequenceNumber |> Option.iter (fun n -> req.SequenceNumber <- n)
+        let! response = client.GetShardIteratorAsync(req, ct)
+        return response.ShardIterator
+    }
 
-    let getRecords (iterator: string) (limit: int) (ct: CancellationToken) =
-        task {
-            let! response = client.GetRecordsAsync(GetRecordsRequest(Limit = limit, ShardIterator = iterator), ct)
-            return response.Records |> Array.ofSeq, if isNull response.NextShardIterator then None else Some response.NextShardIterator
-        }
+    let getRecords (iterator: string) (limit: int) (ct: CancellationToken) = task {
+        let! response = client.GetRecordsAsync(GetRecordsRequest(Limit = limit, ShardIterator = iterator), ct)
+        return
+            response.Records |> Array.ofSeq,
+            if isNull response.NextShardIterator then
+                None
+            else
+                Some response.NextShardIterator
+    }
 
     let getRecordsAsync (iterator: string) (ct: CancellationToken) =
         let batchSize = 5
         { new IAsyncEnumerable<Record> with
             member _.GetAsyncEnumerator(ct) = Enumerator<Record>(iterator, (fun i -> getRecords i batchSize ct)) :> IAsyncEnumerator<Record> }
 
-    let startShardProcessor (outbox: MailboxProcessor<ShardMsg>) (streamArn : string) (position : StreamPosition) (processRecord: Record -> unit) (ct: CancellationToken) =
-        MailboxProcessor<unit>.Start((fun _ ->
-            let rec loop iterator =
-                async {
-                    if not ct.IsCancellationRequested then
-                        // TODO: Handle AWS read failures
-                        let! (recs, nextIterator) = getRecords iterator maxRecords ct |> Async.AwaitTaskCorrect
-                        // TODO: Process Record error handling
-                        recs |> Array.iter processRecord
-                        match nextIterator with
-                        | None -> 
-                            outbox.Post(EndOfShard position.ShardId)
-                            // End processing the shard
-                        | Some i -> 
-                            outbox.Post(UpdatedShardPosition { ShardId = position.ShardId; SequenceNumber = Some i })
-                            do! Async.Sleep idleTimeBetweenReadsMilliseconds
-                            do! loop i
-                }
+    let startShardProcessor
+        (outbox: MailboxProcessor<ShardMsg>)
+        (streamArn: string)
+        (position: StreamPosition)
+        (processRecord: Record -> Task)
+        (ct: CancellationToken)
+        =
+        MailboxProcessor<unit>
+            .Start(
+                (fun _ ->
+                    let rec loop iterator = async {
+                        if not ct.IsCancellationRequested then
+                            // TODO: Handle AWS read failures
+                            let! (recs, nextIterator) = getRecords iterator maxRecords ct |> Async.AwaitTaskCorrect
+                            // TODO: Process Record error handling
+                            for r in recs do
+                                do! processRecord r |> Async.AwaitTaskCorrect
 
-            async {
-                let! initialIterator = getShardIterator streamArn ShardIteratorType.TRIM_HORIZON position ct |> Async.AwaitTaskCorrect
-                do! loop initialIterator
-                while not ct.IsCancellationRequested do
-                    do! Async.Sleep idleTimeBetweenReadsMilliseconds
-            }
-        ), ct)
+                            match nextIterator with
+                            | None -> outbox.Post(EndOfShard position.ShardId)
+                            // End the loop - done processing this shard
+                            | Some i ->
+                                outbox.Post(UpdatedShardPosition { ShardId = position.ShardId; SequenceNumber = Some i })
+                                do! Async.Sleep idleTimeBetweenReadsMilliseconds
+                                do! loop i
+                    }
 
-    let startShardSyncWorker (outbox: MailboxProcessor<ShardMsg>) (streamArn : string) (ct : CancellationToken) =
-        MailboxProcessor<unit>.Start((fun _ ->
-            let rec loop () =
-                async {
-                    if not ct.IsCancellationRequested then
-                        // TODO: Handle AWS read failures
-                        let! stream = describeStream streamArn ct |> Async.AwaitTaskCorrect
-                        outbox.Post(ShardsUpdated stream.Shards)
-                        do! Async.Sleep listShardsCacheAgeMilliseconds
-                        do! loop ()
-                }
+                    async {
+                        let! initialIterator =
+                            getShardIterator streamArn ShardIteratorType.TRIM_HORIZON position ct |> Async.AwaitTaskCorrect
+                        do! loop initialIterator
+                    }),
+                ct
+            )
 
-            loop ()
-        ), ct)
-    
-    let startStreamProcessor (streamArn : string) (startPosition : ReadStreamFrom) (processRecord: Record -> unit) (ct: CancellationToken) =
+    let startShardSyncWorker (outbox: MailboxProcessor<ShardMsg>) (streamArn: string) (ct: CancellationToken) =
+        MailboxProcessor<unit>
+            .Start(
+                (fun _ ->
+                    let rec loop () = async {
+                        if not ct.IsCancellationRequested then
+                            // TODO: Handle AWS read failures
+                            let! stream = describeStream streamArn ct |> Async.AwaitTaskCorrect
+                            outbox.Post(ShardsUpdated stream.Shards)
+                            do! Async.Sleep listShardsCacheAgeMilliseconds
+                            do! loop ()
+                    }
+
+                    loop ()),
+                ct
+            )
+
+    let startStreamProcessor (streamArn: string) (startPosition: ReadStreamFrom) (processRecord: Record -> Task) (ct: CancellationToken) =
         MailboxProcessor<ShardMsg>.Start(fun inbox ->
-            let startShardWorker (shard : Shard) =
-                let position = { ShardId = shard.ShardId; SequenceNumber = None } // TODO: Supply sequence number
+            let startShardWorker (shard: Shard, sequenceNumber: string option) =
+                let position = { ShardId = shard.ShardId; SequenceNumber = sequenceNumber }
                 (shard.ShardId, startShardProcessor inbox streamArn position processRecord ct)
 
-            let rec loop (state: StreamState) =
-                async {
-                    if not ct.IsCancellationRequested then
-                        let! msg = inbox.Receive()
-                        match msg with
-                        | UpdatedShardPosition position ->
-                            printfn "Recording current shard position: %0A" position
-                            do! loop (state |> StreamState.updatedShardPosition position)
-                        | EndOfShard shardId ->
-                            let state = state |> StreamState.completeShard shardId
-                            let newWorkers = state |> StreamState.nextShards |> Seq.map startShardWorker |> Map.ofSeq
-                            newWorkers |> Map.iter (fun sId _ -> printfn "Starting worker for shard %s" sId)
-                            do! loop (state |> StreamState.startShards newWorkers)
-                        | ShardsUpdated shards ->
-                            let state = state |> StreamState.updateShards shards
-                            let newWorkers = state |> StreamState.nextShards |> Seq.map startShardWorker |> Map.ofSeq
-                            newWorkers |> Map.iter (fun sId _ -> printfn "Starting worker for shard %s" sId)
-                            do! loop (state |> StreamState.startShards newWorkers)
-                }
+            let rec loop (state: StreamState) = async {
+                if not ct.IsCancellationRequested then
+                    let! msg = inbox.Receive()
+                    match msg with
+                    | UpdatedShardPosition position ->
+                        printfn "Recording current shard position: %0A" position
+                        do! loop (state |> StreamState.updatedShardPosition position)
+                    | EndOfShard shardId ->
+                        let state = state |> StreamState.completeShard shardId
+                        let newWorkers = state |> StreamState.nextShards |> Seq.map startShardWorker |> Map.ofSeq
+                        newWorkers |> Map.iter (fun sId _ -> printfn "Starting worker for shard %s" sId)
+                        do! loop (state |> StreamState.startShards newWorkers)
+                    | ShardsUpdated shards ->
+                        let state = state |> StreamState.updateShards shards
+                        let newWorkers = state |> StreamState.nextShards |> Seq.map startShardWorker |> Map.ofSeq
+                        newWorkers |> Map.iter (fun sId _ -> printfn "Starting worker for shard %s" sId)
+                        do! loop (state |> StreamState.startShards newWorkers)
+            }
             async {
                 let! stream = describeStream streamArn ct |> Async.AwaitTaskCorrect
                 let state = StreamState.init stream.Shards startPosition
@@ -383,9 +416,8 @@ type StreamContext<'TRecord> internal (client: IAmazonDynamoDBStreams, tableName
                 let workers = StreamState.nextShards state |> Seq.map startShardWorker |> Map.ofSeq
                 workers |> Map.iter (fun sId _ -> printfn "Starting worker for shard %s" sId)
                 do! loop (state |> StreamState.startShards workers)
-            }
-        )
-        
+            })
+
     /// DynamoDB streaming client instance used for the table operations
     member _.Client = client
     /// DynamoDB table name targeted by the context
@@ -395,8 +427,7 @@ type StreamContext<'TRecord> internal (client: IAmazonDynamoDBStreams, tableName
 
 
     /// <summary>
-    ///     Creates a DynamoDB client instance for given F# record and table name.<br/>
-    ///     For creating, provisioning or verification, see <c>VerifyOrCreateTableAsync</c> and <c>VerifyTableAsync</c>.
+    ///   Creates a DynamoDB stream processing instance for given F# record and table name.<br/>
     /// </summary>
     /// <param name="client">DynamoDB streaming client instance.</param>
     /// <param name="tableName">Table name to target.</param>
@@ -409,16 +440,15 @@ type StreamContext<'TRecord> internal (client: IAmazonDynamoDBStreams, tableName
     ///   Lists all the streams associated with the table.
     /// </summary>
     /// <param name="ct">Cancellation token for the operation.</param>
-    member _.ListStreamsAsync(?ct : CancellationToken) =
-        listStreams(ct |> Option.defaultValue CancellationToken.None)
+    member _.ListStreamsAsync(?ct: CancellationToken) = listStreams (ct |> Option.defaultValue CancellationToken.None)
 
     /// <summary>
-    ///   Parses a DynamoDB stream record into the corresponding F# type (matching the table definition).
-    ///   Intended to be used directly from Lambda event handlers or Kinesis consumers.
+    ///   Deserializes a DynamoDB stream record into the corresponding F# type (matching the table definition).
+    ///   Intended to be used directly from Lambda event handlers or KCL consumers.
     /// </summary>
-    /// <param name="record">DynamoDB stream record to parse.</param>
+    /// <param name="record">DynamoDB stream record to deserialize.</param>
     /// <returns>`StreamRecord` with old value, new value, and/or `TableKey`, depending on stream config & operation</returns>
-    member t.ParseStreamRecord(record: Record) : StreamRecord<'TRecord> =
+    member t.DeserializeStreamRecord(record: Record) : StreamRecord<'TRecord> =
         let op =
             match record.EventName with
             | n when n = OperationType.INSERT -> Insert
@@ -442,22 +472,24 @@ type StreamContext<'TRecord> internal (client: IAmazonDynamoDBStreams, tableName
           New = newRec
           Old = oldRec }
 
-    member t.TempReadAllRecords() =
-        task {
-            let! streams = listStreams CancellationToken.None
-            let! stream = describeStream (streams |> List.head) CancellationToken.None
-            match Shard.oldest stream.Shards with
-            | Some shard ->
-                let! iterator = getShardIterator stream.StreamArn ShardIteratorType.TRIM_HORIZON { ShardId = shard.ShardId; SequenceNumber = None } CancellationToken.None
-                let! records = getRecords iterator maxRecords CancellationToken.None
-                return records |> fst |> Array.map t.ParseStreamRecord
-            | None ->
-                return [||]
-        }
-
-
-    member t.StartReadingAsync(streamArn: string, processRecord: StreamRecord<'TRecord> -> unit, ?startPosition : ReadStreamFrom, ?ct: CancellationToken) =
-        task {
-            let processor = startStreamProcessor streamArn (defaultArg startPosition Newest) (fun r -> processRecord (t.ParseStreamRecord r)) (ct |> Option.defaultValue CancellationToken.None)
-            return ()
-        }
+    // TODO: Return/save checkpoint updates somehow
+    /// <summary>
+    /// Start a single-process Dynamo stream reader
+    /// </summary>
+    /// <param name="streamArn">ARN of the stream to read from</param>
+    /// <param name="processRecord">Function to process each record</param>
+    /// <param name="startPosition">Start position of the stream - defaults to `Newest`</param>
+    /// <param name="ct">Cancellation token for the operation - defaults to `CancellationToken.None`</param>
+    member internal t.StartReadingAsync
+        (
+            streamArn: string,
+            processRecord: StreamRecord<'TRecord> -> Task,
+            ?startPosition: ReadStreamFrom,
+            ?ct: CancellationToken
+        ) =
+        startStreamProcessor
+            streamArn
+            (defaultArg startPosition Newest)
+            (fun r -> processRecord (t.DeserializeStreamRecord r))
+            (defaultArg ct CancellationToken.None)
+        :> IDisposable
