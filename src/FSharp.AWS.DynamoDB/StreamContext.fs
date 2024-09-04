@@ -101,13 +101,14 @@ module private StreamState =
                         (s.ShardId,
                          Processing
                              { ShardId = s.ShardId
-                               SequenceNumber = Some s.SequenceNumberRange.EndingSequenceNumber }))
+                               SequenceNumber = None }))
                     |> Map.ofSeq
                 let closedShards =
                     shards
                     |> Seq.filter (fun s -> not (openShards |> Map.containsKey s.ShardId))
                     |> Seq.map (fun s -> (s.ShardId, Completed))
                     |> Map.ofSeq
+
                 closedShards |> Map.union openShards
 
             | Positions pos ->
@@ -236,7 +237,8 @@ type StreamContext<'TRecord> internal (client: IAmazonDynamoDBStreams, tableName
     }
 
     // TODO: what does this return if no more records in shard?
-    let getShardIterator (streamArn: string) (iteratorType: ShardIteratorType) (position: StreamPosition) (ct: CancellationToken) = task {
+    let getShardIterator (streamArn: string) (position: StreamPosition) (ct: CancellationToken) = task {
+        let iteratorType = if position.SequenceNumber.IsSome then ShardIteratorType.AFTER_SEQUENCE_NUMBER else ShardIteratorType.TRIM_HORIZON
         let req = GetShardIteratorRequest(StreamArn = streamArn, ShardId = position.ShardId, ShardIteratorType = iteratorType)
         position.SequenceNumber |> Option.iter (fun n -> req.SequenceNumber <- n)
         let! response = client.GetShardIteratorAsync(req, ct)
@@ -282,7 +284,7 @@ type StreamContext<'TRecord> internal (client: IAmazonDynamoDBStreams, tableName
 
                     async {
                         let! initialIterator =
-                            getShardIterator streamArn ShardIteratorType.TRIM_HORIZON position ct |> Async.AwaitTaskCorrect
+                            getShardIterator streamArn position ct |> Async.AwaitTaskCorrect
                         do! loop initialIterator
                     }),
                 ct
