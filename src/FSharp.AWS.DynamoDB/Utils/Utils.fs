@@ -233,6 +233,16 @@ module internal Utils =
                 None
         | _ -> None
 
+    let (|OptionSome|_|) (e: Expr) =
+        match e with
+        | NewUnionCase(uci, [ v ]) ->
+            let dt = uci.DeclaringType
+            if dt.IsGenericType && dt.GetGenericTypeDefinition() = typedefof<_ option> && uci.Name = (nameof Some) then
+                Some v
+            else
+                None
+        | _ -> None
+
     type Async with
 
         /// Raise an exception

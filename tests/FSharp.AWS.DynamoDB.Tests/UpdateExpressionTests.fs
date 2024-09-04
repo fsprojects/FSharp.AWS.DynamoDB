@@ -244,6 +244,35 @@ type ``Update Expression Tests``(fixture: TableFixture) =
         test <@ "<undefined>" = item'.String @>
 
     [<Fact>]
+    let ``Update using defaultArg combinator on the same optional attribute (None)`` () =
+        let item = { mkItem () with Optional = None }
+        let key = table.PutItem item
+        let item' = table.UpdateItem(key, <@ fun (r: R) -> { r with Optional = defaultArg r.Optional "<undefined>" |> Some } @>)
+        test <@ Some "<undefined>" = item'.Optional @>
+
+    [<Fact>]
+    let ``Update using defaultArg combinator on the same optional attribute (Some)`` () =
+        let item = { mkItem () with Optional = Some(guid ()) }
+        let key = table.PutItem item
+        let item' = table.UpdateItem(key, <@ fun (r: R) -> { r with Optional = defaultArg r.Optional "<undefined>" |> Some } @>)
+        test <@ item.Optional = item'.Optional @>
+
+    [<Fact>]
+    let ``Update using defaultArg combinator on the same non-optional attribute (None)`` () =
+        let item = mkItem ()
+        let key = table.PutItem item
+        clearAttribute table key "String"
+        let item' = table.UpdateItem(key, <@ fun (r: R) -> { r with String = defaultArg (Some r.String) "<undefined>" } @>)
+        test <@ "<undefined>" = item'.String @>
+
+    [<Fact>]
+    let ``Update using defaultArg combinator on the same non-optional attribute (Some)`` () =
+        let item = mkItem ()
+        let key = table.PutItem item
+        let item' = table.UpdateItem(key, <@ fun (r: R) -> { r with String = defaultArg (Some r.String) "<undefined>" } @>)
+        test <@ item.String = item'.String @>
+
+    [<Fact>]
     let ``Update int set with add element`` () =
         let item = { mkItem () with IntSet = set [ 1L; 2L ] }
         let key = table.PutItem item
