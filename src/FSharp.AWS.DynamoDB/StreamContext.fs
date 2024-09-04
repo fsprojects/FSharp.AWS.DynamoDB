@@ -6,7 +6,6 @@ open System.Threading.Tasks
 
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
-open System.Collections.Generic
 
 type StreamOperation =
     | Insert
@@ -27,81 +26,7 @@ type ReadStreamFrom =
     | Newest
     | Positions of StreamPosition list
 
-type private Enumerator<'TRecord>(initialIterator: string, fetchNext: string -> Task<('TRecord[] * string option)>) =
-    let mutable iterator = initialIterator
-    let mutable records: 'TRecord[] = Array.empty
-    let mutable index = 0
-
-    interface IAsyncEnumerator<'TRecord> with
-        member _.Current = records[index]
-
-        member _.MoveNextAsync() =
-            if index < records.Length - 1 then
-                index <- index + 1
-                ValueTask<bool>(true)
-            else
-                let nextTask =
-                    (fetchNext iterator)
-                        .ContinueWith(
-                            (fun (task: Task<('TRecord[] * string option)>) ->
-                                match task.Result with
-                                | (_, None) ->
-                                    records <- Array.empty
-                                    index <- 0
-                                    false
-                                | (recs, Some nextIterator) ->
-                                    records <- recs
-                                    iterator <- nextIterator
-                                    index <- 0
-                                    true),
-                            TaskContinuationOptions.OnlyOnRanToCompletion
-                        )
-                ValueTask<bool>(nextTask)
-
-        member _.DisposeAsync() = ValueTask()
-
-type private ShardTree =
-    | Leaf of Shard
-    | Node of Shard * ShardTree list
-
-module private ShardTree =
-    let shard (tree: ShardTree) =
-        match tree with
-        | Leaf shard
-        | Node(shard, _) -> shard
-
-    let find (shardId: string) (tree: ShardTree) =
-        let rec findInner t =
-            match t with
-            | Leaf s
-            | Node(s, _) when s.ShardId = shardId -> Some(t)
-            | Node(_, children) -> children |> Seq.choose (findInner) |> Seq.tryHead
-            | Leaf _ -> None
-
-        findInner tree
-
-    let nextShards (shardId: string) (trees: ShardTree list) =
-        match trees |> List.choose (find shardId) |> List.tryHead with
-        | Some(Node(_, children)) -> children
-        | _ -> []
-
 module private Shard =
-
-    /// <summary>
-    /// Returns all of the root shards (with no parent) in the stream
-    /// </summary>
-    /// <param name="shards">sequence of `Shard` objects from the `StreamDescription`</param>
-    let roots (shards: Shard seq) =
-        shards
-        |> Seq.filter (fun s ->
-            String.IsNullOrEmpty(s.ParentShardId)
-            || not (shards |> Seq.exists (fun c -> c.ShardId = s.ParentShardId)))
-
-    /// <summary>
-    /// Returns all of the leaf shards (with no children) in the stream
-    /// </summary>
-    /// <param name="shards">sequence of `Shard` objects from the `StreamDescription`</param>
-    let leaves (shards: Shard seq) = shards |> Seq.filter (fun s -> not (shards |> Seq.exists (fun c -> c.ParentShardId = s.ShardId)))
 
     /// <summary>
     /// Returns all of the open shards (with no ending sequence number) in the stream
@@ -327,11 +252,6 @@ type StreamContext<'TRecord> internal (client: IAmazonDynamoDBStreams, tableName
             else
                 Some response.NextShardIterator
     }
-
-    let getRecordsAsync (iterator: string) (ct: CancellationToken) =
-        let batchSize = 5
-        { new IAsyncEnumerable<Record> with
-            member _.GetAsyncEnumerator(ct) = Enumerator<Record>(iterator, (fun i -> getRecords i batchSize ct)) :> IAsyncEnumerator<Record> }
 
     let startShardProcessor
         (outbox: MailboxProcessor<ShardMsg>)
