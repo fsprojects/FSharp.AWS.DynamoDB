@@ -134,6 +134,23 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
         test <@ None = deletedItem @>
         test <@ not (table.ContainsKey key) @>
 
+    [<Theory>]
+    [<InlineData("",
+                 "rangeKey",
+                 "One or more parameter values are not valid. The AttributeValue for a key attribute cannot contain an empty string value. Key: HashKey")>]
+    [<InlineData("hashKey",
+                 "",
+                 "One or more parameter values are not valid. The AttributeValue for a key attribute cannot contain an empty string value. Key: RangeKey")>]
+    [<InlineData("",
+                 "",
+                 "One or more parameter values are not valid. The AttributeValue for a key attribute cannot contain an empty string value. Key: HashKey")>]
+    let ``Operations with empty key values should fail with a DynamoDB client error`` (hashKey, rangeKey, expectedErrorMsg) =
+        let value = { mkItem () with HashKey = hashKey; RangeKey = rangeKey }
+        try
+            table.PutItem value |> ignore
+        with :? Amazon.DynamoDBv2.AmazonDynamoDBException as ex ->
+            test <@ ex.Message = expectedErrorMsg @>
+
     interface IClassFixture<TableFixture>
 
 type ``TransactWriteItems tests``(fixture: TableFixture) =
