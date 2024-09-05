@@ -161,10 +161,10 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
     [<Fact>]
     let ``Minimal happy path`` () = async {
         let item = mkItem ()
-
-        let requests = [ table1.TransactWrite.Put(item, Some doesntExistConditionTable1) ]
-
-        do! table1.TransactWriteItems requests
+        do!
+            TransactionBuilder()
+                .Put(table1, item, doesntExistConditionTable1)
+                .TransactWriteItems()
 
         let! itemFound = table1.ContainsKeyAsync(table1.Template.ExtractKey item)
         true =! itemFound
@@ -175,12 +175,11 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
         let item = mkItem ()
         let compatibleItem = mkCompatibleItem ()
 
-        let tableRequest = table1.TransactWrite.Put(item, Some doesntExistConditionTable1)
-        let table2Request = table2.TransactWrite.Put(compatibleItem, None)
-
-        let requests = [ tableRequest; table2Request ]
-
-        do! table1.TransactWriteItems requests
+        do!
+            TransactionBuilder()
+                .Put(table1, item, doesntExistConditionTable1)
+                .Put(table2, compatibleItem, doesntExistConditionTable2)
+                .TransactWriteItems()
 
         let! itemFound = table1.ContainsKeyAsync(table1.Template.ExtractKey item)
         true =! itemFound
@@ -193,11 +192,12 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
     let ``Minimal Canceled path`` () = async {
         let item = mkItem ()
 
-        let requests = [ table1.TransactWrite.Put(item, Some existsConditionTable1) ]
-
         let mutable failed = false
         try
-            do! table1.TransactWriteItems requests
+            do!
+                TransactionBuilder()
+                    .Put(table1, item, existsConditionTable1)
+                    .TransactWriteItems()
         with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed ->
             failed <- true
 
@@ -212,15 +212,17 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
         let item, item2 = mkItem (), mkItem ()
         let! key = table1.PutItemAsync item
 
-        let requests =
-            [ if shouldFail then
-                  table1.TransactWrite.Check(key, doesntExistConditionTable1)
-              else
-                  table1.TransactWrite.Check(key, existsConditionTable1)
-                  table1.TransactWrite.Put(item2, None) ]
+        let transaction =
+            if shouldFail then
+                TransactionBuilder().Check(table1, key, doesntExistConditionTable1)
+            else
+                TransactionBuilder()
+                    .Check(table1, key, existsConditionTable1)
+                    .Put(table1, item2)
+
         let mutable failed = false
         try
-            do! table1.TransactWriteItems requests
+            do! transaction.TransactWriteItems()
         with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed ->
             failed <- true
 
@@ -234,28 +236,30 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
     let ``All paths`` shouldFail = async {
         let item, item2, item3, item4, item5, item6, item7 = mkItem (), mkItem (), mkItem (), mkItem (), mkItem (), mkItem (), mkItem ()
         let! key = table1.PutItemAsync item
+        let transactionBuilder = TransactionBuilder()
 
         let requests =
-            [ table1.TransactWrite.Update(key, Some existsConditionTable1, compileUpdateTable1 <@ fun t -> { t with Value = 42 } @>)
-              table1.TransactWrite.Put(item2, None)
-              table1.TransactWrite.Put(item3, Some doesntExistConditionTable1)
-              table1.TransactWrite.Delete(table1.Template.ExtractKey item4, Some doesntExistConditionTable1)
-              table1.TransactWrite.Delete(table1.Template.ExtractKey item5, None)
-              table1.TransactWrite.Check(
+            [ transactionBuilder.Update(table1, key, compileUpdateTable1 <@ fun t -> { t with Value = 42 } @>, existsConditionTable1)
+              transactionBuilder.Put(table1, item2)
+              transactionBuilder.Put(table1, item3, doesntExistConditionTable1)
+              transactionBuilder.Delete(table1, table1.Template.ExtractKey item4, Some doesntExistConditionTable1)
+              transactionBuilder.Delete(table1, table1.Template.ExtractKey item5, None)
+              transactionBuilder.Check(
+                  table1,
                   table1.Template.ExtractKey item6,
                   (if shouldFail then
                        existsConditionTable1
                    else
                        doesntExistConditionTable1)
               )
-              table1.TransactWrite.Update(
+              transactionBuilder.Update(
+                  table1,
                   TableKey.Combined(item7.HashKey, item7.RangeKey),
-                  None,
                   compileUpdateTable1 <@ fun t -> { t with Tuple = (42, 42) } @>
               ) ]
         let mutable failed = false
         try
-            do! table1.TransactWriteItems requests
+            do! transactionBuilder.TransactWriteItems()
         with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed ->
             failed <- true
         failed =! shouldFail
@@ -273,8 +277,8 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
         test <@ shouldFail <> (maybeItem7 |> Option.map (fun x -> x.Tuple) |> Option.contains (42, 42)) @>
     }
 
-    let shouldBeRejectedWithArgumentOutOfRangeException requests = async {
-        let! e = Async.Catch(table1.TransactWriteItems requests)
+    let shouldBeRejectedWithArgumentOutOfRangeException (builder: TransactionBuilder) = async {
+        let! e = Async.Catch(builder.TransactWriteItems())
         test
             <@
                 match e with
@@ -284,10 +288,17 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
     }
 
     [<Fact>]
-    let ``Empty request list is rejected with AORE`` () = shouldBeRejectedWithArgumentOutOfRangeException []
+    let ``Empty request list is rejected with AORE`` () =
+        shouldBeRejectedWithArgumentOutOfRangeException (TransactionBuilder())
+        |> Async.RunSynchronously
+        |> ignore
 
     [<Fact>]
     let ``Over 100 writes are rejected with AORE`` () =
-        shouldBeRejectedWithArgumentOutOfRangeException [ for _x in 1..101 -> table1.TransactWrite.Put(mkItem (), None) ]
+        let transactionBuilder = TransactionBuilder()
+        for _x in 1..101 do
+            transactionBuilder.Put(table1, mkItem ()) |> ignore
+
+        shouldBeRejectedWithArgumentOutOfRangeException transactionBuilder
 
     interface IClassFixture<TableFixture>
