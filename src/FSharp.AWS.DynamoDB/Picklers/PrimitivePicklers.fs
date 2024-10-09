@@ -36,8 +36,6 @@ type StringPickler() =
     override _.Pickle s =
         if isNull s then
             AttributeValue(NULL = true)
-        elif s = "" then
-            invalidOp "empty strings not supported by DynamoDB."
         else
             AttributeValue(s)
         |> Some
