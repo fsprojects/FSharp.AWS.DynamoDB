@@ -2023,7 +2023,7 @@ module TransactWriteItemsRequest =
         | _ -> None
 
 
-type TransactionBuilder(?metricsCollector: (RequestMetrics -> unit)) =
+type Transaction(?metricsCollector: (RequestMetrics -> unit)) =
     let transactionItems = ResizeArray<TransactWriteItem>()
     let mutable (dynamoDbClient: IAmazonDynamoDB) = null
 
@@ -2049,7 +2049,7 @@ type TransactionBuilder(?metricsCollector: (RequestMetrics -> unit)) =
             tableContext: TableContext<'TRecord>,
             item: 'TRecord,
             ?precondition: ConditionExpression<'TRecord>
-        ) : TransactionBuilder =
+        ) : Transaction =
         setClient tableContext.Client
         let req = Put(TableName = tableContext.TableName, Item = tableContext.Template.ToAttributeValues item)
         precondition
@@ -2058,7 +2058,7 @@ type TransactionBuilder(?metricsCollector: (RequestMetrics -> unit)) =
             req.ConditionExpression <- cond.Conditional.Write writer)
         transactionItems.Add(TransactWriteItem(Put = req))
         this
-    member this.Check(tableContext: TableContext<'TRecord>, key: TableKey, condition: ConditionExpression<'TRecord>) : TransactionBuilder =
+    member this.Check(tableContext: TableContext<'TRecord>, key: TableKey, condition: ConditionExpression<'TRecord>) : Transaction =
         setClient tableContext.Client
 
         let req = ConditionCheck(TableName = tableContext.TableName, Key = tableContext.Template.ToAttributeValues key)
@@ -2073,7 +2073,7 @@ type TransactionBuilder(?metricsCollector: (RequestMetrics -> unit)) =
             updater: UpdateExpression<'TRecord>,
             ?precondition: ConditionExpression<'TRecord>
 
-        ) : TransactionBuilder =
+        ) : Transaction =
         setClient tableContext.Client
 
         let req = Update(TableName = tableContext.TableName, Key = tableContext.Template.ToAttributeValues key)
@@ -2087,7 +2087,7 @@ type TransactionBuilder(?metricsCollector: (RequestMetrics -> unit)) =
             tableContext: TableContext<'TRecord>,
             key: TableKey,
             precondition: option<ConditionExpression<'TRecord>>
-        ) : TransactionBuilder =
+        ) : Transaction =
         setClient tableContext.Client
 
         let req = Delete(TableName = tableContext.TableName, Key = tableContext.Template.ToAttributeValues key)

@@ -107,7 +107,7 @@ type Tests(fixture: TableFixture) =
 
         let item = mkItem (guid ()) (guid ()) 0
         do!
-            TransactionBuilder(collector.Collect)
+            Transaction(collector.Collect)
                 .Put(sut, item, compile <@ fun t -> NOT_EXISTS t.RangeKey @>)
                 .TransactWriteItems()
 
@@ -135,7 +135,7 @@ type Tests(fixture: TableFixture) =
         try
             do!
                 // The check will fail, which triggers a throw from the underlying AWS SDK; there's no way to extract the consumption info in that case
-                TransactionBuilder()
+                Transaction()
                     .Put(sut, item, compile <@ fun t -> EXISTS t.RangeKey @>)
                     .TransactWriteItems()
         with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed ->
