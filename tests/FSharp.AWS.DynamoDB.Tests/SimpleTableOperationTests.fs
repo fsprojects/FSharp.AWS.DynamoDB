@@ -257,15 +257,15 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
     let ``All paths`` shouldFail = async {
         let item, item2, item3, item4, item5, item6, item7 = mkItem (), mkItem (), mkItem (), mkItem (), mkItem (), mkItem (), mkItem ()
         let! key = table1.PutItemAsync item
-        let Transaction = Transaction()
+        let transaction = Transaction()
 
         let requests =
-            [ Transaction.Update(table1, key, compileUpdateTable1 <@ fun t -> { t with Value = 42 } @>, existsConditionTable1)
-              Transaction.Put(table1, item2)
-              Transaction.Put(table1, item3, doesntExistConditionTable1)
-              Transaction.Delete(table1, table1.Template.ExtractKey item4, Some doesntExistConditionTable1)
-              Transaction.Delete(table1, table1.Template.ExtractKey item5, None)
-              Transaction.Check(
+            [ transaction.Update(table1, key, compileUpdateTable1 <@ fun t -> { t with Value = 42 } @>, existsConditionTable1)
+              transaction.Put(table1, item2)
+              transaction.Put(table1, item3, doesntExistConditionTable1)
+              transaction.Delete(table1, table1.Template.ExtractKey item4, Some doesntExistConditionTable1)
+              transaction.Delete(table1, table1.Template.ExtractKey item5, None)
+              transaction.Check(
                   table1,
                   table1.Template.ExtractKey item6,
                   (if shouldFail then
@@ -273,14 +273,14 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
                    else
                        doesntExistConditionTable1)
               )
-              Transaction.Update(
+              transaction.Update(
                   table1,
                   TableKey.Combined(item7.HashKey, item7.RangeKey),
                   compileUpdateTable1 <@ fun t -> { t with Tuple = (42, 42) } @>
               ) ]
         let mutable failed = false
         try
-            do! Transaction.TransactWriteItems()
+            do! transaction.TransactWriteItems()
         with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed ->
             failed <- true
         failed =! shouldFail
