@@ -253,13 +253,9 @@ table.Scan(startedBefore (DateTimeOffset.Now - TimeSpan.FromDays 1.))
 
 (See [`Script.fsx`](src/FSharp.AWS.DynamoDB/Script.fsx) for example timings showing the relative efficiency.)
 
-## `TransactWriteItems`
+## `Transaction`
 
-Using [`TransactWriteItems`](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_TransactWriteItems.html)
-to compose multiple write operations into an aggregate request that will succeed or fail atomically is supported.
-See [overview article](https://www.alexdebrie.com/posts/dynamodb-transactions) by [@alexdebrie](https://github.com/alexdebrie)
-
-NOTE: while the underlying API supports combining operations on multiple tables, the exposed API does not.   
+`FSharp.AWS.DynamoDB` supports DynamoDB transactions via the `Transaction` class.
 
 The supported individual operations are:
 - `Check`: `ConditionCheck` - potentially veto the batch if the ([precompiled](#Precomputing-DynamoDB-Expressions)) `condition` is not fulfilled by the item identified by `key`
@@ -271,21 +267,22 @@ The supported individual operations are:
 let compile = table.Template.PrecomputeConditionalExpr
 let doesntExistCondition = compile <@ fun t -> NOT_EXISTS t.Value @>
 let existsCondition = compile <@ fun t -> EXISTS t.Value @>
-
 let key = TableKey.Combined(hashKey, rangeKey)
-let requests = [
-    TransactWrite.Check  (key, doesntExistCondition)
-    TransactWrite.Put    (item2, None)
-    TransactWrite.Put    (item3, Some existsCondition)
-    TransactWrite.Delete (table.Template.ExtractKey item5, None) ]
-do! table.TransactWriteItems requests
+
+let transaction = Transaction()
+
+transaction.Check(table, key, doesntExistCondition)
+transaction.Put(table, item2, None)
+transaction.Put(table, item3, Some existsCondition)
+transaction.Delete (table ,table.Template.ExtractKey item5, None)
+do! transaction.TransactWriteItems()
 ```
 
 Failed preconditions (or `TransactWrite.Check`s) are signalled as per the underlying API: via a `TransactionCanceledException`.
 Use `TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed` to trap such conditions:
 
 ```fsharp
-try do! table.TransactWriteItems writes
+try do! transaction.TransactWriteItems()
         return Some result
 with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed -> return None 
 ```
