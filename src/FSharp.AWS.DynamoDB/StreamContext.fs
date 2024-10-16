@@ -370,6 +370,7 @@ type StreamContext<'TRecord> internal (client: IAmazonDynamoDBStreams, tableName
     /// </summary>
     /// <param name="record">DynamoDB stream record to deserialize.</param>
     /// <returns>`StreamRecord` with old value, new value, and/or `TableKey`, depending on stream config & operation</returns>
+    /// <throws>Throws an exception if the New image attributes can’t be deserialized. Old image will be set to `None` if deserialization fails.</throws>
     member t.DeserializeStreamRecord(record: Record) : StreamRecord<'TRecord> =
         let op =
             match record.EventName with
@@ -387,7 +388,8 @@ type StreamContext<'TRecord> internal (client: IAmazonDynamoDBStreams, tableName
             if record.Dynamodb.OldImage.Count = 0 then
                 None
             else
-                Some(t.Template.OfAttributeValues record.Dynamodb.OldImage)
+                try Some(t.Template.OfAttributeValues record.Dynamodb.OldImage)
+                with _ -> None // Swallow exception if old image fails deserialization
         { Operation = op
           TableKey = key
           ApproximateCreationDateTime = DateTimeOffset(record.Dynamodb.ApproximateCreationDateTime)
