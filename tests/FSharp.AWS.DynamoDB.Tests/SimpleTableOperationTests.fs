@@ -18,6 +18,8 @@ module SimpleTableTypes =
           [<RangeKey>]
           RangeKey: string
 
+          EmptyString: string
+
           Value: int64
 
           Tuple: int64 * int64
@@ -46,6 +48,7 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
     let mkItem () =
         { HashKey = guid ()
           RangeKey = guid ()
+          EmptyString = ""
           Value = rand ()
           Tuple = rand (), rand ()
           Map = seq { for _ in 0L .. rand () % 5L -> "K" + guid (), rand () } |> Map.ofSeq
@@ -131,117 +134,172 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
         test <@ None = deletedItem @>
         test <@ not (table.ContainsKey key) @>
 
+    [<Theory>]
+    [<InlineData("",
+                 "rangeKey",
+                 "One or more parameter values are not valid. The AttributeValue for a key attribute cannot contain an empty string value. Key: HashKey")>]
+    [<InlineData("hashKey",
+                 "",
+                 "One or more parameter values are not valid. The AttributeValue for a key attribute cannot contain an empty string value. Key: RangeKey")>]
+    [<InlineData("",
+                 "",
+                 "One or more parameter values are not valid. The AttributeValue for a key attribute cannot contain an empty string value. Key: HashKey")>]
+    let ``Operations with empty key values should fail with a DynamoDB client error`` (hashKey, rangeKey, expectedErrorMsg) =
+        let value = { mkItem () with HashKey = hashKey; RangeKey = rangeKey }
+        try
+            table.PutItem value |> ignore
+        with :? Amazon.DynamoDBv2.AmazonDynamoDBException as ex ->
+            test <@ ex.Message = expectedErrorMsg @>
+
     interface IClassFixture<TableFixture>
 
-type ``TransactWriteItems tests``(fixture: TableFixture) =
+type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
 
-    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
+    let randInt64 = let r = Random.Shared in fun () -> int64 <| r.Next()
+    let randInt = let r = Random.Shared in fun () -> int32 <| r.Next()
     let mkItem () =
         { HashKey = guid ()
           RangeKey = guid ()
-          Value = rand ()
-          Tuple = rand (), rand ()
-          Map = seq { for _ in 0L .. rand () % 5L -> "K" + guid (), rand () } |> Map.ofSeq
-          Unions = [ Choice1Of3(guid ()); Choice2Of3(rand ()); Choice3Of3(Guid.NewGuid().ToByteArray()) ] }
+          EmptyString = ""
+          Value = randInt64 ()
+          Tuple = randInt64 (), randInt64 ()
+          Map = seq { for _ in 0L .. randInt64 () % 5L -> "K" + guid (), randInt64 () } |> Map.ofSeq
+          Unions = [ Choice1Of3(guid ()); Choice2Of3(randInt64 ()); Choice3Of3(Guid.NewGuid().ToByteArray()) ] }
 
-    let table = fixture.CreateEmpty<SimpleRecord>()
-    let compile = table.Template.PrecomputeConditionalExpr
-    let compileUpdate (e: Quotations.Expr<SimpleRecord -> SimpleRecord>) = table.Template.PrecomputeUpdateExpr e
-    let doesntExistCondition = compile <@ fun t -> NOT_EXISTS t.Value @>
-    let existsCondition = compile <@ fun t -> EXISTS t.Value @>
+    let mkCompatibleItem () : CompatibleRecord = { Id = guid (); Values = set [ for _ in 0 .. (randInt () % 5) -> randInt () ] }
+
+    let table1 = table1.CreateEmpty<SimpleRecord>()
+    let table2 = table2.CreateEmpty<CompatibleRecord>()
+    let compileTable1 = table1.Template.PrecomputeConditionalExpr
+    let compileTable2 = table2.Template.PrecomputeConditionalExpr
+    let compileUpdateTable1 (e: Quotations.Expr<SimpleRecord -> SimpleRecord>) = table1.Template.PrecomputeUpdateExpr e
+    let compileUpdateTable2 (e: Quotations.Expr<SimpleRecord -> SimpleRecord>) = table1.Template.PrecomputeUpdateExpr e
+    let doesntExistConditionTable1 = compileTable1 <@ fun t -> NOT_EXISTS t.Value @>
+    let doesntExistConditionTable2 = compileTable2 <@ fun t -> NOT_EXISTS t.Values @>
+    let existsConditionTable1 = compileTable1 <@ fun t -> EXISTS t.Value @>
+    let existsConditionTable2 = compileTable2 <@ fun t -> EXISTS t.Values @>
 
     [<Fact>]
     let ``Minimal happy path`` () = async {
         let item = mkItem ()
+        do!
+            Transaction()
+                .Put(table1, item, doesntExistConditionTable1)
+                .TransactWriteItems()
 
-        let requests = [ TransactWrite.Put(item, Some doesntExistCondition) ]
-
-        do! table.TransactWriteItems requests
-
-        let! itemFound = table.ContainsKeyAsync(table.Template.ExtractKey item)
+        let! itemFound = table1.ContainsKeyAsync(table1.Template.ExtractKey item)
         true =! itemFound
+    }
+
+    [<Fact>]
+    let ``Minimal happy path with multiple tables`` () = async {
+        let item = mkItem ()
+        let compatibleItem = mkCompatibleItem ()
+
+        do!
+            Transaction()
+                .Put(table1, item, doesntExistConditionTable1)
+                .Put(table2, compatibleItem, doesntExistConditionTable2)
+                .TransactWriteItems()
+
+        let! itemFound = table1.ContainsKeyAsync(table1.Template.ExtractKey item)
+        true =! itemFound
+
+        let! compatibleItemFound = table2.ContainsKeyAsync(table2.Template.ExtractKey compatibleItem)
+        true =! compatibleItemFound
     }
 
     [<Fact>]
     let ``Minimal Canceled path`` () = async {
         let item = mkItem ()
 
-        let requests = [ TransactWrite.Put(item, Some existsCondition) ]
-
         let mutable failed = false
         try
-            do! table.TransactWriteItems requests
+            do!
+                Transaction()
+                    .Put(table1, item, existsConditionTable1)
+                    .TransactWriteItems()
         with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed ->
             failed <- true
 
         true =! failed
 
-        let! itemFound = table.ContainsKeyAsync(table.Template.ExtractKey item)
+        let! itemFound = table1.ContainsKeyAsync(table1.Template.ExtractKey item)
         false =! itemFound
     }
 
     [<Theory; InlineData true; InlineData false>]
     let ``ConditionCheck outcome should affect sibling TransactWrite`` shouldFail = async {
         let item, item2 = mkItem (), mkItem ()
-        let! key = table.PutItemAsync item
+        let! key = table1.PutItemAsync item
 
-        let requests =
-            [ if shouldFail then
-                  TransactWrite.Check(key, doesntExistCondition)
-              else
-                  TransactWrite.Check(key, existsCondition)
-                  TransactWrite.Put(item2, None) ]
+        let transaction =
+            if shouldFail then
+                Transaction().Check(table1, key, doesntExistConditionTable1)
+            else
+                Transaction()
+                    .Check(table1, key, existsConditionTable1)
+                    .Put(table1, item2)
+
         let mutable failed = false
         try
-            do! table.TransactWriteItems requests
+            do! transaction.TransactWriteItems()
         with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed ->
             failed <- true
 
         failed =! shouldFail
 
-        let! item2Found = table.ContainsKeyAsync(table.Template.ExtractKey item2)
+        let! item2Found = table1.ContainsKeyAsync(table1.Template.ExtractKey item2)
         failed =! not item2Found
     }
 
     [<Theory; InlineData true; InlineData false>]
     let ``All paths`` shouldFail = async {
         let item, item2, item3, item4, item5, item6, item7 = mkItem (), mkItem (), mkItem (), mkItem (), mkItem (), mkItem (), mkItem ()
-        let! key = table.PutItemAsync item
+        let! key = table1.PutItemAsync item
+        let transaction = Transaction()
 
         let requests =
-            [ TransactWrite.Update(key, Some existsCondition, compileUpdate <@ fun t -> { t with Value = 42 } @>)
-              TransactWrite.Put(item2, None)
-              TransactWrite.Put(item3, Some doesntExistCondition)
-              TransactWrite.Delete(table.Template.ExtractKey item4, Some doesntExistCondition)
-              TransactWrite.Delete(table.Template.ExtractKey item5, None)
-              TransactWrite.Check(table.Template.ExtractKey item6, (if shouldFail then existsCondition else doesntExistCondition))
-              TransactWrite.Update(
+            [ transaction.Update(table1, key, compileUpdateTable1 <@ fun t -> { t with Value = 42 } @>, existsConditionTable1)
+              transaction.Put(table1, item2)
+              transaction.Put(table1, item3, doesntExistConditionTable1)
+              transaction.Delete(table1, table1.Template.ExtractKey item4, Some doesntExistConditionTable1)
+              transaction.Delete(table1, table1.Template.ExtractKey item5, None)
+              transaction.Check(
+                  table1,
+                  table1.Template.ExtractKey item6,
+                  (if shouldFail then
+                       existsConditionTable1
+                   else
+                       doesntExistConditionTable1)
+              )
+              transaction.Update(
+                  table1,
                   TableKey.Combined(item7.HashKey, item7.RangeKey),
-                  None,
-                  compileUpdate <@ fun t -> { t with Tuple = (42, 42) } @>
+                  compileUpdateTable1 <@ fun t -> { t with Tuple = (42, 42) } @>
               ) ]
         let mutable failed = false
         try
-            do! table.TransactWriteItems requests
+            do! transaction.TransactWriteItems()
         with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed ->
             failed <- true
         failed =! shouldFail
 
-        let! maybeItem = table.TryGetItemAsync key
+        let! maybeItem = table1.TryGetItemAsync key
         test <@ shouldFail <> (maybeItem |> Option.contains { item with Value = 42 }) @>
 
-        let! maybeItem2 = table.TryGetItemAsync(table.Template.ExtractKey item2)
+        let! maybeItem2 = table1.TryGetItemAsync(table1.Template.ExtractKey item2)
         test <@ shouldFail <> (maybeItem2 |> Option.contains item2) @>
 
-        let! maybeItem3 = table.TryGetItemAsync(table.Template.ExtractKey item3)
+        let! maybeItem3 = table1.TryGetItemAsync(table1.Template.ExtractKey item3)
         test <@ shouldFail <> (maybeItem3 |> Option.contains item3) @>
 
-        let! maybeItem7 = table.TryGetItemAsync(table.Template.ExtractKey item7)
+        let! maybeItem7 = table1.TryGetItemAsync(table1.Template.ExtractKey item7)
         test <@ shouldFail <> (maybeItem7 |> Option.map (fun x -> x.Tuple) |> Option.contains (42, 42)) @>
     }
 
-    let shouldBeRejectedWithArgumentOutOfRangeException requests = async {
-        let! e = Async.Catch(table.TransactWriteItems requests)
+    let shouldBeRejectedWithArgumentOutOfRangeException (builder: Transaction) = async {
+        let! e = Async.Catch(builder.TransactWriteItems())
         test
             <@
                 match e with
@@ -251,10 +309,17 @@ type ``TransactWriteItems tests``(fixture: TableFixture) =
     }
 
     [<Fact>]
-    let ``Empty request list is rejected with AORE`` () = shouldBeRejectedWithArgumentOutOfRangeException []
+    let ``Empty request list is rejected with AORE`` () =
+        shouldBeRejectedWithArgumentOutOfRangeException (Transaction())
+        |> Async.RunSynchronously
+        |> ignore
 
     [<Fact>]
     let ``Over 100 writes are rejected with AORE`` () =
-        shouldBeRejectedWithArgumentOutOfRangeException [ for _x in 1..101 -> TransactWrite.Put(mkItem (), None) ]
+        let Transaction = Transaction()
+        for _x in 1..101 do
+            Transaction.Put(table1, mkItem ()) |> ignore
+
+        shouldBeRejectedWithArgumentOutOfRangeException Transaction
 
     interface IClassFixture<TableFixture>
