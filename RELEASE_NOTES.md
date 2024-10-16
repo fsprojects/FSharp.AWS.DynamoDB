@@ -1,3 +1,8 @@
+### 0.12.1-beta
+* Added support for `defaultArg` in update expressions on the same attribute, allowing SET if_not_exists semantics (eg { record with OptionalValue = Some (defaultArg record.OptionalValue "Default") })
+* Allow empty strings in non-key attributes (thanks @purkhusid)
+* Support multi-table transactions (thanks @purkhusid)
+
 ### 0.12.0-beta
 * Added support for `Array.contains` and `List.contains` to compare an attribute against multiple values (thanks @faldor20)
 * Added `AllowMultiple = true` for `GlobalSecondaryIndex*` Attributes to allow indices to share an attribute
