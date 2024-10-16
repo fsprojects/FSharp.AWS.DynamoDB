@@ -1,4 +1,3 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
@@ -37,6 +36,7 @@
     <Compile Include="Expression\ExpressionContainers.fs" />
     <Compile Include="RecordTemplate.fs" />
     <Compile Include="TableContext.fs" />
+    <Compile Include="StreamContext.fs" />
     <Compile Include="Extensions.fs" />
     <None Include="Script.fsx" />
     <None Include="paket.template" />

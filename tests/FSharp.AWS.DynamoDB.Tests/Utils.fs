@@ -29,6 +29,11 @@ module Utils =
 
         new AmazonDynamoDBClient(credentials, config) :> IAmazonDynamoDB
 
+    let getStreamsAccount () =
+        let credentials = BasicAWSCredentials("Fake", "Fake")
+        let config = AmazonDynamoDBStreamsConfig(ServiceURL = "http://localhost:8000")
+
+        new AmazonDynamoDBStreamsClient(credentials, config) :> IAmazonDynamoDBStreams
 
     let clearAttribute (table: TableContext<'T>) (key: TableKey) (attribute: string) =
         let keyAttr = table.Template.ToAttributeValues key
@@ -55,6 +60,7 @@ module Utils =
     type TableFixture() =
 
         let client = getDynamoDBAccount ()
+        let streamsClient = getStreamsAccount ()
         let tableName = getRandomTableName ()
 
         member _.Client = client
@@ -63,6 +69,11 @@ module Utils =
         member _.CreateEmpty<'TRecord>() =
             let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
             Scripting.TableContext.Initialize<'TRecord>(client, tableName, Throughput.Provisioned throughput)
+
+        member _.CreateEmptyWithStreaming<'TRecord>(streamType: StreamViewType) =
+            let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
+            (Scripting.TableContext.Initialize<'TRecord>(client, tableName, Throughput.Provisioned throughput, Streaming.Enabled streamType),
+             StreamContext<'TRecord>(streamsClient, tableName))
 
         interface IAsyncLifetime with
             member _.InitializeAsync() = System.Threading.Tasks.Task.CompletedTask
