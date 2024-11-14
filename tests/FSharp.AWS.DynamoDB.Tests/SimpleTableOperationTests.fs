@@ -182,10 +182,9 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
     [<Fact>]
     let ``Minimal happy path`` () = async {
         let item = mkItem ()
-        do!
-            Transaction()
-                .Put(table1, item, doesntExistConditionTable1)
-                .TransactWriteItems()
+        let transaction = table1.CreateTransaction()
+        transaction.Put(table1, item, doesntExistConditionTable1)
+        do! transaction.TransactWriteItems()
 
         let! itemFound = table1.ContainsKeyAsync(table1.Template.ExtractKey item)
         true =! itemFound
@@ -196,11 +195,10 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
         let item = mkItem ()
         let compatibleItem = mkCompatibleItem ()
 
-        do!
-            Transaction()
-                .Put(table1, item, doesntExistConditionTable1)
-                .Put(table2, compatibleItem, doesntExistConditionTable2)
-                .TransactWriteItems()
+        let transaction = table1.CreateTransaction()
+        transaction.Put(table1, item, doesntExistConditionTable1)
+        transaction.Put(table2, compatibleItem, doesntExistConditionTable2)
+        do! transaction.TransactWriteItems()
 
         let! itemFound = table1.ContainsKeyAsync(table1.Template.ExtractKey item)
         true =! itemFound
@@ -213,13 +211,12 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
     let ``Minimal Canceled path`` () = async {
         let item = mkItem ()
 
+        let transaction = table1.CreateTransaction()
+        transaction.Put(table1, item, existsConditionTable1)
         let mutable failed = false
         try
-            do!
-                Transaction()
-                    .Put(table1, item, existsConditionTable1)
-                    .TransactWriteItems()
-        with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed ->
+            do! transaction.TransactWriteItems()
+        with Transaction.TransactionCanceledConditionalCheckFailed ->
             failed <- true
 
         true =! failed
@@ -233,18 +230,17 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
         let item, item2 = mkItem (), mkItem ()
         let! key = table1.PutItemAsync item
 
-        let transaction =
-            if shouldFail then
-                Transaction().Check(table1, key, doesntExistConditionTable1)
-            else
-                Transaction()
-                    .Check(table1, key, existsConditionTable1)
-                    .Put(table1, item2)
+        let transaction = table1.CreateTransaction()
+        if shouldFail then
+            transaction.Check(table1, key, doesntExistConditionTable1)
+        else
+            transaction.Check(table1, key, existsConditionTable1)
+            transaction.Put(table1, item2)
 
         let mutable failed = false
         try
             do! transaction.TransactWriteItems()
-        with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed ->
+        with Transaction.TransactionCanceledConditionalCheckFailed ->
             failed <- true
 
         failed =! shouldFail
@@ -257,14 +253,14 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
     let ``All paths`` shouldFail = async {
         let item, item2, item3, item4, item5, item6, item7 = mkItem (), mkItem (), mkItem (), mkItem (), mkItem (), mkItem (), mkItem ()
         let! key = table1.PutItemAsync item
-        let transaction = Transaction()
+        let transaction = table1.CreateTransaction()
 
         let requests =
             [ transaction.Update(table1, key, compileUpdateTable1 <@ fun t -> { t with Value = 42 } @>, existsConditionTable1)
               transaction.Put(table1, item2)
               transaction.Put(table1, item3, doesntExistConditionTable1)
-              transaction.Delete(table1, table1.Template.ExtractKey item4, Some doesntExistConditionTable1)
-              transaction.Delete(table1, table1.Template.ExtractKey item5, None)
+              transaction.Delete(table1, table1.Template.ExtractKey item4, doesntExistConditionTable1)
+              transaction.Delete(table1, table1.Template.ExtractKey item5)
               transaction.Check(
                   table1,
                   table1.Template.ExtractKey item6,
@@ -281,7 +277,7 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
         let mutable failed = false
         try
             do! transaction.TransactWriteItems()
-        with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed ->
+        with Transaction.TransactionCanceledConditionalCheckFailed ->
             failed <- true
         failed =! shouldFail
 
@@ -310,13 +306,12 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
 
     [<Fact>]
     let ``Empty request list is rejected with AORE`` () =
-        shouldBeRejectedWithArgumentOutOfRangeException (Transaction())
+        shouldBeRejectedWithArgumentOutOfRangeException (Transaction(table1.Client))
         |> Async.RunSynchronously
-        |> ignore
 
     [<Fact>]
     let ``Over 100 writes are rejected with AORE`` () =
-        let Transaction = Transaction()
+        let Transaction = Transaction(table1.Client)
         for _x in 1..101 do
             Transaction.Put(table1, mkItem ()) |> ignore
 

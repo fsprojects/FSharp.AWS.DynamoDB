@@ -1318,22 +1318,17 @@ type TableContext<'TRecord>
         else
             t.VerifyTableAsync()
 
-    member t.Transaction() =
-        match metricsCollector with
-        | Some metricsCollector -> Transaction(metricsCollector = metricsCollector)
-        | None -> Transaction()
+    /// <summary>Creates a new `Transaction`, using the DynamoDB client and metricsCollector configured for this `TableContext`</summary>
+    member _.CreateTransaction() =
+        Transaction(client, ?metricsCollector = metricsCollector)
 
 /// <summary>
 ///    Represents a transactional set of operations to be applied atomically to a arbitrary number of DynamoDB tables.
 /// </summary>
+/// <param name="client">DynamoDB client instance</param>
 /// <param name="metricsCollector">Function to receive request metrics.</param>
-and Transaction(?metricsCollector: (RequestMetrics -> unit)) =
+and Transaction(client: IAmazonDynamoDB, ?metricsCollector: (RequestMetrics -> unit)) =
     let transactionItems = ResizeArray<TransactWriteItem>()
-    let mutable (dynamoDbClient: IAmazonDynamoDB) = null
-
-    let setClient client =
-        if dynamoDbClient = null then
-            dynamoDbClient <- client
 
     let reportMetrics collector (tableName: string) (operation: Operation) (consumedCapacity: ConsumedCapacity list) (itemCount: int) =
         collector
@@ -1353,20 +1348,18 @@ and Transaction(?metricsCollector: (RequestMetrics -> unit)) =
     /// <param name="tableContext">Table context to operate on.</param>
     /// <param name="item">Item to be put.</param>
     /// <param name="precondition">Optional precondition expression.</param>
-    member this.Put<'TRecord>
+    member _.Put<'TRecord>
         (
             tableContext: TableContext<'TRecord>,
             item: 'TRecord,
             ?precondition: ConditionExpression<'TRecord>
-        ) : Transaction =
-        setClient tableContext.Client
+        ) =
         let req = Put(TableName = tableContext.TableName, Item = tableContext.Template.ToAttributeValues item)
         precondition
         |> Option.iter (fun cond ->
             let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
             req.ConditionExpression <- cond.Conditional.Write writer)
         transactionItems.Add(TransactWriteItem(Put = req))
-        this
 
     /// <summary>
     ///   Adds a ConditionCheck operation to the transaction.
@@ -1374,14 +1367,11 @@ and Transaction(?metricsCollector: (RequestMetrics -> unit)) =
     /// <param name="tableContext">Table context to operate on.</param>
     /// <param name="key">Key of item to check.</param>
     /// <param name="condition">Condition to check.</param>
-    member this.Check(tableContext: TableContext<'TRecord>, key: TableKey, condition: ConditionExpression<'TRecord>) : Transaction =
-        setClient tableContext.Client
-
+    member _.Check(tableContext: TableContext<'TRecord>, key: TableKey, condition: ConditionExpression<'TRecord>) =
         let req = ConditionCheck(TableName = tableContext.TableName, Key = tableContext.Template.ToAttributeValues key)
         let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
         req.ConditionExpression <- condition.Conditional.Write writer
         transactionItems.Add(TransactWriteItem(ConditionCheck = req))
-        this
 
     /// <summary>
     ///   Adds an Update operation to the transaction.
@@ -1390,22 +1380,19 @@ and Transaction(?metricsCollector: (RequestMetrics -> unit)) =
     /// <param name="key">Key of item to update.</param>
     /// <param name="updater">Update expression.</param>
     /// <param name="precondition">Optional precondition expression.</param>
-    member this.Update
+    member _.Update
         (
             tableContext: TableContext<'TRecord>,
             key: TableKey,
             updater: UpdateExpression<'TRecord>,
             ?precondition: ConditionExpression<'TRecord>
 
-        ) : Transaction =
-        setClient tableContext.Client
-
+        ) =
         let req = Update(TableName = tableContext.TableName, Key = tableContext.Template.ToAttributeValues key)
         let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
         req.UpdateExpression <- updater.UpdateOps.Write(writer)
         precondition |> Option.iter (fun cond -> req.ConditionExpression <- cond.Conditional.Write writer)
         transactionItems.Add(TransactWriteItem(Update = req))
-        this
 
     /// <summary>
     ///  Adds a Delete operation to the transaction.
@@ -1413,21 +1400,18 @@ and Transaction(?metricsCollector: (RequestMetrics -> unit)) =
     /// <param name="tableContext">Table context to operate on.</param>
     /// <param name="key">Key of item to delete.</param>
     /// <param name="precondition">Optional precondition expression.</param>
-    member this.Delete
+    member _.Delete
         (
             tableContext: TableContext<'TRecord>,
             key: TableKey,
-            precondition: option<ConditionExpression<'TRecord>>
-        ) : Transaction =
-        setClient tableContext.Client
-
+            ?precondition: ConditionExpression<'TRecord>
+        ) =
         let req = Delete(TableName = tableContext.TableName, Key = tableContext.Template.ToAttributeValues key)
         precondition
         |> Option.iter (fun cond ->
             let writer = AttributeWriter(req.ExpressionAttributeNames, req.ExpressionAttributeValues)
             req.ConditionExpression <- cond.Conditional.Write writer)
         transactionItems.Add(TransactWriteItem(Delete = req))
-        this
 
     /// <summary>
     ///     Atomically applies a set of 1-100 operations to the table.<br/>
@@ -1436,13 +1420,13 @@ and Transaction(?metricsCollector: (RequestMetrics -> unit)) =
     /// </summary>
     /// <param name="clientRequestToken">The <c>ClientRequestToken</c> to supply as an idempotency key (10 minute window).</param>
     member _.TransactWriteItems(?clientRequestToken) : Async<unit> = async {
-        if (Seq.length transactionItems) = 0 || (Seq.length transactionItems) > 100 then
+        if transactionItems.Count = 0 || transactionItems.Count > 100 then
             raise
             <| System.ArgumentOutOfRangeException(nameof transactionItems, "must be between 1 and 100 items.")
-        let req = TransactWriteItemsRequest(ReturnConsumedCapacity = returnConsumedCapacity, TransactItems = (ResizeArray transactionItems))
+        let req = TransactWriteItemsRequest(ReturnConsumedCapacity = returnConsumedCapacity, TransactItems = transactionItems)
         clientRequestToken |> Option.iter (fun x -> req.ClientRequestToken <- x)
         let! ct = Async.CancellationToken
-        let! response = dynamoDbClient.TransactWriteItemsAsync(req, ct) |> Async.AwaitTaskCorrect
+        let! response = client.TransactWriteItemsAsync(req, ct) |> Async.AwaitTaskCorrect
         maybeReport
         |> Option.iter (fun r ->
             response.ConsumedCapacity
@@ -2150,8 +2134,8 @@ module Scripting =
             let spec = Throughput.Provisioned provisionedThroughput
             t.UpdateTableIfRequiredAsync(spec) |> Async.Ignore |> Async.RunSynchronously
 
-/// Helpers for working with <c>TransactWriteItemsRequest</c>
-module TransactWriteItemsRequest =
+/// Helpers for working with <c>Transaction</c>
+module Transaction =
     /// <summary>Exception filter to identify whether a <c>TransactWriteItems</c> call has failed due to
     /// one or more of the supplied <c>precondition</c> checks failing.</summary>
     let (|TransactionCanceledConditionalCheckFailed|_|): exn -> unit option =

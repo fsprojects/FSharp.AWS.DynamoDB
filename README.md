@@ -269,25 +269,26 @@ let doesntExistCondition = compile <@ fun t -> NOT_EXISTS t.Value @>
 let existsCondition = compile <@ fun t -> EXISTS t.Value @>
 let key = TableKey.Combined(hashKey, rangeKey)
 
-let transaction = Transaction()
+let transaction = table.CreateTransaction()
 
 transaction.Check(table, key, doesntExistCondition)
 transaction.Put(table, item2, None)
 transaction.Put(table, item3, Some existsCondition)
-transaction.Delete (table ,table.Template.ExtractKey item5, None)
+transaction.Delete(table, table.Template.ExtractKey item5, None)
+
 do! transaction.TransactWriteItems()
 ```
 
-Failed preconditions (or `TransactWrite.Check`s) are signalled as per the underlying API: via a `TransactionCanceledException`.
-Use `TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed` to trap such conditions:
+Failed preconditions (or `Check`s) are signalled as per the underlying API: via a `TransactionCanceledException`.
+Use `Transaction.TransactionCanceledConditionalCheckFailed` to trap such conditions:
 
 ```fsharp
 try do! transaction.TransactWriteItems()
         return Some result
-with TransactWriteItemsRequest.TransactionCanceledConditionalCheckFailed -> return None 
+with Transaction.TransactionCanceledConditionalCheckFailed -> return None 
 ```
 
-See [`TransactWriteItems tests`](./tests/FSharp.AWS.DynamoDB.Tests/SimpleTableOperationTests.fs#130) for more details and examples.
+See [`TransactWriteItems tests`](./tests/FSharp.AWS.DynamoDB.Tests/SimpleTableOperationTests.fs#156) for more details and examples.
 
 It generally costs [double or more the Write Capacity Units charges compared to using precondition expressions](https://zaccharles.medium.com/calculating-a-dynamodb-items-size-and-consumed-capacity-d1728942eb7c)
 on individual operations.
