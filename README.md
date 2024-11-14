@@ -274,12 +274,12 @@ let transaction = table.CreateTransaction()
 transaction.Check(table, key, doesntExistCondition)
 transaction.Put(table, item2, None)
 transaction.Put(table, item3, Some existsCondition)
-transaction.Delete (table ,table.Template.ExtractKey item5, None)
+transaction.Delete(table, table.Template.ExtractKey item5, None)
 
 do! transaction.TransactWriteItems()
 ```
 
-Failed preconditions (or `TransactWrite.Check`s) are signalled as per the underlying API: via a `TransactionCanceledException`.
+Failed preconditions (or `Check`s) are signalled as per the underlying API: via a `TransactionCanceledException`.
 Use `Transaction.TransactionCanceledConditionalCheckFailed` to trap such conditions:
 
 ```fsharp

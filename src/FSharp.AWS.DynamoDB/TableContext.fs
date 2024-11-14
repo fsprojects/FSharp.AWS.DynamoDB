@@ -1320,9 +1320,7 @@ type TableContext<'TRecord>
 
     /// <summary>Creates a new `Transaction`, using the DynamoDB client and metricsCollector configured for this `TableContext`</summary>
     member _.CreateTransaction() =
-        match metricsCollector with
-        | Some metricsCollector -> Transaction(client, metricsCollector = metricsCollector)
-        | None -> Transaction(client)
+        Transaction(client, ?metricsCollector = metricsCollector)
 
 /// <summary>
 ///    Represents a transactional set of operations to be applied atomically to a arbitrary number of DynamoDB tables.
@@ -2136,7 +2134,7 @@ module Scripting =
             let spec = Throughput.Provisioned provisionedThroughput
             t.UpdateTableIfRequiredAsync(spec) |> Async.Ignore |> Async.RunSynchronously
 
-/// Helpers for working with <c>TransactWriteItemsRequest</c>
+/// Helpers for working with <c>Transaction</c>
 module Transaction =
     /// <summary>Exception filter to identify whether a <c>TransactWriteItems</c> call has failed due to
     /// one or more of the supplied <c>precondition</c> checks failing.</summary>
