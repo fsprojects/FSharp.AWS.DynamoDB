@@ -1,3 +1,6 @@
+### 0.12.2-beta
+* (breaking) Revised multi-table transaction API (thanks @bartelink)
+
 ### 0.12.1-beta
 * Added support for `defaultArg` in update expressions on the same attribute, allowing SET if_not_exists semantics (eg { record with OptionalValue = Some (defaultArg record.OptionalValue "Default") })
 * Allow empty strings in non-key attributes (thanks @purkhusid)
