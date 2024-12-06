@@ -1,5 +1,5 @@
-FSharp.Core
-Unquote
 AWSSDK.DynamoDBv2
 DotNet.ReproducibleBuilds
+FSharp.Core
+Unquote
 File: TypeShape.fs TypeShape
