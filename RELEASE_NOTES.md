@@ -1,3 +1,5 @@
+### 0.12.3-beta
+* Removed erroneous `Dotnet.Reproduciblebuilds` dependency [#75](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/75)
 ### 0.12.2-beta
 * (breaking) Revised multi-table transaction API (thanks @bartelink)
 
