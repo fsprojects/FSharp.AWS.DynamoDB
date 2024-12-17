@@ -3,11 +3,18 @@ source https://api.nuget.org/v3/index.json
 storage: none
 framework: net90, netstandard20, netstandard21
 
+# copy_local: true because this is a build-time dependency only
+nuget Dotnet.ReproducibleBuilds copy_local: true
+
 nuget Unquote ~> 6.1.0
-nuget FSharp.Core >= 4.7.2 lowest_matching: true
+
+# NOTE re `content: false`
+# Workaround for malformed FSharp.Core packages https://github.com/dotnet/fsharp/issues/12706 via https://github.com/fsprojects/Paket/issues/4149
+# Removal triggers issues in dotnet publish, e.g. for Lambda projects
+# Also avoids Rider search finding stuff in FSharp.Core.xml
+nuget FSharp.Core >= 4.7.2 content: false, lowest_matching: true
 
 nuget AWSSDK.DynamoDBv2 ~> 3.7.5
-nuget DotNet.ReproducibleBuilds
 nuget System.Diagnostics.DiagnosticSource >= 6.0.0
 github eiriktsarpalis/TypeShape:10.0.0 src/TypeShape/TypeShape.fs
 
