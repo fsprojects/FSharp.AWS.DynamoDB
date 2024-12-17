@@ -1,4 +1,5 @@
 Unquote
 AWSSDK.DynamoDBv2
 DotNet.ReproducibleBuilds
+System.Diagnostics.DiagnosticSource
 File: TypeShape.fs TypeShape
