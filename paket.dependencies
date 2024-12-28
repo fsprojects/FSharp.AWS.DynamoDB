@@ -16,6 +16,7 @@ nuget FSharp.Core >= 4.7.2 content: false, lowest_matching: true
 
 nuget AWSSDK.DynamoDBv2 ~> 3.7.5
 nuget System.Diagnostics.DiagnosticSource >= 6.0.0
+nuget System.Text.Json
 github eiriktsarpalis/TypeShape:10.0.0 src/TypeShape/TypeShape.fs
 
 group Test

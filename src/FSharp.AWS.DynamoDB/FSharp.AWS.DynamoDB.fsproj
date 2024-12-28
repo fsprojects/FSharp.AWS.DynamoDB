@@ -35,6 +35,7 @@
     <Compile Include="Expression\UpdateExpr.fs" />
     <Compile Include="Expression\ProjectionExpr.fs" />
     <Compile Include="Expression\ExpressionContainers.fs" />
+    <Compile Include="Diagnostics.fs" />
     <Compile Include="RecordTemplate.fs" />
     <Compile Include="TableContext.fs" />
     <Compile Include="Extensions.fs" />

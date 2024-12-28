@@ -86,11 +86,11 @@ module internal CreateTableRequest =
         customize |> Option.iter (fun c -> c req)
         req
 
-    let execute (client: IAmazonDynamoDB) request : Async<CreateTableResponse> =
-        async {
-            let! ct = Async.CancellationToken
-            return! client.CreateTableAsync(request, ct) |> Async.AwaitTaskCorrect
-        }
+    let execute (client: IAmazonDynamoDB) (request: CreateTableRequest) : Async<CreateTableResponse> = async {
+        let! ct = Async.CancellationToken
+        use activity = Diagnostics.startTableActivity request.TableName "CreateTable" []
+        return! client.CreateTableAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+    }
 
 module internal UpdateTableRequest =
 
@@ -115,35 +115,37 @@ module internal UpdateTableRequest =
             apply tc sc request
             if customize request then Some request else None
 
-    let execute (client: IAmazonDynamoDB) request : Async<TableDescription> =
-        async {
-            let! ct = Async.CancellationToken
-            let! response = client.UpdateTableAsync(request, ct) |> Async.AwaitTaskCorrect
-            return response.TableDescription
-        }
+    let execute (client: IAmazonDynamoDB) (request: UpdateTableRequest) : Async<TableDescription> = async {
+        let! ct = Async.CancellationToken
+        use activity = Diagnostics.startTableActivity request.TableName "UpdateTable" []
+        let! response = client.UpdateTableAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+        return response.TableDescription
+    }
 
 module internal Provisioning =
 
-    let tryDescribe (client: IAmazonDynamoDB, tableName: string) : Async<TableDescription option> =
-        async {
-            let! ct = Async.CancellationToken
-            let! td = client.DescribeTableAsync(tableName, ct) |> Async.AwaitTaskCorrect
-            return
-                match td.Table with
-                | t when t.TableStatus = TableStatus.ACTIVE -> Some t
-                | _ -> None
-        }
+    let tryDescribe (client: IAmazonDynamoDB, tableName: string) : Async<TableDescription option> = async {
+        let! ct = Async.CancellationToken
+        use activity = Diagnostics.startTableActivity tableName "DescribeTable" []
+        let! td =
+            client.DescribeTableAsync(tableName, ct)
+            |> Task.addActivityException activity
+            |> Async.AwaitTaskCorrect
+        return
+            match td.Table with
+            | t when t.TableStatus = TableStatus.ACTIVE -> Some t
+            | _ -> None
+    }
 
     let private waitForActive (client: IAmazonDynamoDB, tableName: string) : Async<TableDescription> =
-        let rec wait () =
-            async {
-                match! tryDescribe (client, tableName) with
-                | Some t -> return t
-                | None ->
-                    do! Async.Sleep 1000
-                    // wait indefinitely if table is in transition state
-                    return! wait ()
-            }
+        let rec wait () = async {
+            match! tryDescribe (client, tableName) with
+            | Some t -> return t
+            | None ->
+                do! Async.Sleep 1000
+                // wait indefinitely if table is in transition state
+                return! wait ()
+        }
         wait ()
 
     let (|Conflict|_|) (e: exn) =
@@ -153,29 +155,28 @@ module internal Provisioning =
         | _ -> None
 
     let private checkOrCreate (client, tableName) validateDescription maybeMakeCreateTableRequest : Async<TableDescription> =
-        let rec aux retries =
-            async {
-                match! waitForActive (client, tableName) |> Async.Catch with
-                | Choice1Of2 desc ->
-                    validateDescription desc
-                    return desc
+        let rec aux retries = async {
+            match! waitForActive (client, tableName) |> Async.Catch with
+            | Choice1Of2 desc ->
+                validateDescription desc
+                return desc
 
-                | Choice2Of2(:? ResourceNotFoundException) when Option.isSome maybeMakeCreateTableRequest ->
-                    let req = maybeMakeCreateTableRequest.Value()
-                    match! CreateTableRequest.execute client req |> Async.Catch with
-                    | Choice1Of2 _ -> return! aux retries
-                    | Choice2Of2 Conflict when retries > 0 ->
-                        do! Async.Sleep 2000
-                        return! aux (retries - 1)
-
-                    | Choice2Of2 e -> return! Async.Raise e
-
+            | Choice2Of2(:? ResourceNotFoundException) when Option.isSome maybeMakeCreateTableRequest ->
+                let req = maybeMakeCreateTableRequest.Value()
+                match! CreateTableRequest.execute client req |> Async.Catch with
+                | Choice1Of2 _ -> return! aux retries
                 | Choice2Of2 Conflict when retries > 0 ->
                     do! Async.Sleep 2000
                     return! aux (retries - 1)
 
                 | Choice2Of2 e -> return! Async.Raise e
-            }
+
+            | Choice2Of2 Conflict when retries > 0 ->
+                do! Async.Sleep 2000
+                return! aux (retries - 1)
+
+            | Choice2Of2 e -> return! Async.Raise e
+        }
         aux 9 // up to 9 retries, i.e. 10 attempts before we let exception propagate
 
     let private validateDescription (tableName, template: RecordTemplate<'TRecord>) desc =
@@ -250,30 +251,6 @@ type TableContext<'TRecord>
     internal
     (client: IAmazonDynamoDB, tableName: string, template: RecordTemplate<'TRecord>, metricsCollector: (RequestMetrics -> unit) option) =
 
-    let activitySource = new System.Diagnostics.ActivitySource("FSharp.AWS.DynamoDB.TableContext")
-
-    let addActivityTags (tags: (string * obj) list) (activity: System.Diagnostics.Activity) =
-        if notNull activity then
-            tags |> List.iter (fun (k, v) -> activity.AddTag(k, v) |> ignore)
-
-    let startActivity (operation: Operation) (tags: (string * obj) list) : System.Diagnostics.Activity =
-        let activity =
-            activitySource.StartActivity(sprintf "%s %s" (operation.ToString()) tableName, System.Diagnostics.ActivityKind.Client)
-        activity
-        |> addActivityTags (
-            tags
-            |> List.append
-                [ ("db.system", "dynamodb")
-                  ("aws.dynamodb.table_names", [| tableName |])
-                  ("rpc.system", "aws-api")
-                  ("rpc.service", "DynamoDB")
-                  ("rpc.method", operation.ToString()) ]
-        )
-        activity
-
-    let addActivityCapacity (capacity: ConsumedCapacity) (activity: System.Diagnostics.Activity) =
-        capacity.GlobalSecondaryIndexes
-
     let reportMetrics collector (operation: Operation) (consumedCapacity: ConsumedCapacity list) (itemCount: int) =
         collector
             { TableName = tableName
@@ -284,68 +261,74 @@ type TableContext<'TRecord>
     let returnConsumedCapacity, maybeReport =
         match metricsCollector with
         | Some sink -> ReturnConsumedCapacity.INDEXES, Some(reportMetrics sink)
-        | None when activitySource.HasListeners() -> ReturnConsumedCapacity.INDEXES, None
+        | None when Diagnostics.hasListeners () -> ReturnConsumedCapacity.INDEXES, None
         | None -> ReturnConsumedCapacity.NONE, None
 
-    let tryGetItemAsync (key: TableKey) (consistentRead: bool option) (proj: ProjectionExpr.ProjectionExpr option) =
-        async {
-            let consistentRead = defaultArg consistentRead false
-            use activity = startActivity GetItem [ ("aws.dynamodb.consistent_read", consistentRead :> obj) ]
-            let kav = template.ToAttributeValues(key)
-            let request = GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity, ConsistentRead = consistentRead)
-            match proj with
-            | None -> ()
-            | Some proj ->
-                let aw = AttributeWriter(request.ExpressionAttributeNames, null)
-                request.ProjectionExpression <- proj.Write aw
-                activity |> addActivityTags [ ("aws.dynamodb.projection", request.ProjectionExpression) ]
+    let tryGetItemAsync (key: TableKey) (consistentRead: bool option) (proj: ProjectionExpr.ProjectionExpr option) = async {
+        let consistentRead = defaultArg consistentRead false
+        use activity = Diagnostics.startTableActivity tableName "GetItem" [ ("aws.dynamodb.consistent_read", consistentRead :> obj) ]
+        let kav = template.ToAttributeValues(key)
+        let request = GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity, ConsistentRead = consistentRead)
+        match proj with
+        | None -> ()
+        | Some proj ->
+            let aw = AttributeWriter(request.ExpressionAttributeNames, null)
+            request.ProjectionExpression <- proj.Write aw
+            activity
+            |> Diagnostics.addActivityTags [ ("aws.dynamodb.projection", request.ProjectionExpression) ]
 
-            let! ct = Async.CancellationToken
-            let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
-            maybeReport
-            |> Option.iter (fun r -> r GetItem [ response.ConsumedCapacity ] (if response.IsItemSet then 1 else 0))
-            if response.HttpStatusCode <> HttpStatusCode.OK then
-                failwithf "GetItem request returned error %O" response.HttpStatusCode
+        let! ct = Async.CancellationToken
+        let! response = client.GetItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+        if response.HttpStatusCode <> HttpStatusCode.OK then
+            failwithf "GetItem request returned error %O" response.HttpStatusCode
 
-            if response.IsItemSet then
-                return Some response.Item
-            else
-                return None
-        }
+        maybeReport
+        |> Option.iter (fun r -> r GetItem [ response.ConsumedCapacity ] (if response.IsItemSet then 1 else 0))
+        Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
 
-    let getItemAsync (key: TableKey) (consistentRead: bool option) (proj: ProjectionExpr.ProjectionExpr option) =
-        async {
-            match! tryGetItemAsync key consistentRead proj with
-            | Some item -> return item
-            | None -> return raise <| ResourceNotFoundException(sprintf "could not find item %O" key)
-        }
+        if response.IsItemSet then
+            return Some response.Item
+        else
+            return None
+    }
 
-    let batchGetItemsAsync (keys: seq<TableKey>) (consistentRead: bool option) (projExpr: ProjectionExpr.ProjectionExpr option) =
-        async {
+    let getItemAsync (key: TableKey) (consistentRead: bool option) (proj: ProjectionExpr.ProjectionExpr option) = async {
+        match! tryGetItemAsync key consistentRead proj with
+        | Some item -> return item
+        | None -> return raise <| ResourceNotFoundException(sprintf "could not find item %O" key)
+    }
 
-            let consistentRead = defaultArg consistentRead false
-            let kna = KeysAndAttributes()
-            kna.AttributesToGet.AddRange(template.Info.Properties |> Seq.map (fun p -> p.Name))
-            kna.Keys.AddRange(keys |> Seq.map template.ToAttributeValues)
-            kna.ConsistentRead <- consistentRead
-            match projExpr with
-            | None -> ()
-            | Some projExpr ->
-                let aw = AttributeWriter(kna.ExpressionAttributeNames, null)
-                kna.ProjectionExpression <- projExpr.Write aw
+    let batchGetItemsAsync (keys: seq<TableKey>) (consistentRead: bool option) (projExpr: ProjectionExpr.ProjectionExpr option) = async {
+        let consistentRead = defaultArg consistentRead false
+        use activity = Diagnostics.startTableActivity tableName "BatchGetItem" [ ("aws.dynamodb.consistent_read", consistentRead :> obj) ]
+        let kna = KeysAndAttributes()
+        kna.AttributesToGet.AddRange(template.Info.Properties |> Seq.map (fun p -> p.Name))
+        kna.Keys.AddRange(keys |> Seq.map template.ToAttributeValues)
+        kna.ConsistentRead <- consistentRead
+        match projExpr with
+        | None -> ()
+        | Some projExpr ->
+            let aw = AttributeWriter(kna.ExpressionAttributeNames, null)
+            kna.ProjectionExpression <- projExpr.Write aw
+            activity |> Diagnostics.addActivityTags [ ("aws.dynamodb.projection", kna.ProjectionExpression) ]
 
-            let request = BatchGetItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
-            request.RequestItems[tableName] <- kna
+        let request = BatchGetItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
+        request.RequestItems[tableName] <- kna
 
-            let! ct = Async.CancellationToken
-            let! response = client.BatchGetItemAsync(request, ct) |> Async.AwaitTaskCorrect
-            maybeReport
-            |> Option.iter (fun r -> r BatchGetItems (List.ofSeq response.ConsumedCapacity) response.Responses[tableName].Count)
-            if response.HttpStatusCode <> HttpStatusCode.OK then
-                failwithf "BatchGetItem request returned error %O" response.HttpStatusCode
+        let! ct = Async.CancellationToken
+        let! response =
+            client.BatchGetItemAsync(request, ct)
+            |> Task.addActivityException activity
+            |> Async.AwaitTaskCorrect
+        if response.HttpStatusCode <> HttpStatusCode.OK then
+            failwithf "BatchGetItem request returned error %O" response.HttpStatusCode
 
-            return response.Responses[tableName]
-        }
+        maybeReport
+        |> Option.iter (fun r -> r BatchGetItems (List.ofSeq response.ConsumedCapacity) response.Responses[tableName].Count)
+        Diagnostics.addActivityCapacity response.ConsumedCapacity activity
+
+        return response.Responses[tableName]
+    }
 
     let queryPaginatedAsync
         (keyCondition: ConditionalExpr.ConditionalExpression)
@@ -375,41 +358,54 @@ type TableContext<'TRecord>
             let emitMetrics () = maybeReport |> Option.iter (fun r -> r Query (Seq.toList consumedCapacity) downloaded.Count)
             let mutable lastEvaluatedKey: Dictionary<string, AttributeValue> option = None
 
-            let rec aux last =
-                async {
-                    let request = QueryRequest(tableName, ReturnConsumedCapacity = returnConsumedCapacity)
-                    keyCondition.IndexName |> Option.iter (fun name -> request.IndexName <- name)
-                    let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
-                    request.KeyConditionExpression <- keyCondition.Write writer
+            let rec aux last = async {
+                use activity =
+                    Diagnostics.startTableActivity
+                        tableName
+                        "Query"
+                        [ ("aws.dynamodb.consistent_read", (defaultArg consistentRead false) :> obj)
+                          ("aws.dynamodb.scan_forward", (defaultArg scanIndexForward true) :> obj)
+                          ("aws.dynamodb.index_name", keyCondition.IndexName :> obj)
+                          ("aws.dynamodb.limit", limit.GetCount() :> obj) ]
+                let request = QueryRequest(tableName, ReturnConsumedCapacity = returnConsumedCapacity)
+                keyCondition.IndexName |> Option.iter (fun name -> request.IndexName <- name)
+                let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+                request.KeyConditionExpression <- keyCondition.Write writer
 
-                    match filterCondition with
-                    | None -> ()
-                    | Some fc -> request.FilterExpression <- fc.Write writer
+                match filterCondition with
+                | None -> ()
+                | Some fc -> request.FilterExpression <- fc.Write writer
 
-                    match projectionExpr with
-                    | None -> ()
-                    | Some pe -> request.ProjectionExpression <- pe.Write writer
+                match projectionExpr with
+                | None -> ()
+                | Some pe ->
+                    request.ProjectionExpression <- pe.Write writer
+                    Diagnostics.addActivityTags [ ("aws.dynamodb.projection", request.ProjectionExpression :> obj) ] activity
 
-                    limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
-                    consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
-                    scanIndexForward |> Option.iter (fun sif -> request.ScanIndexForward <- sif)
-                    last |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
+                limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
+                consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
+                scanIndexForward |> Option.iter (fun sif -> request.ScanIndexForward <- sif)
+                last |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
 
-                    let! ct = Async.CancellationToken
-                    let! response = client.QueryAsync(request, ct) |> Async.AwaitTaskCorrect
-                    consumedCapacity.Add response.ConsumedCapacity
-                    if response.HttpStatusCode <> HttpStatusCode.OK then
-                        emitMetrics ()
-                        failwithf "Query request returned error %O" response.HttpStatusCode
+                let! ct = Async.CancellationToken
+                let! response = client.QueryAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+                if response.HttpStatusCode <> HttpStatusCode.OK then
+                    emitMetrics ()
+                    failwithf "Query request returned error %O" response.HttpStatusCode
 
-                    downloaded.AddRange response.Items
-                    if response.LastEvaluatedKey.Count > 0 then
-                        lastEvaluatedKey <- Some response.LastEvaluatedKey
-                        if limit.IsDownloadIncomplete downloaded.Count then
-                            do! aux lastEvaluatedKey
-                    else
-                        lastEvaluatedKey <- None
-                }
+                consumedCapacity.Add response.ConsumedCapacity
+                Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
+                Diagnostics.stopActivity activity // Explicitly stop activity as it is still in scope
+
+                downloaded.AddRange response.Items
+
+                if response.LastEvaluatedKey.Count > 0 then
+                    lastEvaluatedKey <- Some response.LastEvaluatedKey
+                    if limit.IsDownloadIncomplete downloaded.Count then
+                        do! aux lastEvaluatedKey
+                else
+                    lastEvaluatedKey <- None
+            }
 
             do!
                 aux (
@@ -461,37 +457,51 @@ type TableContext<'TRecord>
             let consumedCapacity = ResizeArray<ConsumedCapacity>()
             let emitMetrics () = maybeReport |> Option.iter (fun r -> r Scan (Seq.toList consumedCapacity) downloaded.Count)
             let mutable lastEvaluatedKey: Dictionary<string, AttributeValue> option = None
-            let rec aux last =
-                async {
-                    let request = ScanRequest(tableName, ReturnConsumedCapacity = returnConsumedCapacity)
-                    let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
-                    match filterCondition with
-                    | None -> ()
-                    | Some fc -> request.FilterExpression <- fc.Write writer
+            let rec aux last = async {
+                use activity =
+                    Diagnostics.startTableActivity
+                        tableName
+                        "Scan"
+                        [ ("aws.dynamodb.consistent_read", (defaultArg consistentRead false) :> obj)
+                          ("aws.dynamodb.limit", limit.GetCount() :> obj) ]
+                let request = ScanRequest(tableName, ReturnConsumedCapacity = returnConsumedCapacity)
+                let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+                match filterCondition with
+                | None -> ()
+                | Some fc -> request.FilterExpression <- fc.Write writer
 
-                    match projectionExpr with
-                    | None -> ()
-                    | Some pe -> request.ProjectionExpression <- pe.Write writer
+                match projectionExpr with
+                | None -> ()
+                | Some pe ->
+                    request.ProjectionExpression <- pe.Write writer
+                    Diagnostics.addActivityTags [ ("aws.dynamodb.projection", request.ProjectionExpression :> obj) ] activity
 
-                    limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
-                    consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
-                    last |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
+                limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
+                consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
+                last |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
 
-                    let! ct = Async.CancellationToken
-                    let! response = client.ScanAsync(request, ct) |> Async.AwaitTaskCorrect
-                    if response.HttpStatusCode <> HttpStatusCode.OK then
-                        emitMetrics ()
-                        failwithf "Scan request returned error %O" response.HttpStatusCode
+                let! ct = Async.CancellationToken
+                let! response = client.ScanAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+                if response.HttpStatusCode <> HttpStatusCode.OK then
+                    emitMetrics ()
+                    failwithf "Scan request returned error %O" response.HttpStatusCode
 
-                    downloaded.AddRange response.Items
-                    consumedCapacity.Add response.ConsumedCapacity
-                    if response.LastEvaluatedKey.Count > 0 then
-                        lastEvaluatedKey <- Some response.LastEvaluatedKey
-                        if limit.IsDownloadIncomplete downloaded.Count then
-                            do! aux lastEvaluatedKey
-                    else
-                        lastEvaluatedKey <- None
-                }
+                downloaded.AddRange response.Items
+                consumedCapacity.Add response.ConsumedCapacity
+                Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
+                Diagnostics.addActivityTags
+                    [ ("aws.dynamodb.count", response.Count :> obj)
+                      ("aws.dynamodb.scanned_count", response.ScannedCount :> obj) ]
+                    activity
+                Diagnostics.stopActivity activity // Explicitly stop activity as it is still in scope
+
+                if response.LastEvaluatedKey.Count > 0 then
+                    lastEvaluatedKey <- Some response.LastEvaluatedKey
+                    if limit.IsDownloadIncomplete downloaded.Count then
+                        do! aux lastEvaluatedKey
+                else
+                    lastEvaluatedKey <- None
+            }
 
             do! aux (exclusiveStartKey |> Option.map template.ToAttributeValues)
 
@@ -556,26 +566,27 @@ type TableContext<'TRecord>
     /// <summary>Asynchronously puts a record item in the table.</summary>
     /// <param name="item">Item to be written.</param>
     /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
-    member _.PutItemAsync(item: 'TRecord, ?precondition: ConditionExpression<'TRecord>) : Async<TableKey> =
-        async {
-            let attrValues = template.ToAttributeValues(item)
-            let request =
-                PutItemRequest(tableName, attrValues, ReturnValues = ReturnValue.NONE, ReturnConsumedCapacity = returnConsumedCapacity)
-            match precondition with
-            | Some pc ->
-                let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
-                request.ConditionExpression <- pc.Conditional.Write writer
-                request.ReturnValuesOnConditionCheckFailure <- ReturnValuesOnConditionCheckFailure.ALL_OLD
-            | _ -> ()
+    member _.PutItemAsync(item: 'TRecord, ?precondition: ConditionExpression<'TRecord>) : Async<TableKey> = async {
+        let attrValues = template.ToAttributeValues(item)
+        use activity = Diagnostics.startTableActivity tableName "PutItem" []
+        let request =
+            PutItemRequest(tableName, attrValues, ReturnValues = ReturnValue.NONE, ReturnConsumedCapacity = returnConsumedCapacity)
+        match precondition with
+        | Some pc ->
+            let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+            request.ConditionExpression <- pc.Conditional.Write writer
+            request.ReturnValuesOnConditionCheckFailure <- ReturnValuesOnConditionCheckFailure.ALL_OLD
+        | _ -> ()
 
-            let! ct = Async.CancellationToken
-            let! response = client.PutItemAsync(request, ct) |> Async.AwaitTaskCorrect
-            maybeReport |> Option.iter (fun r -> r PutItem [ response.ConsumedCapacity ] 1)
-            if response.HttpStatusCode <> HttpStatusCode.OK then
-                failwithf "PutItem request returned error %O" response.HttpStatusCode
+        let! ct = Async.CancellationToken
+        let! response = client.PutItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+        if response.HttpStatusCode <> HttpStatusCode.OK then
+            failwithf "PutItem request returned error %O" response.HttpStatusCode
+        maybeReport |> Option.iter (fun r -> r PutItem [ response.ConsumedCapacity ] 1)
+        Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
 
-            return template.ExtractKey item
-        }
+        return template.ExtractKey item
+    }
 
     /// <summary>Asynchronously puts a record item in the table.</summary>
     /// <param name="item">Item to be written.</param>
@@ -589,36 +600,37 @@ type TableContext<'TRecord>
     /// </summary>
     /// <returns>Any unprocessed items due to throttling.</returns>
     /// <param name="items">Items to be written.</param>
-    member _.BatchPutItemsAsync(items: seq<'TRecord>) : Async<'TRecord[]> =
-        async {
-            let mkWriteRequest (item: 'TRecord) =
-                let attrValues = template.ToAttributeValues(item)
-                let pr = PutRequest(attrValues)
-                WriteRequest(pr)
+    member _.BatchPutItemsAsync(items: seq<'TRecord>) : Async<'TRecord[]> = async {
+        use activity = Diagnostics.startTableActivity tableName "BatchWriteItem" []
+        let mkWriteRequest (item: 'TRecord) =
+            let attrValues = template.ToAttributeValues(item)
+            let pr = PutRequest(attrValues)
+            WriteRequest(pr)
 
-            let items = Seq.toArray items
-            if items.Length > 25 then
-                invalidArg "items" "item length must be less than or equal to 25."
-            let writeRequests = items |> Seq.map mkWriteRequest |> rlist
-            let pbr = BatchWriteItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
-            pbr.RequestItems[tableName] <- writeRequests
-            let! ct = Async.CancellationToken
-            let! response = client.BatchWriteItemAsync(pbr, ct) |> Async.AwaitTaskCorrect
-            let unprocessed =
-                match response.UnprocessedItems.TryGetValue tableName with
-                | true, reqs ->
-                    reqs
-                    |> Seq.choose (fun r -> r.PutRequest |> Option.ofObj)
-                    |> Seq.map (fun w -> w.Item)
-                    |> Seq.toArray
-                | false, _ -> [||]
-            maybeReport
-            |> Option.iter (fun r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) (items.Length - unprocessed.Length))
-            if response.HttpStatusCode <> HttpStatusCode.OK then
-                failwithf "BatchWriteItem put request returned error %O" response.HttpStatusCode
+        let items = Seq.toArray items
+        if items.Length > 25 then
+            invalidArg "items" "item length must be less than or equal to 25."
+        let writeRequests = items |> Seq.map mkWriteRequest |> rlist
+        let pbr = BatchWriteItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
+        pbr.RequestItems[tableName] <- writeRequests
+        let! ct = Async.CancellationToken
+        let! response = client.BatchWriteItemAsync(pbr, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+        if response.HttpStatusCode <> HttpStatusCode.OK then
+            failwithf "BatchWriteItem put request returned error %O" response.HttpStatusCode
+        let unprocessed =
+            match response.UnprocessedItems.TryGetValue tableName with
+            | true, reqs ->
+                reqs
+                |> Seq.choose (fun r -> r.PutRequest |> Option.ofObj)
+                |> Seq.map (fun w -> w.Item)
+                |> Seq.toArray
+            | false, _ -> [||]
+        maybeReport
+        |> Option.iter (fun r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) (items.Length - unprocessed.Length))
+        Diagnostics.addActivityCapacity response.ConsumedCapacity activity
 
-            return unprocessed |> Array.map template.OfAttributeValues
-        }
+        return unprocessed |> Array.map template.OfAttributeValues
+    }
 
 
     /// <summary>Asynchronously updates item with supplied key using provided update expression.</summary>
@@ -634,7 +646,7 @@ type TableContext<'TRecord>
             ?returnLatest: bool
         ) : Async<'TRecord> =
         async {
-
+            use activity = Diagnostics.startTableActivity tableName "UpdateItem" []
             let kav = template.ToAttributeValues(key)
             let request = UpdateItemRequest(Key = kav, TableName = tableName, ReturnConsumedCapacity = returnConsumedCapacity)
             request.ReturnValues <-
@@ -653,10 +665,12 @@ type TableContext<'TRecord>
             | _ -> ()
 
             let! ct = Async.CancellationToken
-            let! response = client.UpdateItemAsync(request, ct) |> Async.AwaitTaskCorrect
-            maybeReport |> Option.iter (fun r -> r UpdateItem [ response.ConsumedCapacity ] 1)
+            let! response = client.UpdateItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
             if response.HttpStatusCode <> HttpStatusCode.OK then
                 failwithf "UpdateItem request returned error %O" response.HttpStatusCode
+
+            maybeReport |> Option.iter (fun r -> r UpdateItem [ response.ConsumedCapacity ] 1)
+            Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
 
             return template.OfAttributeValues response.Attributes
         }
@@ -699,28 +713,32 @@ type TableContext<'TRecord>
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member _.TryGetItemAsync(key: TableKey, ?consistentRead: bool) : Async<'TRecord option> =
-        async {
-            let! response = tryGetItemAsync key consistentRead None
-            return response |> Option.map template.OfAttributeValues
-        }
+    member _.TryGetItemAsync(key: TableKey, ?consistentRead: bool) : Async<'TRecord option> = async {
+        let! response = tryGetItemAsync key consistentRead None
+        return response |> Option.map template.OfAttributeValues
+    }
 
 
     /// <summary>
     ///     Asynchronously checks whether item of supplied key exists in table.
     /// </summary>
     /// <param name="key">Key to be checked.</param>
-    member _.ContainsKeyAsync(key: TableKey) : Async<bool> =
-        async {
-            let kav = template.ToAttributeValues(key)
-            let request = GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity)
-            request.ExpressionAttributeNames.Add("#HKEY", template.PrimaryKey.HashKey.AttributeName)
-            request.ProjectionExpression <- "#HKEY"
-            let! ct = Async.CancellationToken
-            let! response = client.GetItemAsync(request, ct) |> Async.AwaitTaskCorrect
-            maybeReport |> Option.iter (fun r -> r GetItem [ response.ConsumedCapacity ] 1)
-            return response.IsItemSet
-        }
+    member _.ContainsKeyAsync(key: TableKey) : Async<bool> = async {
+        use activity =
+            Diagnostics.startTableActivity
+                tableName
+                "GetItem"
+                [ ("aws.dynamodb.consistent_read", false :> obj); ("aws.dynamodb.projection_expression", "#HKEY") ]
+        let kav = template.ToAttributeValues(key)
+        let request = GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity)
+        request.ExpressionAttributeNames.Add("#HKEY", template.PrimaryKey.HashKey.AttributeName)
+        request.ProjectionExpression <- "#HKEY"
+        let! ct = Async.CancellationToken
+        let! response = client.GetItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+        maybeReport |> Option.iter (fun r -> r GetItem [ response.ConsumedCapacity ] 1)
+        Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
+        return response.IsItemSet
+    }
 
 
     /// <summary>
@@ -730,11 +748,10 @@ type TableContext<'TRecord>
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member _.GetItemAsync(key: TableKey, ?consistentRead: bool) : Async<'TRecord> =
-        async {
-            let! item = getItemAsync key consistentRead None
-            return template.OfAttributeValues item
-        }
+    member _.GetItemAsync(key: TableKey, ?consistentRead: bool) : Async<'TRecord> = async {
+        let! item = getItemAsync key consistentRead None
+        return template.OfAttributeValues item
+    }
 
 
     /// <summary>
@@ -772,11 +789,10 @@ type TableContext<'TRecord>
     /// </summary>
     /// <param name="keys">Keys of items to be fetched.</param>
     /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
-    member _.BatchGetItemsAsync(keys: seq<TableKey>, ?consistentRead: bool) : Async<'TRecord[]> =
-        async {
-            let! response = batchGetItemsAsync keys consistentRead None
-            return response |> Seq.map template.OfAttributeValues |> Seq.toArray
-        }
+    member _.BatchGetItemsAsync(keys: seq<TableKey>, ?consistentRead: bool) : Async<'TRecord[]> = async {
+        let! response = batchGetItemsAsync keys consistentRead None
+        return response |> Seq.map template.OfAttributeValues |> Seq.toArray
+    }
 
 
     /// <summary>
@@ -816,29 +832,30 @@ type TableContext<'TRecord>
     /// <returns>The deleted item, or None if the item didn’t exist.</returns>
     /// <param name="key">Key of item to be deleted.</param>
     /// <param name="precondition">Specifies a precondition expression that existing item should satisfy. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
-    member _.DeleteItemAsync(key: TableKey, ?precondition: ConditionExpression<'TRecord>) : Async<'TRecord option> =
-        async {
-            let kav = template.ToAttributeValues key
-            let request =
-                DeleteItemRequest(tableName, kav, ReturnValues = ReturnValue.ALL_OLD, ReturnConsumedCapacity = returnConsumedCapacity)
-            match precondition with
-            | Some pc ->
-                let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
-                request.ConditionExpression <- pc.Conditional.Write writer
-                request.ReturnValuesOnConditionCheckFailure <- ReturnValuesOnConditionCheckFailure.ALL_OLD
-            | None -> ()
+    member _.DeleteItemAsync(key: TableKey, ?precondition: ConditionExpression<'TRecord>) : Async<'TRecord option> = async {
+        use activity = Diagnostics.startTableActivity tableName "DeleteItem" []
+        let kav = template.ToAttributeValues key
+        let request = DeleteItemRequest(tableName, kav, ReturnValues = ReturnValue.ALL_OLD, ReturnConsumedCapacity = returnConsumedCapacity)
+        match precondition with
+        | Some pc ->
+            let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+            request.ConditionExpression <- pc.Conditional.Write writer
+            request.ReturnValuesOnConditionCheckFailure <- ReturnValuesOnConditionCheckFailure.ALL_OLD
+        | None -> ()
 
-            let! ct = Async.CancellationToken
-            let! response = client.DeleteItemAsync(request, ct) |> Async.AwaitTaskCorrect
-            maybeReport |> Option.iter (fun r -> r DeleteItem [ response.ConsumedCapacity ] 1)
-            if response.HttpStatusCode <> HttpStatusCode.OK then
-                failwithf "DeleteItem request returned error %O" response.HttpStatusCode
+        let! ct = Async.CancellationToken
+        let! response = client.DeleteItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+        if response.HttpStatusCode <> HttpStatusCode.OK then
+            failwithf "DeleteItem request returned error %O" response.HttpStatusCode
 
-            if response.Attributes.Count = 0 then
-                return None
-            else
-                return template.OfAttributeValues response.Attributes |> Some
-        }
+        maybeReport |> Option.iter (fun r -> r DeleteItem [ response.ConsumedCapacity ] 1)
+        Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
+
+        if response.Attributes.Count = 0 then
+            return None
+        else
+            return template.OfAttributeValues response.Attributes |> Some
+    }
 
     /// <summary>Asynchronously deletes item of given key from table.</summary>
     /// <returns>The deleted item, or None if the item didn’t exist.</returns>
@@ -853,37 +870,42 @@ type TableContext<'TRecord>
     /// </summary>
     /// <returns>Any unprocessed keys due to throttling.</returns>
     /// <param name="keys">Keys of items to be deleted.</param>
-    member _.BatchDeleteItemsAsync(keys: seq<TableKey>) =
-        async {
-            let mkDeleteRequest (key: TableKey) =
-                let kav = template.ToAttributeValues(key)
-                let pr = DeleteRequest(kav)
-                WriteRequest(pr)
+    member _.BatchDeleteItemsAsync(keys: seq<TableKey>) = async {
+        use activity = Diagnostics.startTableActivity tableName "BatchWriteItem" []
+        let mkDeleteRequest (key: TableKey) =
+            let kav = template.ToAttributeValues(key)
+            let pr = DeleteRequest(kav)
+            WriteRequest(pr)
 
-            let keys = Seq.toArray keys
-            if keys.Length > 25 then
-                invalidArg "items" "key length must be less than or equal to 25."
-            let request = BatchWriteItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
-            let deleteRequests = keys |> Seq.map mkDeleteRequest |> rlist
-            request.RequestItems[tableName] <- deleteRequests
+        let keys = Seq.toArray keys
+        if keys.Length > 25 then
+            invalidArg "items" "key length must be less than or equal to 25."
+        let request = BatchWriteItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
+        let deleteRequests = keys |> Seq.map mkDeleteRequest |> rlist
+        request.RequestItems[tableName] <- deleteRequests
 
-            let! ct = Async.CancellationToken
-            let! response = client.BatchWriteItemAsync(request, ct) |> Async.AwaitTaskCorrect
-            let unprocessed =
-                match response.UnprocessedItems.TryGetValue tableName with
-                | true, reqs ->
-                    reqs
-                    |> Seq.choose (fun r -> r.DeleteRequest |> Option.ofObj)
-                    |> Seq.map (fun d -> d.Key)
-                    |> Seq.toArray
-                | false, _ -> [||]
-            maybeReport
-            |> Option.iter (fun r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) (keys.Length - unprocessed.Length))
-            if response.HttpStatusCode <> HttpStatusCode.OK then
-                failwithf "BatchWriteItem deletion request returned error %O" response.HttpStatusCode
+        let! ct = Async.CancellationToken
+        let! response =
+            client.BatchWriteItemAsync(request, ct)
+            |> Task.addActivityException activity
+            |> Async.AwaitTaskCorrect
+        if response.HttpStatusCode <> HttpStatusCode.OK then
+            failwithf "BatchWriteItem deletion request returned error %O" response.HttpStatusCode
 
-            return unprocessed |> Array.map template.ExtractKey
-        }
+        let unprocessed =
+            match response.UnprocessedItems.TryGetValue tableName with
+            | true, reqs ->
+                reqs
+                |> Seq.choose (fun r -> r.DeleteRequest |> Option.ofObj)
+                |> Seq.map (fun d -> d.Key)
+                |> Seq.toArray
+            | false, _ -> [||]
+        maybeReport
+        |> Option.iter (fun r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) (keys.Length - unprocessed.Length))
+        Diagnostics.addActivityCapacity response.ConsumedCapacity activity
+
+        return unprocessed |> Array.map template.ExtractKey
+    }
 
     /// <summary>
     ///     Asynchronously queries table with given condition expressions.
@@ -1133,12 +1155,11 @@ type TableContext<'TRecord>
     /// <param name="filterCondition">Filter condition expression.</param>
     /// <param name="limit">Maximum number of items to evaluate.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member _.ScanAsync(?filterCondition: ConditionExpression<'TRecord>, ?limit: int, ?consistentRead: bool) : Async<'TRecord[]> =
-        async {
-            let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
-            let! downloaded = scanAsync filterCondition None limit consistentRead
-            return downloaded |> Seq.map template.OfAttributeValues |> Seq.toArray
-        }
+    member _.ScanAsync(?filterCondition: ConditionExpression<'TRecord>, ?limit: int, ?consistentRead: bool) : Async<'TRecord[]> = async {
+        let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+        let! downloaded = scanAsync filterCondition None limit consistentRead
+        return downloaded |> Seq.map template.OfAttributeValues |> Seq.toArray
+    }
 
     /// <summary>
     ///     Asynchronously scans table with given condition expressions.
@@ -1326,24 +1347,22 @@ type TableContext<'TRecord>
     /// <param name="streaming">Optional streaming configuration to apply for the table. Default (if creating): Disabled. Default: (if existing) do not change.</param>
     /// <param name="custom">Callback to post-process the <c>UpdateTableRequest</c>. <c>UpdateTable</c> is inhibited if it returns <c>false</c> and no other configuration requires a change.</param>
     /// <param name="currentTableDescription">Current table configuration, if known. Retrieved via <c>DescribeTable</c> if not supplied.</param>
-    member _.UpdateTableIfRequiredAsync(?throughput: Throughput, ?streaming, ?custom, ?currentTableDescription) : Async<TableDescription> =
-        async {
-            let! tableDescription =
-                async {
-                    match currentTableDescription with
-                    | Some d -> return d
-                    | None ->
-                        match! Provisioning.tryDescribe (client, tableName) with
-                        | Some d -> return d
-                        | None ->
-                            return
-                                invalidOp
-                                    "Table is not currently Active. Please use VerifyTableAsync or VerifyOrCreateTableAsync to guard against this state."
-                }
-            match UpdateTableRequest.createIfRequired tableName tableDescription throughput streaming custom with
-            | None -> return tableDescription
-            | Some request -> return! UpdateTableRequest.execute client request
+    member _.UpdateTableIfRequiredAsync(?throughput: Throughput, ?streaming, ?custom, ?currentTableDescription) : Async<TableDescription> = async {
+        let! tableDescription = async {
+            match currentTableDescription with
+            | Some d -> return d
+            | None ->
+                match! Provisioning.tryDescribe (client, tableName) with
+                | Some d -> return d
+                | None ->
+                    return
+                        invalidOp
+                            "Table is not currently Active. Please use VerifyTableAsync or VerifyOrCreateTableAsync to guard against this state."
         }
+        match UpdateTableRequest.createIfRequired tableName tableDescription throughput streaming custom with
+        | None -> return tableDescription
+        | Some request -> return! UpdateTableRequest.execute client request
+    }
 
     /// <summary>Asynchronously updates the underlying table with supplied provisioned throughput.</summary>
     /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
@@ -1387,6 +1406,14 @@ and Transaction(client: IAmazonDynamoDB, ?metricsCollector: (RequestMetrics -> u
         match metricsCollector with
         | Some sink -> ReturnConsumedCapacity.INDEXES, Some(reportMetrics sink)
         | None -> ReturnConsumedCapacity.NONE, None
+
+    let tableNameForItem (item: TransactWriteItem) =
+        match (item.Put, item.ConditionCheck, item.Delete, item.Update) with
+        | (null, null, null, null) -> invalidArg "item" "must contain a Put, ConditionCheck, Delete, or Update operation."
+        | (p, null, null, null) -> p.TableName
+        | (_, c, null, null) -> c.TableName
+        | (_, _, d, null) -> d.TableName
+        | (_, _, _, u) -> u.TableName
 
     /// <summary>
     ///    Adds a Put operation to the transaction.
@@ -1455,24 +1482,25 @@ and Transaction(client: IAmazonDynamoDB, ?metricsCollector: (RequestMetrics -> u
     ///     See the DynamoDB <a href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_TransactWriteItems.html"><c>TransactWriteItems</c> API documentation</a> for full details of semantics and charges.<br/>
     /// </summary>
     /// <param name="clientRequestToken">The <c>ClientRequestToken</c> to supply as an idempotency key (10 minute window).</param>
-    member _.TransactWriteItems(?clientRequestToken) : Async<unit> =
-        async {
-            if transactionItems.Count = 0 || transactionItems.Count > 100 then
-                raise
-                <| System.ArgumentOutOfRangeException(nameof transactionItems, "must be between 1 and 100 items.")
-            let req = TransactWriteItemsRequest(ReturnConsumedCapacity = returnConsumedCapacity, TransactItems = transactionItems)
-            clientRequestToken |> Option.iter (fun x -> req.ClientRequestToken <- x)
-            let! ct = Async.CancellationToken
-            let! response = client.TransactWriteItemsAsync(req, ct) |> Async.AwaitTaskCorrect
-            maybeReport
-            |> Option.iter (fun r ->
-                response.ConsumedCapacity
-                |> Seq.groupBy (fun x -> x.TableName)
-                |> Seq.iter (fun (tableName, consumedCapacity) ->
-                    r tableName Operation.TransactWriteItems (Seq.toList consumedCapacity) (Seq.length transactionItems)))
-            if response.HttpStatusCode <> HttpStatusCode.OK then
-                failwithf "TransactWriteItems request returned error %O" response.HttpStatusCode
-        }
+    member _.TransactWriteItems(?clientRequestToken) : Async<unit> = async {
+        if transactionItems.Count = 0 || transactionItems.Count > 100 then
+            raise
+            <| System.ArgumentOutOfRangeException(nameof transactionItems, "must be between 1 and 100 items.")
+        use activity = Diagnostics.startMultipleTableActivity (transactionItems |> Seq.map tableNameForItem) "TransactWriteItems" []
+        let req = TransactWriteItemsRequest(ReturnConsumedCapacity = returnConsumedCapacity, TransactItems = transactionItems)
+        clientRequestToken |> Option.iter (fun x -> req.ClientRequestToken <- x)
+        let! ct = Async.CancellationToken
+        let! response = client.TransactWriteItemsAsync(req, ct) |> Async.AwaitTaskCorrect
+        if response.HttpStatusCode <> HttpStatusCode.OK then
+            failwithf "TransactWriteItems request returned error %O" response.HttpStatusCode
+        maybeReport
+        |> Option.iter (fun r ->
+            response.ConsumedCapacity
+            |> Seq.groupBy (fun x -> x.TableName)
+            |> Seq.iter (fun (tableName, consumedCapacity) ->
+                r tableName Operation.TransactWriteItems (Seq.toList consumedCapacity) (Seq.length transactionItems)))
+        Diagnostics.addActivityCapacity response.ConsumedCapacity activity
+    }
 
 // Deprecated factory method, to be removed. Replaced with
 // 1. TableContext<'T> ctor (synchronous)

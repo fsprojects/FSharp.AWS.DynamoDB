@@ -3,4 +3,5 @@ DotNet.ReproducibleBuilds
 FSharp.Core
 Unquote
 System.Diagnostics.DiagnosticSource
+System.Text.Json
 File: TypeShape.fs TypeShape

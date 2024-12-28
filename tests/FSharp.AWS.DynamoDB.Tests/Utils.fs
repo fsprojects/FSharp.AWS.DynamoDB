@@ -16,6 +16,7 @@ open Amazon.Runtime
 
 [<AutoOpen>]
 module Utils =
+    open System.Diagnostics
 
     let guid () = Guid.NewGuid().ToString("N")
 
@@ -56,12 +57,18 @@ module Utils =
 
         let client = getDynamoDBAccount ()
         let tableName = getRandomTableName ()
+        let activities = new Collections.Concurrent.ConcurrentBag<Activity>()
 
         member _.Client = client
         member _.TableName = tableName
 
         member _.CreateEmpty<'TRecord>() =
             let throughput = ProvisionedThroughput(readCapacityUnits = 10L, writeCapacityUnits = 10L)
+            let listener = new ActivityListener()
+            listener.ShouldListenTo <- fun s -> s.Name = "FSharp.AWS.DynamoDB"
+            listener.Sample <- fun _ -> ActivitySamplingResult.AllData
+            listener.ActivityStopped <- fun a -> activities.Add(a)
+            ActivitySource.AddActivityListener(listener)
             Scripting.TableContext.Initialize<'TRecord>(client, tableName, Throughput.Provisioned throughput)
 
         interface IAsyncLifetime with
