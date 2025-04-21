@@ -88,7 +88,7 @@ module internal CreateTableRequest =
 
     let execute (client: IAmazonDynamoDB) (request: CreateTableRequest) : Async<CreateTableResponse> = async {
         let! ct = Async.CancellationToken
-        use activity = Diagnostics.startTableActivity request.TableName "CreateTable" []
+        use activity = Activity.startTableActivity request.TableName "CreateTable"
         return! client.CreateTableAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
     }
 
@@ -117,7 +117,7 @@ module internal UpdateTableRequest =
 
     let execute (client: IAmazonDynamoDB) (request: UpdateTableRequest) : Async<TableDescription> = async {
         let! ct = Async.CancellationToken
-        use activity = Diagnostics.startTableActivity request.TableName "UpdateTable" []
+        use activity = Activity.startTableActivity request.TableName "UpdateTable"
         let! response = client.UpdateTableAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
         return response.TableDescription
     }
@@ -126,7 +126,7 @@ module internal Provisioning =
 
     let tryDescribe (client: IAmazonDynamoDB, tableName: string) : Async<TableDescription option> = async {
         let! ct = Async.CancellationToken
-        use activity = Diagnostics.startTableActivity tableName "DescribeTable" []
+        use activity = Activity.startTableActivity tableName "DescribeTable"
         let! td =
             client.DescribeTableAsync(tableName, ct)
             |> Task.addActivityException activity
@@ -261,12 +261,12 @@ type TableContext<'TRecord>
     let returnConsumedCapacity, maybeReport =
         match metricsCollector with
         | Some sink -> ReturnConsumedCapacity.INDEXES, Some(reportMetrics sink)
-        | None when Diagnostics.hasListeners () -> ReturnConsumedCapacity.INDEXES, None
+        | None when Activity.hasListeners () -> ReturnConsumedCapacity.TOTAL, None
         | None -> ReturnConsumedCapacity.NONE, None
 
     let tryGetItemAsync (key: TableKey) (consistentRead: bool option) (proj: ProjectionExpr.ProjectionExpr option) = async {
         let consistentRead = defaultArg consistentRead false
-        use activity = Diagnostics.startTableActivity tableName "GetItem" [ ("aws.dynamodb.consistent_read", consistentRead :> obj) ]
+        use activity = Activity.startTableActivity tableName "GetItem" |> Activity.addConsistentRead consistentRead
         let kav = template.ToAttributeValues(key)
         let request = GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity, ConsistentRead = consistentRead)
         match proj with
@@ -274,17 +274,15 @@ type TableContext<'TRecord>
         | Some proj ->
             let aw = AttributeWriter(request.ExpressionAttributeNames, null)
             request.ProjectionExpression <- proj.Write aw
-            activity
-            |> Diagnostics.addActivityTags [ ("aws.dynamodb.projection", request.ProjectionExpression) ]
+            activity |> Activity.addProjection request.ProjectionExpression |> ignore
 
         let! ct = Async.CancellationToken
         let! response = client.GetItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
-        if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf "GetItem request returned error %O" response.HttpStatusCode
 
         maybeReport
         |> Option.iter (fun r -> r GetItem [ response.ConsumedCapacity ] (if response.IsItemSet then 1 else 0))
-        Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
+
+        Meter.recordConsumedCapacity tableName "GetItem" response.ConsumedCapacity
 
         if response.IsItemSet then
             return Some response.Item
@@ -300,7 +298,7 @@ type TableContext<'TRecord>
 
     let batchGetItemsAsync (keys: seq<TableKey>) (consistentRead: bool option) (projExpr: ProjectionExpr.ProjectionExpr option) = async {
         let consistentRead = defaultArg consistentRead false
-        use activity = Diagnostics.startTableActivity tableName "BatchGetItem" [ ("aws.dynamodb.consistent_read", consistentRead :> obj) ]
+        use activity = Activity.startTableActivity tableName "BatchGetItem" |> Activity.addConsistentRead consistentRead
         let kna = KeysAndAttributes()
         kna.AttributesToGet.AddRange(template.Info.Properties |> Seq.map (fun p -> p.Name))
         kna.Keys.AddRange(keys |> Seq.map template.ToAttributeValues)
@@ -310,7 +308,7 @@ type TableContext<'TRecord>
         | Some projExpr ->
             let aw = AttributeWriter(kna.ExpressionAttributeNames, null)
             kna.ProjectionExpression <- projExpr.Write aw
-            activity |> Diagnostics.addActivityTags [ ("aws.dynamodb.projection", kna.ProjectionExpression) ]
+            activity |> Activity.addProjection kna.ProjectionExpression |> ignore
 
         let request = BatchGetItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
         request.RequestItems[tableName] <- kna
@@ -320,12 +318,11 @@ type TableContext<'TRecord>
             client.BatchGetItemAsync(request, ct)
             |> Task.addActivityException activity
             |> Async.AwaitTaskCorrect
-        if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf "BatchGetItem request returned error %O" response.HttpStatusCode
 
         maybeReport
         |> Option.iter (fun r -> r BatchGetItems (List.ofSeq response.ConsumedCapacity) response.Responses[tableName].Count)
-        Diagnostics.addActivityCapacity response.ConsumedCapacity activity
+
+        response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity tableName "BatchGetItem")
 
         return response.Responses[tableName]
     }
@@ -360,13 +357,11 @@ type TableContext<'TRecord>
 
             let rec aux last = async {
                 use activity =
-                    Diagnostics.startTableActivity
-                        tableName
-                        "Query"
-                        [ ("aws.dynamodb.consistent_read", (defaultArg consistentRead false) :> obj)
-                          ("aws.dynamodb.scan_forward", (defaultArg scanIndexForward true) :> obj)
-                          ("aws.dynamodb.index_name", keyCondition.IndexName :> obj)
-                          ("aws.dynamodb.limit", limit.GetCount() :> obj) ]
+                    Activity.startTableActivity tableName "Query"
+                    |> Activity.addConsistentRead (defaultArg consistentRead false)
+                    |> Activity.addScanIndexForward (defaultArg scanIndexForward true)
+                    |> Activity.addIndexName keyCondition.IndexName
+                    |> Activity.addLimit (limit.GetCount())
                 let request = QueryRequest(tableName, ReturnConsumedCapacity = returnConsumedCapacity)
                 keyCondition.IndexName |> Option.iter (fun name -> request.IndexName <- name)
                 let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
@@ -380,7 +375,7 @@ type TableContext<'TRecord>
                 | None -> ()
                 | Some pe ->
                     request.ProjectionExpression <- pe.Write writer
-                    Diagnostics.addActivityTags [ ("aws.dynamodb.projection", request.ProjectionExpression :> obj) ] activity
+                    Activity.addProjection request.ProjectionExpression activity |> ignore
 
                 limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
                 consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
@@ -389,13 +384,9 @@ type TableContext<'TRecord>
 
                 let! ct = Async.CancellationToken
                 let! response = client.QueryAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
-                if response.HttpStatusCode <> HttpStatusCode.OK then
-                    emitMetrics ()
-                    failwithf "Query request returned error %O" response.HttpStatusCode
-
                 consumedCapacity.Add response.ConsumedCapacity
-                Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
-                Diagnostics.stopActivity activity // Explicitly stop activity as it is still in scope
+                Meter.recordConsumedCapacity tableName "Query" response.ConsumedCapacity
+                Activity.stop activity // Explicitly stop activity as it is still in scope
 
                 downloaded.AddRange response.Items
 
@@ -459,11 +450,10 @@ type TableContext<'TRecord>
             let mutable lastEvaluatedKey: Dictionary<string, AttributeValue> option = None
             let rec aux last = async {
                 use activity =
-                    Diagnostics.startTableActivity
-                        tableName
-                        "Scan"
-                        [ ("aws.dynamodb.consistent_read", (defaultArg consistentRead false) :> obj)
-                          ("aws.dynamodb.limit", limit.GetCount() :> obj) ]
+                    Activity.startTableActivity tableName "Scan"
+                    |> Activity.addConsistentRead (defaultArg consistentRead false)
+                    |> Activity.addLimit (limit.GetCount())
+
                 let request = ScanRequest(tableName, ReturnConsumedCapacity = returnConsumedCapacity)
                 let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
                 match filterCondition with
@@ -474,7 +464,7 @@ type TableContext<'TRecord>
                 | None -> ()
                 | Some pe ->
                     request.ProjectionExpression <- pe.Write writer
-                    Diagnostics.addActivityTags [ ("aws.dynamodb.projection", request.ProjectionExpression :> obj) ] activity
+                    Activity.addProjection request.ProjectionExpression activity |> ignore
 
                 limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
                 consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
@@ -482,18 +472,14 @@ type TableContext<'TRecord>
 
                 let! ct = Async.CancellationToken
                 let! response = client.ScanAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
-                if response.HttpStatusCode <> HttpStatusCode.OK then
-                    emitMetrics ()
-                    failwithf "Scan request returned error %O" response.HttpStatusCode
 
                 downloaded.AddRange response.Items
                 consumedCapacity.Add response.ConsumedCapacity
-                Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
-                Diagnostics.addActivityTags
-                    [ ("aws.dynamodb.count", response.Count :> obj)
-                      ("aws.dynamodb.scanned_count", response.ScannedCount :> obj) ]
-                    activity
-                Diagnostics.stopActivity activity // Explicitly stop activity as it is still in scope
+                Meter.recordConsumedCapacity tableName "Scan" response.ConsumedCapacity
+                activity
+                |> Activity.addCount response.Count
+                |> Activity.addScannedCount response.ScannedCount
+                |> Activity.stop // Explicitly stop activity as it is still in scope
 
                 if response.LastEvaluatedKey.Count > 0 then
                     lastEvaluatedKey <- Some response.LastEvaluatedKey
@@ -568,7 +554,7 @@ type TableContext<'TRecord>
     /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     member _.PutItemAsync(item: 'TRecord, ?precondition: ConditionExpression<'TRecord>) : Async<TableKey> = async {
         let attrValues = template.ToAttributeValues(item)
-        use activity = Diagnostics.startTableActivity tableName "PutItem" []
+        use activity = Activity.startTableActivity tableName "PutItem"
         let request =
             PutItemRequest(tableName, attrValues, ReturnValues = ReturnValue.NONE, ReturnConsumedCapacity = returnConsumedCapacity)
         match precondition with
@@ -580,10 +566,8 @@ type TableContext<'TRecord>
 
         let! ct = Async.CancellationToken
         let! response = client.PutItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
-        if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf "PutItem request returned error %O" response.HttpStatusCode
         maybeReport |> Option.iter (fun r -> r PutItem [ response.ConsumedCapacity ] 1)
-        Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
+        Meter.recordConsumedCapacity tableName "PutItem" response.ConsumedCapacity
 
         return template.ExtractKey item
     }
@@ -601,7 +585,7 @@ type TableContext<'TRecord>
     /// <returns>Any unprocessed items due to throttling.</returns>
     /// <param name="items">Items to be written.</param>
     member _.BatchPutItemsAsync(items: seq<'TRecord>) : Async<'TRecord[]> = async {
-        use activity = Diagnostics.startTableActivity tableName "BatchWriteItem" []
+        use activity = Activity.startTableActivity tableName "BatchWriteItem"
         let mkWriteRequest (item: 'TRecord) =
             let attrValues = template.ToAttributeValues(item)
             let pr = PutRequest(attrValues)
@@ -615,8 +599,6 @@ type TableContext<'TRecord>
         pbr.RequestItems[tableName] <- writeRequests
         let! ct = Async.CancellationToken
         let! response = client.BatchWriteItemAsync(pbr, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
-        if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf "BatchWriteItem put request returned error %O" response.HttpStatusCode
         let unprocessed =
             match response.UnprocessedItems.TryGetValue tableName with
             | true, reqs ->
@@ -627,7 +609,7 @@ type TableContext<'TRecord>
             | false, _ -> [||]
         maybeReport
         |> Option.iter (fun r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) (items.Length - unprocessed.Length))
-        Diagnostics.addActivityCapacity response.ConsumedCapacity activity
+        response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity tableName "BatchWriteItem")
 
         return unprocessed |> Array.map template.OfAttributeValues
     }
@@ -646,7 +628,7 @@ type TableContext<'TRecord>
             ?returnLatest: bool
         ) : Async<'TRecord> =
         async {
-            use activity = Diagnostics.startTableActivity tableName "UpdateItem" []
+            use activity = Activity.startTableActivity tableName "UpdateItem"
             let kav = template.ToAttributeValues(key)
             let request = UpdateItemRequest(Key = kav, TableName = tableName, ReturnConsumedCapacity = returnConsumedCapacity)
             request.ReturnValues <-
@@ -666,11 +648,9 @@ type TableContext<'TRecord>
 
             let! ct = Async.CancellationToken
             let! response = client.UpdateItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
-            if response.HttpStatusCode <> HttpStatusCode.OK then
-                failwithf "UpdateItem request returned error %O" response.HttpStatusCode
 
             maybeReport |> Option.iter (fun r -> r UpdateItem [ response.ConsumedCapacity ] 1)
-            Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
+            Meter.recordConsumedCapacity tableName "UpdateItem" response.ConsumedCapacity
 
             return template.OfAttributeValues response.Attributes
         }
@@ -725,10 +705,10 @@ type TableContext<'TRecord>
     /// <param name="key">Key to be checked.</param>
     member _.ContainsKeyAsync(key: TableKey) : Async<bool> = async {
         use activity =
-            Diagnostics.startTableActivity
-                tableName
-                "GetItem"
-                [ ("aws.dynamodb.consistent_read", false :> obj); ("aws.dynamodb.projection_expression", "#HKEY") ]
+            Activity.startTableActivity tableName "GetItem"
+            |> Activity.addConsistentRead false
+            |> Activity.addProjection "#HKEY"
+
         let kav = template.ToAttributeValues(key)
         let request = GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity)
         request.ExpressionAttributeNames.Add("#HKEY", template.PrimaryKey.HashKey.AttributeName)
@@ -736,7 +716,7 @@ type TableContext<'TRecord>
         let! ct = Async.CancellationToken
         let! response = client.GetItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
         maybeReport |> Option.iter (fun r -> r GetItem [ response.ConsumedCapacity ] 1)
-        Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
+        Meter.recordConsumedCapacity tableName "GetItem" response.ConsumedCapacity
         return response.IsItemSet
     }
 
@@ -833,7 +813,7 @@ type TableContext<'TRecord>
     /// <param name="key">Key of item to be deleted.</param>
     /// <param name="precondition">Specifies a precondition expression that existing item should satisfy. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     member _.DeleteItemAsync(key: TableKey, ?precondition: ConditionExpression<'TRecord>) : Async<'TRecord option> = async {
-        use activity = Diagnostics.startTableActivity tableName "DeleteItem" []
+        use activity = Activity.startTableActivity tableName "DeleteItem"
         let kav = template.ToAttributeValues key
         let request = DeleteItemRequest(tableName, kav, ReturnValues = ReturnValue.ALL_OLD, ReturnConsumedCapacity = returnConsumedCapacity)
         match precondition with
@@ -845,11 +825,9 @@ type TableContext<'TRecord>
 
         let! ct = Async.CancellationToken
         let! response = client.DeleteItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
-        if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf "DeleteItem request returned error %O" response.HttpStatusCode
 
         maybeReport |> Option.iter (fun r -> r DeleteItem [ response.ConsumedCapacity ] 1)
-        Diagnostics.addActivityCapacity [ response.ConsumedCapacity ] activity
+        Meter.recordConsumedCapacity tableName "DeleteItem" response.ConsumedCapacity
 
         if response.Attributes.Count = 0 then
             return None
@@ -871,7 +849,7 @@ type TableContext<'TRecord>
     /// <returns>Any unprocessed keys due to throttling.</returns>
     /// <param name="keys">Keys of items to be deleted.</param>
     member _.BatchDeleteItemsAsync(keys: seq<TableKey>) = async {
-        use activity = Diagnostics.startTableActivity tableName "BatchWriteItem" []
+        use activity = Activity.startTableActivity tableName "BatchWriteItem"
         let mkDeleteRequest (key: TableKey) =
             let kav = template.ToAttributeValues(key)
             let pr = DeleteRequest(kav)
@@ -889,8 +867,6 @@ type TableContext<'TRecord>
             client.BatchWriteItemAsync(request, ct)
             |> Task.addActivityException activity
             |> Async.AwaitTaskCorrect
-        if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf "BatchWriteItem deletion request returned error %O" response.HttpStatusCode
 
         let unprocessed =
             match response.UnprocessedItems.TryGetValue tableName with
@@ -902,7 +878,7 @@ type TableContext<'TRecord>
             | false, _ -> [||]
         maybeReport
         |> Option.iter (fun r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) (keys.Length - unprocessed.Length))
-        Diagnostics.addActivityCapacity response.ConsumedCapacity activity
+        response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity tableName "BatchWriteItem")
 
         return unprocessed |> Array.map template.ExtractKey
     }
@@ -1404,7 +1380,8 @@ and Transaction(client: IAmazonDynamoDB, ?metricsCollector: (RequestMetrics -> u
 
     let returnConsumedCapacity, maybeReport =
         match metricsCollector with
-        | Some sink -> ReturnConsumedCapacity.INDEXES, Some(reportMetrics sink)
+        | Some sink -> ReturnConsumedCapacity.TOTAL, Some(reportMetrics sink)
+        | None when Activity.hasListeners () -> ReturnConsumedCapacity.TOTAL, None
         | None -> ReturnConsumedCapacity.NONE, None
 
     let tableNameForItem (item: TransactWriteItem) =
@@ -1486,20 +1463,23 @@ and Transaction(client: IAmazonDynamoDB, ?metricsCollector: (RequestMetrics -> u
         if transactionItems.Count = 0 || transactionItems.Count > 100 then
             raise
             <| System.ArgumentOutOfRangeException(nameof transactionItems, "must be between 1 and 100 items.")
-        use activity = Diagnostics.startMultipleTableActivity (transactionItems |> Seq.map tableNameForItem) "TransactWriteItems" []
+        use activity = Activity.startMultipleTableActivity (transactionItems |> Seq.map tableNameForItem) "TransactWriteItems"
         let req = TransactWriteItemsRequest(ReturnConsumedCapacity = returnConsumedCapacity, TransactItems = transactionItems)
         clientRequestToken |> Option.iter (fun x -> req.ClientRequestToken <- x)
         let! ct = Async.CancellationToken
-        let! response = client.TransactWriteItemsAsync(req, ct) |> Async.AwaitTaskCorrect
-        if response.HttpStatusCode <> HttpStatusCode.OK then
-            failwithf "TransactWriteItems request returned error %O" response.HttpStatusCode
+        let! response =
+            client.TransactWriteItemsAsync(req, ct)
+            |> Task.addActivityException activity
+            |> Async.AwaitTaskCorrect
+
         maybeReport
         |> Option.iter (fun r ->
             response.ConsumedCapacity
             |> Seq.groupBy (fun x -> x.TableName)
             |> Seq.iter (fun (tableName, consumedCapacity) ->
                 r tableName Operation.TransactWriteItems (Seq.toList consumedCapacity) (Seq.length transactionItems)))
-        Diagnostics.addActivityCapacity response.ConsumedCapacity activity
+        response.ConsumedCapacity
+        |> Seq.iter (fun c -> Meter.recordConsumedCapacity c.TableName "TransactWriteItems" c)
     }
 
 // Deprecated factory method, to be removed. Replaced with
