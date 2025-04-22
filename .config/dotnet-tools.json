@@ -6,13 +6,22 @@
       "version": "9.0.2",
       "commands": [
         "paket"
-      ]
+      ],
+      "rollForward": false
     },
     "fantomas": {
       "version": "6.2.3",
       "commands": [
         "fantomas"
-      ]
+      ],
+      "rollForward": false
+    },
+    "sleet": {
+      "version": "6.4.0",
+      "commands": [
+        "sleet"
+      ],
+      "rollForward": false
     }
   }
 }
