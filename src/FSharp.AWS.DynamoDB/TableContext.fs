@@ -1288,26 +1288,6 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
         | Some request -> return! UpdateTableRequest.execute client request
     }
 
-    /// <summary>Asynchronously updates the underlying table with supplied provisioned throughput.</summary>
-    /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
-    [<System.Obsolete("Please replace with UpdateTableIfRequiredAsync")>]
-    member t.UpdateProvisionedThroughputAsync(provisionedThroughput: ProvisionedThroughput) : Async<unit> =
-        t.UpdateTableIfRequiredAsync(Throughput.Provisioned provisionedThroughput) |> Async.Ignore
-
-    /// <summary>Asynchronously verify that the table exists and is compatible with record key schema.</summary>
-    /// <param name="createIfNotExists">Create the table instance now instance if it does not exist. Defaults to false.</param>
-    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Defaults to (10,10).</param>
-    [<System.Obsolete("Please replace with either 1. VerifyTableAsync or 2. VerifyOrCreateTableAsync")>]
-    member t.VerifyTableAsync(?createIfNotExists: bool, ?provisionedThroughput: ProvisionedThroughput) : Async<unit> =
-        if createIfNotExists = Some true then
-            let throughput =
-                match provisionedThroughput with
-                | Some p -> p
-                | None -> ProvisionedThroughput(10L, 10L)
-            t.VerifyOrCreateTableAsync(Throughput.Provisioned throughput) |> Async.Ignore
-        else
-            t.VerifyTableAsync()
-
     /// <summary>Creates a new `Transaction`, using the DynamoDB client and metricsCollector configured for this `TableContext`</summary>
     member _.CreateTransaction() = Transaction(client)
 
