@@ -6,7 +6,7 @@ open System.Globalization
 open System.IO
 open System.Reflection
 
-open TypeShape
+open TypeShape.Core
 open Amazon.DynamoDBv2.Model
 
 //

@@ -4,7 +4,7 @@ open System
 open System.Collections.Concurrent
 open System.Collections.Generic
 
-open TypeShape
+open TypeShape.Core
 
 //
 //  Pickler resolution implementation

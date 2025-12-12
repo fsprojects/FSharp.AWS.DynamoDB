@@ -1,6 +1,0 @@
-group Test
-    FsCheck
-    Microsoft.NET.Test.Sdk
-    Microsoft.Extensions.Diagnostics.Testing
-    xunit
-    xunit.runner.visualstudio

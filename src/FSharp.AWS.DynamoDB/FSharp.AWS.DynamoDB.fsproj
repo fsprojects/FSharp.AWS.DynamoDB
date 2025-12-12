@@ -2,21 +2,8 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <OutputPath>..\..\bin\</OutputPath>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>An idiomatic F# wrapper for the AWS DynamoDB SDK.</Description>
-    <Authors>Eirik Tsarpalis</Authors>
-    <Copyright>Copyright 2016</Copyright>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/fsprojects/FSharp.AWS.DynamoDB</PackageProjectUrl>
-    <PackageIconUrl>https://avatars0.githubusercontent.com/u/6001315</PackageIconUrl>
-    <PackageTags>fsharp, f#, aws, amazon, dynamodb</PackageTags>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="paket.references" />
-    <Compile Include="..\..\paket-files\eiriktsarpalis\TypeShape\src\TypeShape\TypeShape.fs">
-      <Paket>True</Paket>
-      <Link>TypeShape/TypeShape.fs</Link>
-    </Compile>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Utils\Utils.fs" />
     <Compile Include="Utils\DynamoUtils.fs" />
@@ -40,5 +27,12 @@
     <Compile Include="Extensions.fs" />
     <None Include="Script.fsx" />
   </ItemGroup>
-  <Import Project="..\..\.paket\Paket.Restore.targets" />
+  <ItemGroup>
+    <PackageReference Include="DotNet.ReproducibleBuilds" PrivateAssets="All" />
+    <PackageReference Include="Unquote" />
+    <PackageReference Include="AWSSDK.DynamoDBv2" />
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="TypeShape" />
+    <PackageReference Include="System.Diagnostics.DiagnosticSource" />
+  </ItemGroup>
 </Project>

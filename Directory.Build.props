@@ -1,0 +1,19 @@
+<Project>
+    <PropertyGroup>
+        <WarningLevel>5</WarningLevel>
+        <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+        <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    </PropertyGroup>
+
+    <!-- NuGet Metadata -->
+    <PropertyGroup>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <Description>An idiomatic F# wrapper for the AWS DynamoDB SDK.</Description>
+        <Authors>Eirik Tsarpalis</Authors>
+        <Copyright>Copyright 2016</Copyright>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/fsprojects/FSharp.AWS.DynamoDB</PackageProjectUrl>
+        <PackageIconUrl>https://avatars0.githubusercontent.com/u/6001315</PackageIconUrl>
+        <PackageTags>fsharp, f#, aws, amazon, dynamodb</PackageTags>
+    </PropertyGroup>
+</Project>

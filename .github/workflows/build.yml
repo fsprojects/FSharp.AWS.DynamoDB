@@ -7,27 +7,27 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        dotnet: ['9.0.x']
+        dotnet: ["10.0.x"]
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: ${{ matrix.dotnet }}
-    - name: Restore tools
-      run: dotnet tool restore
-    - name: Restore dependencies
-      run: dotnet restore
-    - name: Run build
-      run: dotnet fsi build.fsx -t Build
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ matrix.dotnet }}
+      - name: Restore tools
+        run: dotnet tool restore
+      - name: Restore dependencies
+        run: dotnet restore
+      - name: Run build
+        run: dotnet fsi build.fsx -t Build
 
   test:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        dotnet: ['9.0.x']
+        dotnet: ["10.0.x"]
     runs-on: ${{ matrix.os }}
 
     services:
@@ -37,14 +37,14 @@ jobs:
           - 8000:8000
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: ${{ matrix.dotnet }}
-    - name: Restore tools
-      run: dotnet tool restore
-    - name: Restore dependencies
-      run: dotnet restore
-    - name: Run tests
-      run: dotnet fsi build.fsx -t Test
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ matrix.dotnet }}
+      - name: Restore tools
+        run: dotnet tool restore
+      - name: Restore dependencies
+        run: dotnet restore
+      - name: Run tests
+        run: dotnet fsi build.fsx -t Test
