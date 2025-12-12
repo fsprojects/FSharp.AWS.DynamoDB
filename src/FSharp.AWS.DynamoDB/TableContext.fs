@@ -260,7 +260,7 @@ type TableContext<'TRecord>
 
     let returnConsumedCapacity, maybeReport =
         match metricsCollector with
-        | Some sink -> ReturnConsumedCapacity.INDEXES, Some(reportMetrics sink)
+        | Some sink -> ReturnConsumedCapacity.TOTAL, Some(reportMetrics sink)
         | None when Activity.hasListeners () -> ReturnConsumedCapacity.TOTAL, None
         | None -> ReturnConsumedCapacity.NONE, None
 
@@ -282,7 +282,7 @@ type TableContext<'TRecord>
         maybeReport
         |> Option.iter (fun r -> r GetItem [ response.ConsumedCapacity ] (if response.IsItemSet then 1 else 0))
 
-        Meter.recordConsumedCapacity tableName "GetItem" response.ConsumedCapacity
+        Meter.recordConsumedCapacity "GetItem" response.ConsumedCapacity
 
         if response.IsItemSet then
             return Some response.Item
@@ -322,7 +322,7 @@ type TableContext<'TRecord>
         maybeReport
         |> Option.iter (fun r -> r BatchGetItems (List.ofSeq response.ConsumedCapacity) response.Responses[tableName].Count)
 
-        response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity tableName "BatchGetItem")
+        response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity "BatchGetItem")
 
         return response.Responses[tableName]
     }
@@ -385,7 +385,7 @@ type TableContext<'TRecord>
                 let! ct = Async.CancellationToken
                 let! response = client.QueryAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
                 consumedCapacity.Add response.ConsumedCapacity
-                Meter.recordConsumedCapacity tableName "Query" response.ConsumedCapacity
+                Meter.recordConsumedCapacity "Query" response.ConsumedCapacity
                 Activity.stop activity // Explicitly stop activity as it is still in scope
 
                 downloaded.AddRange response.Items
@@ -475,7 +475,7 @@ type TableContext<'TRecord>
 
                 downloaded.AddRange response.Items
                 consumedCapacity.Add response.ConsumedCapacity
-                Meter.recordConsumedCapacity tableName "Scan" response.ConsumedCapacity
+                Meter.recordConsumedCapacity "Scan" response.ConsumedCapacity
                 activity
                 |> Activity.addCount response.Count
                 |> Activity.addScannedCount response.ScannedCount
@@ -567,7 +567,7 @@ type TableContext<'TRecord>
         let! ct = Async.CancellationToken
         let! response = client.PutItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
         maybeReport |> Option.iter (fun r -> r PutItem [ response.ConsumedCapacity ] 1)
-        Meter.recordConsumedCapacity tableName "PutItem" response.ConsumedCapacity
+        Meter.recordConsumedCapacity "PutItem" response.ConsumedCapacity
 
         return template.ExtractKey item
     }
@@ -609,7 +609,7 @@ type TableContext<'TRecord>
             | false, _ -> [||]
         maybeReport
         |> Option.iter (fun r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) (items.Length - unprocessed.Length))
-        response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity tableName "BatchWriteItem")
+        response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity "BatchWriteItem")
 
         return unprocessed |> Array.map template.OfAttributeValues
     }
@@ -650,7 +650,7 @@ type TableContext<'TRecord>
             let! response = client.UpdateItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
 
             maybeReport |> Option.iter (fun r -> r UpdateItem [ response.ConsumedCapacity ] 1)
-            Meter.recordConsumedCapacity tableName "UpdateItem" response.ConsumedCapacity
+            Meter.recordConsumedCapacity "UpdateItem" response.ConsumedCapacity
 
             return template.OfAttributeValues response.Attributes
         }
@@ -716,7 +716,7 @@ type TableContext<'TRecord>
         let! ct = Async.CancellationToken
         let! response = client.GetItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
         maybeReport |> Option.iter (fun r -> r GetItem [ response.ConsumedCapacity ] 1)
-        Meter.recordConsumedCapacity tableName "GetItem" response.ConsumedCapacity
+        Meter.recordConsumedCapacity "GetItem" response.ConsumedCapacity
         return response.IsItemSet
     }
 
@@ -827,7 +827,7 @@ type TableContext<'TRecord>
         let! response = client.DeleteItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
 
         maybeReport |> Option.iter (fun r -> r DeleteItem [ response.ConsumedCapacity ] 1)
-        Meter.recordConsumedCapacity tableName "DeleteItem" response.ConsumedCapacity
+        Meter.recordConsumedCapacity "DeleteItem" response.ConsumedCapacity
 
         if response.Attributes.Count = 0 then
             return None
@@ -878,7 +878,7 @@ type TableContext<'TRecord>
             | false, _ -> [||]
         maybeReport
         |> Option.iter (fun r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) (keys.Length - unprocessed.Length))
-        response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity tableName "BatchWriteItem")
+        response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity "BatchWriteItem")
 
         return unprocessed |> Array.map template.ExtractKey
     }
@@ -1478,8 +1478,7 @@ and Transaction(client: IAmazonDynamoDB, ?metricsCollector: (RequestMetrics -> u
             |> Seq.groupBy (fun x -> x.TableName)
             |> Seq.iter (fun (tableName, consumedCapacity) ->
                 r tableName Operation.TransactWriteItems (Seq.toList consumedCapacity) (Seq.length transactionItems)))
-        response.ConsumedCapacity
-        |> Seq.iter (fun c -> Meter.recordConsumedCapacity c.TableName "TransactWriteItems" c)
+        response.ConsumedCapacity |> Seq.iter (fun c -> Meter.recordConsumedCapacity "TransactWriteItems" c)
     }
 
 // Deprecated factory method, to be removed. Replaced with

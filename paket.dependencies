@@ -24,5 +24,6 @@ group Test
 
     nuget FsCheck ~> 2.16.6
     nuget Microsoft.NET.Test.Sdk
+    nuget Microsoft.Extensions.Diagnostics.Testing
     nuget xunit
     nuget xunit.runner.visualstudio

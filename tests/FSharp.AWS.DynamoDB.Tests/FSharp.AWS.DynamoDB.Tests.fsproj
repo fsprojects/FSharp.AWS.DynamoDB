@@ -1,7 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
-  </PropertyGroup>  
+  </PropertyGroup>
   <ItemGroup>
     <None Include="paket.references" />
     <Compile Include="Utils.fs" />
@@ -14,6 +14,7 @@
     <Compile Include="SparseGSITests.fs" />
     <Compile Include="PaginationTests.fs" />
     <Compile Include="MetricsCollectorTests.fs" />
+    <Compile Include="DiagnosticsTests.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\FSharp.AWS.DynamoDB\FSharp.AWS.DynamoDB.fsproj" />

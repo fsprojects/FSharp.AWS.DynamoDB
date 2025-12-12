@@ -76,45 +76,26 @@ module internal Meter =
     open System.Diagnostics.Metrics
     open System.Collections.Generic
 
+
     let private meter = new Meter "FSharp.AWS.DynamoDB"
 
-    let private consumedReadCapacity =
+    // instrument is internal for test access
+    let internal consumedCapacity =
         meter.CreateHistogram<float>(
             "db.client.operation.consumed_read_capacity",
-            unit = "RCU",
-            description = "Consumed read capacity units (RCU) for the DynamoDB operation",
+            unit = "CU",
+            description = "Consumed total capacity units (RCU or WCU) for the DynamoDB operation",
             tags = [ KeyValuePair("db.system.name", "aws.dynamodb" :> obj) ]
         )
 
-    let private consumedWriteCapacity =
-        meter.CreateHistogram<float>(
-            "db.client.operation.consumed_write_capacity",
-            unit = "WCU",
-            description = "Consumed write capacity units (WCU) for the DynamoDB operation",
-            tags = [ KeyValuePair("db.system.name", "aws.dynamodb" :> obj) ]
-        )
-
-    let recordConsumedReadCapacity (tableName: string) (operation: string) (rcu: float) =
-        if rcu > 0.0 then
-            consumedReadCapacity.Record(
-                rcu,
-                KeyValuePair("db.collection.name", tableName :> obj),
-                KeyValuePair("db.operation.name", operation :> obj)
-            )
-
-    let recordConsumedWriteCapacity (tableName: string) (operation: string) (wcu: float) =
-        if wcu > 0.0 then
-            consumedWriteCapacity.Record(
-                wcu,
-                KeyValuePair("db.collection.name", tableName :> obj),
-                KeyValuePair("db.operation.name", operation :> obj)
-            )
-
-    let recordConsumedCapacity (tableName: string) (operation: string) (capacity : Amazon.DynamoDBv2.Model.ConsumedCapacity) =
+    let recordConsumedCapacity (operation: string) (capacity: Amazon.DynamoDBv2.Model.ConsumedCapacity) =
         if capacity <> null then
-            recordConsumedReadCapacity tableName operation capacity.ReadCapacityUnits
-            recordConsumedWriteCapacity tableName operation capacity.WriteCapacityUnits
-            
+            consumedCapacity.Record(
+                capacity.CapacityUnits,
+                KeyValuePair("db.collection.name", capacity.TableName :> obj),
+                KeyValuePair("db.operation.name", operation :> obj)
+            )
+
 module internal Task =
     open System.Threading.Tasks
     open System.Diagnostics
