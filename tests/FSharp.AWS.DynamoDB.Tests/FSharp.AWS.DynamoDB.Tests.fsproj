@@ -13,7 +13,6 @@
     <Compile Include="MultipleKeyAttributeTests.fs" />
     <Compile Include="SparseGSITests.fs" />
     <Compile Include="PaginationTests.fs" />
-    <Compile Include="MetricsCollectorTests.fs" />
     <Compile Include="DiagnosticsTests.fs" />
   </ItemGroup>
   <ItemGroup>

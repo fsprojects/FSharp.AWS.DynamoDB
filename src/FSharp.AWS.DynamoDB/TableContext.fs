@@ -199,25 +199,6 @@ module internal Provisioning =
 
     let validateOnly (client, tableName, template) : Async<unit> = run (client, tableName, template) None |> Async.Ignore
 
-/// Represents the operation performed on the table, for metrics collection purposes
-type Operation =
-    | GetItem
-    | PutItem
-    | UpdateItem
-    | DeleteItem
-    | BatchGetItems
-    | BatchWriteItems
-    | TransactWriteItems
-    | Scan
-    | Query
-
-/// Represents metrics returned by the table operation, for plugging in to an observability framework
-type RequestMetrics =
-    { TableName: string
-      Operation: Operation
-      ConsumedCapacity: ConsumedCapacity list
-      ItemCount: int }
-
 /// Scan/query limit type (internal only)
 type private LimitType =
     | All
@@ -247,22 +228,13 @@ module Precondition =
 
 /// DynamoDB client object for performing table operations in the context of given F# record representations
 [<Sealed; AutoSerializable(false)>]
-type TableContext<'TRecord>
-    internal
-    (client: IAmazonDynamoDB, tableName: string, template: RecordTemplate<'TRecord>, metricsCollector: (RequestMetrics -> unit) option) =
+type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string, template: RecordTemplate<'TRecord>) =
 
-    let reportMetrics collector (operation: Operation) (consumedCapacity: ConsumedCapacity list) (itemCount: int) =
-        collector
-            { TableName = tableName
-              Operation = operation
-              ConsumedCapacity = consumedCapacity
-              ItemCount = itemCount }
-
-    let returnConsumedCapacity, maybeReport =
-        match metricsCollector with
-        | Some sink -> ReturnConsumedCapacity.TOTAL, Some(reportMetrics sink)
-        | None when Activity.hasListeners () -> ReturnConsumedCapacity.TOTAL, None
-        | None -> ReturnConsumedCapacity.NONE, None
+    let returnConsumedCapacity =
+        if Activity.hasListeners () then
+            ReturnConsumedCapacity.TOTAL
+        else
+            ReturnConsumedCapacity.NONE
 
     let tryGetItemAsync (key: TableKey) (consistentRead: bool option) (proj: ProjectionExpr.ProjectionExpr option) = async {
         let consistentRead = defaultArg consistentRead false
@@ -278,9 +250,6 @@ type TableContext<'TRecord>
 
         let! ct = Async.CancellationToken
         let! response = client.GetItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
-
-        maybeReport
-        |> Option.iter (fun r -> r GetItem [ response.ConsumedCapacity ] (if response.IsItemSet then 1 else 0))
 
         Meter.recordConsumedCapacity "GetItem" response.ConsumedCapacity
 
@@ -319,9 +288,6 @@ type TableContext<'TRecord>
             |> Task.addActivityException activity
             |> Async.AwaitTaskCorrect
 
-        maybeReport
-        |> Option.iter (fun r -> r BatchGetItems (List.ofSeq response.ConsumedCapacity) response.Responses[tableName].Count)
-
         response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity "BatchGetItem")
 
         return response.Responses[tableName]
@@ -352,7 +318,6 @@ type TableContext<'TRecord>
 
             let downloaded = ResizeArray<_>()
             let consumedCapacity = ResizeArray<ConsumedCapacity>()
-            let emitMetrics () = maybeReport |> Option.iter (fun r -> r Query (Seq.toList consumedCapacity) downloaded.Count)
             let mutable lastEvaluatedKey: Dictionary<string, AttributeValue> option = None
 
             let rec aux last = async {
@@ -404,8 +369,6 @@ type TableContext<'TRecord>
                     |> Option.map (fun k -> template.ToAttributeValues(k, keyCondition.KeyCondition.Value))
                 )
 
-            emitMetrics ()
-
             return
                 (downloaded,
                  lastEvaluatedKey
@@ -446,7 +409,6 @@ type TableContext<'TRecord>
 
             let downloaded = ResizeArray<_>()
             let consumedCapacity = ResizeArray<ConsumedCapacity>()
-            let emitMetrics () = maybeReport |> Option.iter (fun r -> r Scan (Seq.toList consumedCapacity) downloaded.Count)
             let mutable lastEvaluatedKey: Dictionary<string, AttributeValue> option = None
             let rec aux last = async {
                 use activity =
@@ -491,8 +453,6 @@ type TableContext<'TRecord>
 
             do! aux (exclusiveStartKey |> Option.map template.ToAttributeValues)
 
-            emitMetrics ()
-
             return (downloaded, lastEvaluatedKey |> Option.map template.ExtractKey)
         }
 
@@ -528,11 +488,10 @@ type TableContext<'TRecord>
     /// </summary>
     /// <param name="client">DynamoDB client instance.</param>
     /// <param name="tableName">Table name to target.</param>
-    /// <param name="metricsCollector">Function to receive request metrics.</param>
-    new(client: IAmazonDynamoDB, tableName: string, ?metricsCollector: RequestMetrics -> unit) =
+    new(client: IAmazonDynamoDB, tableName: string) =
         if not <| isValidTableName tableName then
             invalidArg "tableName" "unsupported DynamoDB table name."
-        TableContext<'TRecord>(client, tableName, RecordTemplate.Define<'TRecord>(), metricsCollector)
+        TableContext<'TRecord>(client, tableName, RecordTemplate.Define<'TRecord>())
 
 
     /// Creates a new table context instance that uses
@@ -543,11 +502,8 @@ type TableContext<'TRecord>
         if template.PrimaryKey <> rd.PrimaryKey then
             invalidArg (string typeof<'TRecord2>) "incompatible key schema."
 
-        new TableContext<'TRecord2>(client, tableName, rd, metricsCollector)
+        new TableContext<'TRecord2>(client, tableName, rd)
 
-    /// Creates an identical table context with the specified metricsCollector callback replacing any previously specified one
-    member _.WithMetricsCollector(collector: RequestMetrics -> unit) : TableContext<'TRecord> =
-        new TableContext<'TRecord>(client, tableName, template, Some collector)
 
     /// <summary>Asynchronously puts a record item in the table.</summary>
     /// <param name="item">Item to be written.</param>
@@ -566,7 +522,6 @@ type TableContext<'TRecord>
 
         let! ct = Async.CancellationToken
         let! response = client.PutItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
-        maybeReport |> Option.iter (fun r -> r PutItem [ response.ConsumedCapacity ] 1)
         Meter.recordConsumedCapacity "PutItem" response.ConsumedCapacity
 
         return template.ExtractKey item
@@ -607,8 +562,6 @@ type TableContext<'TRecord>
                 |> Seq.map (fun w -> w.Item)
                 |> Seq.toArray
             | false, _ -> [||]
-        maybeReport
-        |> Option.iter (fun r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) (items.Length - unprocessed.Length))
         response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity "BatchWriteItem")
 
         return unprocessed |> Array.map template.OfAttributeValues
@@ -649,7 +602,6 @@ type TableContext<'TRecord>
             let! ct = Async.CancellationToken
             let! response = client.UpdateItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
 
-            maybeReport |> Option.iter (fun r -> r UpdateItem [ response.ConsumedCapacity ] 1)
             Meter.recordConsumedCapacity "UpdateItem" response.ConsumedCapacity
 
             return template.OfAttributeValues response.Attributes
@@ -715,7 +667,6 @@ type TableContext<'TRecord>
         request.ProjectionExpression <- "#HKEY"
         let! ct = Async.CancellationToken
         let! response = client.GetItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
-        maybeReport |> Option.iter (fun r -> r GetItem [ response.ConsumedCapacity ] 1)
         Meter.recordConsumedCapacity "GetItem" response.ConsumedCapacity
         return response.IsItemSet
     }
@@ -826,7 +777,6 @@ type TableContext<'TRecord>
         let! ct = Async.CancellationToken
         let! response = client.DeleteItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
 
-        maybeReport |> Option.iter (fun r -> r DeleteItem [ response.ConsumedCapacity ] 1)
         Meter.recordConsumedCapacity "DeleteItem" response.ConsumedCapacity
 
         if response.Attributes.Count = 0 then
@@ -876,8 +826,6 @@ type TableContext<'TRecord>
                 |> Seq.map (fun d -> d.Key)
                 |> Seq.toArray
             | false, _ -> [||]
-        maybeReport
-        |> Option.iter (fun r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) (keys.Length - unprocessed.Length))
         response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity "BatchWriteItem")
 
         return unprocessed |> Array.map template.ExtractKey
@@ -1361,28 +1309,20 @@ type TableContext<'TRecord>
             t.VerifyTableAsync()
 
     /// <summary>Creates a new `Transaction`, using the DynamoDB client and metricsCollector configured for this `TableContext`</summary>
-    member _.CreateTransaction() = Transaction(client, ?metricsCollector = metricsCollector)
+    member _.CreateTransaction() = Transaction(client)
 
 /// <summary>
 ///    Represents a transactional set of operations to be applied atomically to a arbitrary number of DynamoDB tables.
 /// </summary>
 /// <param name="client">DynamoDB client instance</param>
-/// <param name="metricsCollector">Function to receive request metrics.</param>
-and Transaction(client: IAmazonDynamoDB, ?metricsCollector: (RequestMetrics -> unit)) =
+and Transaction(client: IAmazonDynamoDB) =
     let transactionItems = ResizeArray<TransactWriteItem>()
 
-    let reportMetrics collector (tableName: string) (operation: Operation) (consumedCapacity: ConsumedCapacity list) (itemCount: int) =
-        collector
-            { TableName = tableName
-              Operation = operation
-              ConsumedCapacity = consumedCapacity
-              ItemCount = itemCount }
-
-    let returnConsumedCapacity, maybeReport =
-        match metricsCollector with
-        | Some sink -> ReturnConsumedCapacity.TOTAL, Some(reportMetrics sink)
-        | None when Activity.hasListeners () -> ReturnConsumedCapacity.TOTAL, None
-        | None -> ReturnConsumedCapacity.NONE, None
+    let returnConsumedCapacity =
+        if Activity.hasListeners () then
+            ReturnConsumedCapacity.TOTAL
+        else
+            ReturnConsumedCapacity.NONE
 
     let tableNameForItem (item: TransactWriteItem) =
         match (item.Put, item.ConditionCheck, item.Delete, item.Update) with
@@ -1472,12 +1412,6 @@ and Transaction(client: IAmazonDynamoDB, ?metricsCollector: (RequestMetrics -> u
             |> Task.addActivityException activity
             |> Async.AwaitTaskCorrect
 
-        maybeReport
-        |> Option.iter (fun r ->
-            response.ConsumedCapacity
-            |> Seq.groupBy (fun x -> x.TableName)
-            |> Seq.iter (fun (tableName, consumedCapacity) ->
-                r tableName Operation.TransactWriteItems (Seq.toList consumedCapacity) (Seq.length transactionItems)))
         response.ConsumedCapacity |> Seq.iter (fun c -> Meter.recordConsumedCapacity "TransactWriteItems" c)
     }
 
@@ -1492,11 +1426,10 @@ type TableContext internal () =
             tableName: string,
             ?verifyTable: bool,
             ?createIfNotExists: bool,
-            ?provisionedThroughput: ProvisionedThroughput,
-            ?metricsCollector: RequestMetrics -> unit
+            ?provisionedThroughput: ProvisionedThroughput
         ) =
         async {
-            let context = TableContext<'TRecord>(client, tableName, ?metricsCollector = metricsCollector)
+            let context = TableContext<'TRecord>(client, tableName)
             if createIfNotExists = Some true then
                 let throughput =
                     match provisionedThroughput with
@@ -1507,67 +1440,6 @@ type TableContext internal () =
                 do! context.VerifyTableAsync()
             return context
         }
-
-    /// <summary>
-    ///     Creates a DynamoDB client instance for given F# record and table name.
-    /// </summary>
-    /// <param name="client">DynamoDB client instance.</param>
-    /// <param name="tableName">Table name to target.</param>
-    /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
-    /// <param name="createIfNotExists">Create the table now if it does not exist. Defaults to false.</param>
-    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created. Default: 10 RCU, 10 WCU</param>
-    /// <param name="metricsCollector">Function to receive request metrics.</param>
-    [<System.Obsolete(@"This method has been deprecated. Please use TableContext constructor
-                        (optionally followed by VerifyTableAsync or VerifyOrCreateTableAsync)")>]
-    static member CreateAsync<'TRecord>
-        (
-            client: IAmazonDynamoDB,
-            tableName: string,
-            ?verifyTable: bool,
-            ?createIfNotExists: bool,
-            ?provisionedThroughput: ProvisionedThroughput,
-            ?metricsCollector: RequestMetrics -> unit
-        ) =
-        TableContext.CreateAsyncImpl<'TRecord>(
-            client,
-            tableName,
-            ?verifyTable = verifyTable,
-            ?createIfNotExists = createIfNotExists,
-            ?provisionedThroughput = provisionedThroughput,
-            ?metricsCollector = metricsCollector
-        )
-
-    /// <summary>
-    ///     Creates a DynamoDB client instance for given F# record and table name.
-    /// </summary>
-    /// <param name="client">DynamoDB client instance.</param>
-    /// <param name="tableName">Table name to target.</param>
-    /// <param name="verifyTable">Verify that the table exists and is compatible with supplied record schema. Defaults to true.</param>
-    /// <param name="createIfNotExists">Create the table now instance if it does not exist. Defaults to false.</param>
-    /// <param name="provisionedThroughput">Provisioned throughput for the table if newly created.</param>
-    /// <param name="metricsCollector">Function to receive request metrics.</param>
-    [<System.Obsolete(@"Creation with synchronous verification has been deprecated. Please use either
-                        1. TableContext constructor (optionally followed by VerifyTableAsync or VerifyOrCreateTableAsync) OR
-                        2. (for scripting scenarios) Scripting.TableContext.Initialize")>]
-    static member Create<'TRecord>
-        (
-            client: IAmazonDynamoDB,
-            tableName: string,
-            ?verifyTable: bool,
-            ?createIfNotExists: bool,
-            ?provisionedThroughput: ProvisionedThroughput,
-            ?metricsCollector: RequestMetrics -> unit
-        ) =
-        TableContext.CreateAsyncImpl<'TRecord>(
-            client,
-            tableName,
-            ?verifyTable = verifyTable,
-            ?createIfNotExists = createIfNotExists,
-            ?provisionedThroughput = provisionedThroughput,
-            ?metricsCollector = metricsCollector
-        )
-        |> Async.RunSynchronously
-
 
 
 /// <summary>
