@@ -1,6 +1,6 @@
 # FSharp.AWS.DynamoDB
 
-![](https://github.com/fsprojects/FSharp.AWS.DynamoDB/workflows/Build/badge.svg) [![NuGet Badge](https://buildstats.info/nuget/FSharp.AWS.DynamoDB?includePreReleases=true)](https://www.nuget.org/packages/FSharp.AWS.DynamoDB)
+![](https://github.com/fsprojects/FSharp.AWS.DynamoDB/workflows/Build/badge.svg) [![NuGet Badge](https://img.shields.io/nuget/vpre/FSharp.AWS.DynamoDB)](https://www.nuget.org/packages/FSharp.AWS.DynamoDB)
 
 `FSharp.AWS.DynamoDB` is an F# wrapper over the standard `AWSSDK.DynamoDBv2` library that
 represents Table Items as F# records, enabling one to perform updates, queries and scans
