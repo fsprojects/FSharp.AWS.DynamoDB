@@ -18,6 +18,7 @@ type KeyType =
     | Range = 2
 
 /// Describes the key structure of a given F# record
+[<NoComparison>]
 type PrimaryKeyStructure =
     | HashKeyOnly of hashKeyProperty: PropertyMetadata
     | Combined of hashKeyProperty: PropertyMetadata * rangeKeyProperty: PropertyMetadata
@@ -39,6 +40,7 @@ type TableKeySchemata(schemata: TableKeySchema[]) =
     override __.ToString() = __.StructuredFormatDisplay
 
 /// Infered key schema metadata for an F# record
+[<NoComparison>]
 type RecordTableInfo =
     {
         Type: Type

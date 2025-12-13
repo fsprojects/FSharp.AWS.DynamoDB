@@ -27,6 +27,7 @@ open FSharp.AWS.DynamoDB.ExprCommon
 //  see http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.Modifying.html
 
 /// DynamoDB update opration
+[<NoComparison>]
 type UpdateOperation =
     | Skip
     | Set of AttributeId * UpdateValue
@@ -52,7 +53,7 @@ type UpdateOperation =
 
 
 /// Update value used for SET operations
-and UpdateValue =
+and [<NoComparison>] UpdateValue =
     | Operand of Operand
     | Op_Addition of Operand * Operand
     | Op_Subtraction of Operand * Operand
@@ -60,13 +61,14 @@ and UpdateValue =
     | If_Not_Exists of AttributeId * Operand
 
 /// Update value operand
-and Operand =
+and [<NoComparison>] Operand =
     | Attribute of AttributeId
     | Value of AttributeValueEqWrapper
     | Param of index: int * Pickler
     | Undefined
 
 /// Intermediate representation of update expressions
+[<NoComparison; NoEquality>]
 type IntermediateUpdateExprs =
     {
         /// Record variable identifier used by predicate
@@ -84,6 +86,7 @@ type IntermediateUpdateExprs =
     }
 
 /// Update operations pars
+[<NoComparison>]
 type UpdateOperations =
     {
         /// Update operations, sorted by type

@@ -228,6 +228,7 @@ module ``Record Generation Tests`` =
 
           Nested: NestedRecord * NestedUnion }
 
+    [<NoComparison>]
     type ``Complex Record D`` =
         { [<HashKey>]
           HashKey: byte[]

@@ -64,6 +64,7 @@ type AttributeId with
         else
             notFound id.NestedAttributes
 
+[<NoComparison; NoEquality>]
 type ProjectionExpr =
     { Attributes: AttributeId[]
       Ctor: Dictionary<string, AttributeValue> -> obj }

@@ -115,6 +115,7 @@ type PropertySerializerAttribute<'PickleType>() =
         member x.Deserialize pickle = x.Deserialize(pickle :?> 'PickleType)
 
 /// Metadata on a table key attribute
+[<NoComparison>]
 type KeyAttributeSchema = { AttributeName: string; KeyType: ScalarAttributeType }
 
 /// Identifies type of DynamoDB table key schema
@@ -130,6 +131,7 @@ type KeySchemaType =
         | PrimaryKey -> None
 
 /// DynamoDB table key schema description
+[<NoComparison>]
 type TableKeySchema =
     { HashKey: KeyAttributeSchema
       RangeKey: KeyAttributeSchema option

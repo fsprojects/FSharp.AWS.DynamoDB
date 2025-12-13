@@ -295,19 +295,21 @@ on individual operations.
 
 ## Observability
 
-Critical to any production deployment is to ensure that you have good insight into the costs your application is incurring at runtime.
+DynamoDB request spans are exposed via `System.Diagnostics.Activity`s, which allows them to be exported to your observability platform.
 
-A hook is provided so metrics can be published via your preferred Observability provider. For example, using [Prometheus.NET](https://github.com/prometheus-net/prometheus-net):
+For example, OpenTelemetry can be configured with something like:
 
 ```fsharp
-let dbCounter = Prometheus.Metrics.CreateCounter("aws_dynamodb_requests_total", "Count of all DynamoDB requests", "table", "operation")
-let processMetrics (m : RequestMetrics) =
-    dbCounter.WithLabels(m.TableName, string m.Operation).Inc()
-let table = TableContext<WorkItemInfo>(client, tableName = "workItems", metricsCollector = processMetrics)
+    services
+        .AddOpenTelemetry()
+        .WithTracing(fun provider ->
+            .AddService("FSharp.AWS.DynamoDB")
+            .AddOltpExporter(fun options ->
+                options.Endpoint <- "Your OLTP endpoint"
+            )
+            .AddConsoleExporter() |> ignore
+        )
 ```
-
-If `metricsCollector` is supplied, the requests will set `ReturnConsumedCapacity` to `ReturnConsumedCapacity.INDEX` 
-and the `RequestMetrics` parameter will contain a list of `ConsumedCapacity` objects returned from the DynamoDB operations.
 
 ## Read consistency
 

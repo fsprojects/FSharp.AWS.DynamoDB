@@ -14,7 +14,7 @@ open FSharp.AWS.DynamoDB
 //
 //  Pickler implementation for F# Union types
 //
-
+[<NoComparison>]
 type private UnionCaseData = { UCI: UnionCaseInfo; CaseCtor: MethodInfo; Properties: PropertyMetadata[] }
 
 type UnionPickler<'U>(resolver: IPicklerResolver) =

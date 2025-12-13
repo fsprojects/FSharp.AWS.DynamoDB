@@ -18,6 +18,7 @@ open FSharp.AWS.DynamoDB.ExprCommon
 //  see http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.SpecifyingConditions.html
 
 /// DynamoDB query expression
+[<NoComparison>]
 type QueryExpr =
     | False // True & False not part of the DynamoDB spec;
     | True // used here for reducing condition expressions
@@ -46,7 +47,7 @@ and Comparator =
         | NE -> false
         | _ -> true
 
-and Operand =
+and [<NoComparison>] Operand =
     | Undefined
     | Value of AttributeValueEqWrapper
     | Param of index: int * Pickler
@@ -54,6 +55,7 @@ and Operand =
     | SizeOf of AttributeId
 
 /// Conditional expression parsed from quotation expr
+[<NoComparison>]
 type ConditionalExpression =
     {
         /// Query conditional expression

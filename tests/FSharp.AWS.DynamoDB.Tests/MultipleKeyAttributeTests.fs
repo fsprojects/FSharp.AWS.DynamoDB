@@ -32,10 +32,10 @@ module MultiKeyTypes =
 
 type ``Inverse GSI Table Operation Tests``(fixture: TableFixture) =
 
-    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
+    let rand = let r = Random.Shared in fun () -> int <| r.Next()
     let mkItem () =
-        { PrimaryKey = ((int (rand ())) % 50).ToString()
-          SortKey = ((int (rand ())) % 50).ToString() }
+        { PrimaryKey = sprintf "%d" ((rand ()) % 50)
+          SortKey = sprintf "%d" ((rand ()) % 50) }
 
     let table = fixture.CreateEmpty<InverseKeyRecord>()
 
@@ -53,13 +53,13 @@ type ``Inverse GSI Table Operation Tests``(fixture: TableFixture) =
 
 type ``Shared Range Key Table Operation Tests``(fixture: TableFixture) =
 
-    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
+    let rand = let r = Random.Shared in fun () -> int <| r.Next()
 
     let mkItem () =
         { HashKey = guid ()
-          GSI1 = ((int (rand ())) % 5).ToString()
-          GSI2 = ((int (rand ())) % 5 + 20).ToString()
-          SortKey = ((int (rand ())) % 50).ToString() }
+          GSI1 = sprintf "%d" ((rand ()) % 5)
+          GSI2 = sprintf "%d" (((rand ()) % 5) + 20)
+          SortKey = sprintf "%d" ((rand ()) % 50) }
 
     let table = fixture.CreateEmpty<SharedRangeKeyRecord>()
 

@@ -30,6 +30,7 @@ type NestedAttribute =
         | FIndex i -> sprintf "[%d]" i
 
 /// DynamoDB Attribute identifier
+[<NoComparison>]
 type AttributeId =
     { RootName: string
       RootId: string
@@ -112,6 +113,7 @@ type PropertyMetadata with
     member rp.AttrId = sprintf "#ATTR%d" rp.Index
 
 /// Represents a nested field of an F# record type
+[<NoComparison>]
 type QuotedAttribute =
     | Root of PropertyMetadata * keyAttrs: (TableKeySchema * KeyType)[]
     | Nested of PropertyMetadata * parent: QuotedAttribute
@@ -294,7 +296,9 @@ let extractExprParams (recordInfo: RecordTableInfo) (expr: Expr) =
 // Detects conflicts in a collection of attribute paths
 // e.g. 'r.Foo.Bar.[0]' and 'r.Foo' are conflicting
 // however 'r.Foo.Bar.[0]' and 'r.Foo.Bar.[1]' are not conflicting
+[<NoComparison>]
 type private AttributeNode = { Value: string; Children: ResizeArray<AttributeNode> }
+
 /// Detects conflicts in a collection of attribute paths
 let tryFindConflictingPaths (attrs: seq<AttributeId>) =
     let root = new ResizeArray<AttributeNode>()

@@ -21,9 +21,11 @@ type ProvisionedThroughput = Amazon.DynamoDBv2.Model.ProvisionedThroughput
 
 /// Represents the throughput configuration for a Table
 [<RequireQualifiedAccess>]
+[<NoComparison>]
 type Throughput =
     | Provisioned of ProvisionedThroughput
     | OnDemand
+
 module internal Throughput =
     let applyToCreateRequest (req: CreateTableRequest) =
         function
@@ -54,10 +56,11 @@ module internal Throughput =
         | Throughput.OnDemand -> req.BillingMode <- BillingMode.PAY_PER_REQUEST
 
 /// Represents the streaming configuration for a Table
-[<RequireQualifiedAccess>]
+[<RequireQualifiedAccess; NoComparison>]
 type Streaming =
     | Enabled of StreamViewType
     | Disabled
+
 module internal Streaming =
     let private (|Spec|) =
         function
