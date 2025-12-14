@@ -1,6 +1,7 @@
 ﻿namespace FSharp.AWS.DynamoDB.Tests
 
 open System
+open System.Threading.Tasks
 
 open Swensen.Unquote
 open Xunit
@@ -115,9 +116,8 @@ type ``Conditional Expression Tests``(fixture: TableFixture) =
     let ``Item not exists failure should add conflicting item data to the exception`` () =
         let item = mkItem ()
         let _key = table.PutItem(item, precondition = itemDoesNotExist)
-        raisesWith<ConditionalCheckFailedException>
-            <@ table.PutItemAsync(item, precondition = itemDoesNotExist) |> Async.RunSynchronously @>
-            (fun e -> <@ e.Item.Count > 0 @>)
+        raisesAsyncWith<_, ConditionalCheckFailedException> (fun () -> table.PutItemAsync(item, precondition = itemDoesNotExist)) (fun e ->
+            e.Item.Count > 0)
 
     [<Fact>]
     let ``String precondition`` () =
@@ -450,36 +450,35 @@ type ``Conditional Expression Tests``(fixture: TableFixture) =
         =! _key
 
     [<Fact>]
-    let ``Simple Query Expression`` () =
+    let ``Simple Query Expression`` () = task {
         let hKey = guid ()
 
-        seq { for i in 1..200 -> { mkItem () with HashKey = hKey; RangeKey = int64 i } }
-        |> Seq.splitInto 25
-        |> Seq.map table.BatchPutItemsAsync
-        |> Async.Parallel
-        |> Async.Ignore
-        |> Async.RunSynchronously
+        let! _ =
+            seq { for i in 1..200 -> { mkItem () with HashKey = hKey; RangeKey = int64 i } }
+            |> Seq.splitInto 25
+            |> Seq.map table.BatchPutItemsAsync
+            |> Task.WhenAll
 
 
-        let results = table.Query(<@ fun r -> r.HashKey = hKey && BETWEEN r.RangeKey 50L 149L @>)
+        let! results = table.QueryAsync(<@ fun r -> r.HashKey = hKey && BETWEEN r.RangeKey 50L 149L @>)
         test <@ 100 = results.Length @>
+    }
 
     [<Fact>]
-    let ``Simple Query/Filter Expression`` () =
+    let ``Simple Query/Filter Expression`` () = task {
         let hKey = guid ()
 
-        seq { for i in 1..200 -> { mkItem () with HashKey = hKey; RangeKey = int64 i; Bool = i % 2 = 0 } }
-        |> Seq.splitInto 25
-        |> Seq.map table.BatchPutItemsAsync
-        |> Async.Parallel
-        |> Async.Ignore
-        |> Async.RunSynchronously
+        let! _ =
+            seq { for i in 1..200 -> { mkItem () with HashKey = hKey; RangeKey = int64 i; Bool = i % 2 = 0 } }
+            |> Seq.splitInto 25
+            |> Seq.map table.BatchPutItemsAsync
+            |> Task.WhenAll
 
-        let results =
-            table.Query(<@ fun r -> r.HashKey = hKey && BETWEEN r.RangeKey 50L 149L @>, filterCondition = <@ fun r -> r.Bool = true @>)
+        let! results =
+            table.QueryAsync(<@ fun r -> r.HashKey = hKey && BETWEEN r.RangeKey 50L 149L @>, filterCondition = <@ fun r -> r.Bool = true @>)
 
         test <@ 50 = results.Length @>
-
+    }
     [<Fact>]
     let ``Detect incompatible key conditions`` () =
         let test outcome q = test <@ outcome = table.Template.PrecomputeConditionalExpr(q).IsKeyConditionCompatible @>
@@ -521,18 +520,18 @@ type ``Conditional Expression Tests``(fixture: TableFixture) =
         test false <@ fun r -> r.Nested <= r.Nested @>
 
     [<Fact>]
-    let ``Simple Scan Expression`` () =
+    let ``Simple Scan Expression`` () = task {
         let hKey = guid ()
 
-        seq { for i in 1..200 -> { mkItem () with HashKey = hKey; RangeKey = int64 i; Bool = i % 2 = 0 } }
-        |> Seq.splitInto 25
-        |> Seq.map table.BatchPutItemsAsync
-        |> Async.Parallel
-        |> Async.Ignore
-        |> Async.RunSynchronously
+        let! _ =
+            seq { for i in 1..200 -> { mkItem () with HashKey = hKey; RangeKey = int64 i; Bool = i % 2 = 0 } }
+            |> Seq.splitInto 25
+            |> Seq.map table.BatchPutItemsAsync
+            |> Task.WhenAll
 
-        let results = table.Scan(<@ fun r -> r.HashKey = hKey && r.RangeKey <= 100L && r.Bool = true @>)
+        let! results = table.ScanAsync(<@ fun r -> r.HashKey = hKey && r.RangeKey <= 100L && r.Bool = true @>)
         test <@ 50 = results.Length @>
+    }
 
     [<Fact>]
     let ``Simple Parametric Conditional`` () =
@@ -558,33 +557,32 @@ type ``Conditional Expression Tests``(fixture: TableFixture) =
         |> shouldFailwith<_, ArgumentException>
 
     [<Fact>]
-    let ``Global Secondary index query`` () =
+    let ``Global Secondary index query`` () = task {
         let hKey = guid ()
 
-        seq { for i in 1..200 -> { mkItem () with GSIH = hKey; GSIR = i } }
-        |> Seq.splitInto 25
-        |> Seq.map table.BatchPutItemsAsync
-        |> Async.Parallel
-        |> Async.Ignore
-        |> Async.RunSynchronously
+        let! _ =
+            seq { for i in 1..200 -> { mkItem () with GSIH = hKey; GSIR = i } }
+            |> Seq.splitInto 25
+            |> Seq.map table.BatchPutItemsAsync
+            |> Task.WhenAll
 
-        let result = table.Query <@ fun r -> r.GSIH = hKey && BETWEEN r.GSIR 101 200 @>
+        let! result = table.QueryAsync <@ fun r -> r.GSIH = hKey && BETWEEN r.GSIR 101 200 @>
         test <@ 100 = result.Length @>
-
+    }
 
     [<Fact>]
-    let ``Local Secondary index query`` () =
+    let ``Local Secondary index query`` () = task {
         let hKey = guid ()
 
-        seq { for i in 1..200 -> { mkItem () with HashKey = hKey; LSI = int64 i } }
-        |> Seq.splitInto 25
-        |> Seq.map table.BatchPutItemsAsync
-        |> Async.Parallel
-        |> Async.Ignore
-        |> Async.RunSynchronously
+        let! _ =
+            seq { for i in 1..200 -> { mkItem () with HashKey = hKey; LSI = int64 i } }
+            |> Seq.splitInto 25
+            |> Seq.map table.BatchPutItemsAsync
+            |> Task.WhenAll
 
-        let result = table.Query <@ fun r -> r.HashKey = hKey && BETWEEN r.LSI 101L 200L @>
+        let! result = table.QueryAsync <@ fun r -> r.HashKey = hKey && BETWEEN r.LSI 101L 200L @>
         test <@ 100 = result.Length @>
+    }
 
     let testScan items (expr: Quotations.Expr<(CondExprRecord -> bool)>) =
         let res = table.Scan expr

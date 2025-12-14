@@ -70,8 +70,8 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
     let ``Simple Put Operation`` () =
         let value = mkItem ()
         let key = table.PutItem value
-        let value' = table.GetItem key
-        test <@ value = value' @>
+        let value' = table.TryGetItem key
+        test <@ Some value = value' @>
 
     [<Fact>]
     let ``ContainsKey Operation`` () =
@@ -85,7 +85,7 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
     let ``TryGet Operation`` () =
         let value = mkItem ()
         let computedKey = table.Template.ExtractKey value
-        let get k = table.TryGetItemAsync k |> Async.RunSynchronously
+        let get k = table.TryGetItem k
         let initialLoad = get computedKey
         test <@ None = initialLoad @>
         let key = table.PutItem value
@@ -134,6 +134,7 @@ type ``Simple Table Operation Tests``(fixture: TableFixture) =
         test <@ None = deletedItem @>
         test <@ not (table.ContainsKey key) @>
 
+    // TODO: this fails test runs
     [<Theory>]
     [<InlineData("",
                  "rangeKey",
@@ -180,7 +181,7 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
     let existsConditionTable2 = compileTable2 <@ fun t -> EXISTS t.Values @>
 
     [<Fact>]
-    let ``Minimal happy path`` () = async {
+    let ``Minimal happy path`` () = task {
         let item = mkItem ()
         let transaction = table1.CreateTransaction()
         transaction.Put(table1, item, doesntExistConditionTable1)
@@ -191,7 +192,7 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
     }
 
     [<Fact>]
-    let ``Minimal happy path with multiple tables`` () = async {
+    let ``Minimal happy path with multiple tables`` () = task {
         let item = mkItem ()
         let compatibleItem = mkCompatibleItem ()
 
@@ -208,7 +209,7 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
     }
 
     [<Fact>]
-    let ``Minimal Canceled path`` () = async {
+    let ``Minimal Canceled path`` () = task {
         let item = mkItem ()
 
         let transaction = table1.CreateTransaction()
@@ -226,7 +227,7 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
     }
 
     [<Theory; InlineData true; InlineData false>]
-    let ``ConditionCheck outcome should affect sibling TransactWrite`` shouldFail = async {
+    let ``ConditionCheck outcome should affect sibling TransactWrite`` shouldFail = task {
         let item, item2 = mkItem (), mkItem ()
         let! key = table1.PutItemAsync item
 
@@ -250,7 +251,7 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
     }
 
     [<Theory; InlineData true; InlineData false>]
-    let ``All paths`` shouldFail = async {
+    let ``All paths`` shouldFail = task {
         let item, item2, item3, item4, item5, item6, item7 = mkItem (), mkItem (), mkItem (), mkItem (), mkItem (), mkItem (), mkItem ()
         let! key = table1.PutItemAsync item
         let transaction = table1.CreateTransaction()
@@ -294,27 +295,17 @@ type ``TransactWriteItems tests``(table1: TableFixture, table2: TableFixture) =
         test <@ shouldFail <> (maybeItem7 |> Option.map (fun x -> x.Tuple) |> Option.contains (42, 42)) @>
     }
 
-    let shouldBeRejectedWithArgumentOutOfRangeException (builder: Transaction) = async {
-        let! e = Async.Catch(builder.TransactWriteItems())
-        test
-            <@
-                match e with
-                | Choice1Of2() -> false
-                | Choice2Of2 e -> e :? ArgumentOutOfRangeException
-            @>
-    }
-
     [<Fact>]
     let ``Empty request list is rejected with AORE`` () =
-        shouldBeRejectedWithArgumentOutOfRangeException (Transaction(table1.Client))
-        |> Async.RunSynchronously
+        raisesAsync<_, ArgumentOutOfRangeException> (fun () -> Transaction(table1.Client).TransactWriteItems())
 
     [<Fact>]
-    let ``Over 100 writes are rejected with AORE`` () =
+    let ``Over 100 writes are rejected with AORE`` () = task {
         let Transaction = Transaction(table1.Client)
         for _x in 1..101 do
             Transaction.Put(table1, mkItem ()) |> ignore
 
-        shouldBeRejectedWithArgumentOutOfRangeException Transaction
+        do! raisesAsync<_, ArgumentOutOfRangeException> (fun () -> Transaction.TransactWriteItems())
+    }
 
     interface IClassFixture<TableFixture>

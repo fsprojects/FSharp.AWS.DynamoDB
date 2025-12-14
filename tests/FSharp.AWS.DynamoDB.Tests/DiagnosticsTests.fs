@@ -67,7 +67,7 @@ type Tests(fixture: TableFixture) =
     let isTagSet tag (tags: KeyValuePair<string, string> seq) = tags |> Seq.exists (fun t -> t.Key = tag)
 
     [<Fact>]
-    let ``Collect Metrics on TryGetItem`` () = async {
+    let ``Collect Metrics on TryGetItem`` () = task {
         let! result =
             let nonExistentHk = guid ()
             table.TryGetItemAsync(key = TableKey.Combined(nonExistentHk, 0))

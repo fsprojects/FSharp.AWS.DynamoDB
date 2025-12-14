@@ -2,6 +2,8 @@
 
 open System.Collections.Generic
 open System.Net
+open System.Threading
+open System.Threading.Tasks
 
 open Microsoft.FSharp.Quotations
 
@@ -9,6 +11,7 @@ open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
 open FSharp.AWS.DynamoDB.ExprCommon
+
 
 /// Exception raised by DynamoDB in case where write preconditions are not satisfied
 type ConditionalCheckFailedException = Amazon.DynamoDBv2.Model.ConditionalCheckFailedException
@@ -89,10 +92,9 @@ module internal CreateTableRequest =
         customize |> Option.iter (fun c -> c req)
         req
 
-    let execute (client: IAmazonDynamoDB) (request: CreateTableRequest) : Async<CreateTableResponse> = async {
-        let! ct = Async.CancellationToken
+    let execute (client: IAmazonDynamoDB) (request: CreateTableRequest) (ct: CancellationToken) : Task<CreateTableResponse> = task {
         use activity = Activity.startTableActivity request.TableName "CreateTable"
-        return! client.CreateTableAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+        return! client.CreateTableAsync(request, ct) |> Task.addActivityException activity
     }
 
 module internal UpdateTableRequest =
@@ -118,34 +120,29 @@ module internal UpdateTableRequest =
             apply tc sc request
             if customize request then Some request else None
 
-    let execute (client: IAmazonDynamoDB) (request: UpdateTableRequest) : Async<TableDescription> = async {
-        let! ct = Async.CancellationToken
+    let execute (client: IAmazonDynamoDB) (request: UpdateTableRequest) (ct: CancellationToken) : Task<TableDescription> = task {
         use activity = Activity.startTableActivity request.TableName "UpdateTable"
-        let! response = client.UpdateTableAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+        let! response = client.UpdateTableAsync(request, ct) |> Task.addActivityException activity
         return response.TableDescription
     }
 
 module internal Provisioning =
 
-    let tryDescribe (client: IAmazonDynamoDB, tableName: string) : Async<TableDescription option> = async {
-        let! ct = Async.CancellationToken
+    let tryDescribe (client: IAmazonDynamoDB, tableName: string, ct: CancellationToken) : Task<TableDescription option> = task {
         use activity = Activity.startTableActivity tableName "DescribeTable"
-        let! td =
-            client.DescribeTableAsync(tableName, ct)
-            |> Task.addActivityException activity
-            |> Async.AwaitTaskCorrect
+        let! td = client.DescribeTableAsync(tableName, ct) |> Task.addActivityException activity
         return
             match td.Table with
             | t when t.TableStatus = TableStatus.ACTIVE -> Some t
             | _ -> None
     }
 
-    let private waitForActive (client: IAmazonDynamoDB, tableName: string) : Async<TableDescription> =
-        let rec wait () = async {
-            match! tryDescribe (client, tableName) with
+    let private waitForActive (client: IAmazonDynamoDB, tableName: string, ct: CancellationToken) : Task<TableDescription> =
+        let rec wait () = task {
+            match! tryDescribe (client, tableName, ct) with
             | Some t -> return t
             | None ->
-                do! Async.Sleep 1000
+                do! Task.Delay(1000)
                 // wait indefinitely if table is in transition state
                 return! wait ()
         }
@@ -157,28 +154,30 @@ module internal Provisioning =
         | :? ResourceInUseException -> Some()
         | _ -> None
 
-    let private checkOrCreate (client, tableName) validateDescription maybeMakeCreateTableRequest : Async<TableDescription> =
-        let rec aux retries = async {
-            match! waitForActive (client, tableName) |> Async.Catch with
-            | Choice1Of2 desc ->
+    let private checkOrCreate
+        (client, tableName)
+        validateDescription
+        maybeMakeCreateTableRequest
+        (ct: CancellationToken)
+        : Task<TableDescription> =
+        let rec aux retries = task {
+            try
+                let! desc = waitForActive (client, tableName, ct)
                 validateDescription desc
                 return desc
-
-            | Choice2Of2(:? ResourceNotFoundException) when Option.isSome maybeMakeCreateTableRequest ->
+            with
+            | :? ResourceNotFoundException when Option.isSome maybeMakeCreateTableRequest ->
                 let req = maybeMakeCreateTableRequest.Value()
-                match! CreateTableRequest.execute client req |> Async.Catch with
-                | Choice1Of2 _ -> return! aux retries
-                | Choice2Of2 Conflict when retries > 0 ->
-                    do! Async.Sleep 2000
+                try
+                    do! CreateTableRequest.execute client req ct |> Task.Ignore
+                    return! aux retries
+                with Conflict when retries > 0 ->
+                    do! Task.Delay 2000
                     return! aux (retries - 1)
 
-                | Choice2Of2 e -> return! Async.Raise e
-
-            | Choice2Of2 Conflict when retries > 0 ->
-                do! Async.Sleep 2000
+            | Conflict when retries > 0 ->
+                do! Task.Delay 2000
                 return! aux (retries - 1)
-
-            | Choice2Of2 e -> return! Async.Raise e
         }
         aux 9 // up to 9 retries, i.e. 10 attempts before we let exception propagate
 
@@ -192,15 +191,15 @@ module internal Provisioning =
                 typeof<'TRecord>
             |> invalidOp
 
-    let private run (client, tableName, template) maybeMakeCreateRequest : Async<TableDescription> =
+    let private run (client, tableName, template) maybeMakeCreateRequest ct : Task<TableDescription> =
         let validate = validateDescription (tableName, template)
-        checkOrCreate (client, tableName) validate maybeMakeCreateRequest
+        checkOrCreate (client, tableName) validate maybeMakeCreateRequest ct
 
-    let verifyOrCreate (client, tableName, template) throughput streaming customize : Async<TableDescription> =
+    let verifyOrCreate (client, tableName, template) throughput streaming customize ct : Task<TableDescription> =
         let generateCreateRequest () = CreateTableRequest.create (tableName, template) throughput streaming customize
-        run (client, tableName, template) (Some generateCreateRequest)
+        run (client, tableName, template) (Some generateCreateRequest) ct
 
-    let validateOnly (client, tableName, template) : Async<unit> = run (client, tableName, template) None |> Async.Ignore
+    let validateOnly (client, tableName, template) ct : Task<unit> = run (client, tableName, template) None ct |> Task.Ignore
 
 /// Scan/query limit type (internal only)
 type private LimitType =
@@ -239,7 +238,7 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
         else
             ReturnConsumedCapacity.NONE
 
-    let tryGetItemAsync (key: TableKey) (consistentRead: bool option) (proj: ProjectionExpr.ProjectionExpr option) = async {
+    let tryGetItemAsync (key: TableKey) (consistentRead: bool option) (proj: ProjectionExpr.ProjectionExpr option) (ct: CancellationToken) = task {
         let consistentRead = defaultArg consistentRead false
         use activity = Activity.startTableActivity tableName "GetItem" |> Activity.addConsistentRead consistentRead
         let kav = template.ToAttributeValues(key)
@@ -251,8 +250,7 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
             request.ProjectionExpression <- proj.Write aw
             activity |> Activity.addProjection request.ProjectionExpression |> ignore
 
-        let! ct = Async.CancellationToken
-        let! response = client.GetItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+        let! response = client.GetItemAsync(request, ct) |> Task.addActivityException activity
 
         Meter.recordConsumedCapacity "GetItem" response.ConsumedCapacity
 
@@ -262,39 +260,35 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
             return None
     }
 
-    let getItemAsync (key: TableKey) (consistentRead: bool option) (proj: ProjectionExpr.ProjectionExpr option) = async {
-        match! tryGetItemAsync key consistentRead proj with
-        | Some item -> return item
-        | None -> return raise <| ResourceNotFoundException(sprintf "could not find item %O" key)
-    }
+    let batchGetItemsAsync
+        (keys: seq<TableKey>)
+        (consistentRead: bool option)
+        (projExpr: ProjectionExpr.ProjectionExpr option)
+        (ct: CancellationToken)
+        =
+        task {
+            let consistentRead = defaultArg consistentRead false
+            use activity = Activity.startTableActivity tableName "BatchGetItem" |> Activity.addConsistentRead consistentRead
+            let kna = KeysAndAttributes()
+            kna.AttributesToGet.AddRange(template.Info.Properties |> Seq.map (fun p -> p.Name))
+            kna.Keys.AddRange(keys |> Seq.map template.ToAttributeValues)
+            kna.ConsistentRead <- consistentRead
+            match projExpr with
+            | None -> ()
+            | Some projExpr ->
+                let aw = AttributeWriter(kna.ExpressionAttributeNames, null)
+                kna.ProjectionExpression <- projExpr.Write aw
+                activity |> Activity.addProjection kna.ProjectionExpression |> ignore
 
-    let batchGetItemsAsync (keys: seq<TableKey>) (consistentRead: bool option) (projExpr: ProjectionExpr.ProjectionExpr option) = async {
-        let consistentRead = defaultArg consistentRead false
-        use activity = Activity.startTableActivity tableName "BatchGetItem" |> Activity.addConsistentRead consistentRead
-        let kna = KeysAndAttributes()
-        kna.AttributesToGet.AddRange(template.Info.Properties |> Seq.map (fun p -> p.Name))
-        kna.Keys.AddRange(keys |> Seq.map template.ToAttributeValues)
-        kna.ConsistentRead <- consistentRead
-        match projExpr with
-        | None -> ()
-        | Some projExpr ->
-            let aw = AttributeWriter(kna.ExpressionAttributeNames, null)
-            kna.ProjectionExpression <- projExpr.Write aw
-            activity |> Activity.addProjection kna.ProjectionExpression |> ignore
+            let request = BatchGetItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
+            request.RequestItems[tableName] <- kna
 
-        let request = BatchGetItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
-        request.RequestItems[tableName] <- kna
+            let! response = client.BatchGetItemAsync(request, ct) |> Task.addActivityException activity
 
-        let! ct = Async.CancellationToken
-        let! response =
-            client.BatchGetItemAsync(request, ct)
-            |> Task.addActivityException activity
-            |> Async.AwaitTaskCorrect
+            response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity "BatchGetItem")
 
-        response.ConsumedCapacity |> Seq.iter (Meter.recordConsumedCapacity "BatchGetItem")
-
-        return response.Responses[tableName]
-    }
+            return response.Responses[tableName]
+        }
 
     let queryPaginatedAsync
         (keyCondition: ConditionalExpr.ConditionalExpression)
@@ -304,13 +298,13 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
         (exclusiveStartKey: IndexKey option)
         (consistentRead: bool option)
         (scanIndexForward: bool option)
+        (ct: CancellationToken)
         =
-        async {
 
-            if not keyCondition.IsKeyConditionCompatible then
-                invalidArg
-                    "keyCondition"
-                    """key conditions must satisfy the following constraints:
+        if not keyCondition.IsKeyConditionCompatible then
+            invalidArg
+                "keyCondition"
+                """key conditions must satisfy the following constraints:
 * Must only reference HashKey & RangeKey attributes.
 * Must reference HashKey attribute exactly once.
 * Must reference RangeKey attribute at most once.
@@ -319,53 +313,53 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
 * Must not contain nested operands.
 """
 
-            let downloaded = ResizeArray<_>()
-            let consumedCapacity = ResizeArray<ConsumedCapacity>()
-            let mutable lastEvaluatedKey: Dictionary<string, AttributeValue> option = None
+        let downloaded = ResizeArray<_>()
+        let consumedCapacity = ResizeArray<ConsumedCapacity>()
+        let mutable lastEvaluatedKey: Dictionary<string, AttributeValue> option = None
 
-            let rec aux last = async {
-                use activity =
-                    Activity.startTableActivity tableName "Query"
-                    |> Activity.addConsistentRead (defaultArg consistentRead false)
-                    |> Activity.addScanIndexForward (defaultArg scanIndexForward true)
-                    |> Activity.addIndexName keyCondition.IndexName
-                    |> Activity.addLimit (limit.GetCount())
-                let request = QueryRequest(tableName, ReturnConsumedCapacity = returnConsumedCapacity)
-                keyCondition.IndexName |> Option.iter (fun name -> request.IndexName <- name)
-                let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
-                request.KeyConditionExpression <- keyCondition.Write writer
+        let rec aux last = task {
+            use activity =
+                Activity.startTableActivity tableName "Query"
+                |> Activity.addConsistentRead (defaultArg consistentRead false)
+                |> Activity.addScanIndexForward (defaultArg scanIndexForward true)
+                |> Activity.addIndexName keyCondition.IndexName
+                |> Activity.addLimit (limit.GetCount())
+            let request = QueryRequest(tableName, ReturnConsumedCapacity = returnConsumedCapacity)
+            keyCondition.IndexName |> Option.iter (fun name -> request.IndexName <- name)
+            let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+            request.KeyConditionExpression <- keyCondition.Write writer
 
-                match filterCondition with
-                | None -> ()
-                | Some fc -> request.FilterExpression <- fc.Write writer
+            match filterCondition with
+            | None -> ()
+            | Some fc -> request.FilterExpression <- fc.Write writer
 
-                match projectionExpr with
-                | None -> ()
-                | Some pe ->
-                    request.ProjectionExpression <- pe.Write writer
-                    Activity.addProjection request.ProjectionExpression activity |> ignore
+            match projectionExpr with
+            | None -> ()
+            | Some pe ->
+                request.ProjectionExpression <- pe.Write writer
+                Activity.addProjection request.ProjectionExpression activity |> ignore
 
-                limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
-                consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
-                scanIndexForward |> Option.iter (fun sif -> request.ScanIndexForward <- sif)
-                last |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
+            limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
+            consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
+            scanIndexForward |> Option.iter (fun sif -> request.ScanIndexForward <- sif)
+            last |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
 
-                let! ct = Async.CancellationToken
-                let! response = client.QueryAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
-                consumedCapacity.Add response.ConsumedCapacity
-                Meter.recordConsumedCapacity "Query" response.ConsumedCapacity
-                Activity.stop activity // Explicitly stop activity as it is still in scope
+            let! response = client.QueryAsync(request, ct) |> Task.addActivityException activity
+            consumedCapacity.Add response.ConsumedCapacity
+            Meter.recordConsumedCapacity "Query" response.ConsumedCapacity
+            Activity.stop activity // Explicitly stop activity as it is still in scope
 
-                downloaded.AddRange response.Items
+            downloaded.AddRange response.Items
 
-                if response.LastEvaluatedKey.Count > 0 then
-                    lastEvaluatedKey <- Some response.LastEvaluatedKey
-                    if limit.IsDownloadIncomplete downloaded.Count then
-                        do! aux lastEvaluatedKey
-                else
-                    lastEvaluatedKey <- None
-            }
+            if response.LastEvaluatedKey.Count > 0 then
+                lastEvaluatedKey <- Some response.LastEvaluatedKey
+                if limit.IsDownloadIncomplete downloaded.Count then
+                    do! aux lastEvaluatedKey
+            else
+                lastEvaluatedKey <- None
+        }
 
+        task {
             do!
                 aux (
                     exclusiveStartKey
@@ -385,8 +379,9 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
         (limit: int option)
         (consistentRead: bool option)
         (scanIndexForward: bool option)
+        (ct: CancellationToken)
         =
-        async {
+        task {
 
             let! downloaded, _ =
                 queryPaginatedAsync
@@ -397,6 +392,7 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
                     None
                     consistentRead
                     scanIndexForward
+                    ct
 
             return downloaded
         }
@@ -407,53 +403,51 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
         (limit: LimitType)
         (exclusiveStartKey: TableKey option)
         (consistentRead: bool option)
+        (ct: CancellationToken)
         =
-        async {
+        let downloaded = ResizeArray<_>()
+        let consumedCapacity = ResizeArray<ConsumedCapacity>()
+        let mutable lastEvaluatedKey: Dictionary<string, AttributeValue> option = None
+        let rec aux last = task {
+            use activity =
+                Activity.startTableActivity tableName "Scan"
+                |> Activity.addConsistentRead (defaultArg consistentRead false)
+                |> Activity.addLimit (limit.GetCount())
 
-            let downloaded = ResizeArray<_>()
-            let consumedCapacity = ResizeArray<ConsumedCapacity>()
-            let mutable lastEvaluatedKey: Dictionary<string, AttributeValue> option = None
-            let rec aux last = async {
-                use activity =
-                    Activity.startTableActivity tableName "Scan"
-                    |> Activity.addConsistentRead (defaultArg consistentRead false)
-                    |> Activity.addLimit (limit.GetCount())
+            let request = ScanRequest(tableName, ReturnConsumedCapacity = returnConsumedCapacity)
+            let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
+            match filterCondition with
+            | None -> ()
+            | Some fc -> request.FilterExpression <- fc.Write writer
 
-                let request = ScanRequest(tableName, ReturnConsumedCapacity = returnConsumedCapacity)
-                let writer = AttributeWriter(request.ExpressionAttributeNames, request.ExpressionAttributeValues)
-                match filterCondition with
-                | None -> ()
-                | Some fc -> request.FilterExpression <- fc.Write writer
+            match projectionExpr with
+            | None -> ()
+            | Some pe ->
+                request.ProjectionExpression <- pe.Write writer
+                Activity.addProjection request.ProjectionExpression activity |> ignore
 
-                match projectionExpr with
-                | None -> ()
-                | Some pe ->
-                    request.ProjectionExpression <- pe.Write writer
-                    Activity.addProjection request.ProjectionExpression activity |> ignore
+            limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
+            consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
+            last |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
 
-                limit.GetCount() |> Option.iter (fun l -> request.Limit <- l - downloaded.Count)
-                consistentRead |> Option.iter (fun cr -> request.ConsistentRead <- cr)
-                last |> Option.iter (fun l -> request.ExclusiveStartKey <- l)
+            let! response = client.ScanAsync(request, ct) |> Task.addActivityException activity
 
-                let! ct = Async.CancellationToken
-                let! response = client.ScanAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+            downloaded.AddRange response.Items
+            consumedCapacity.Add response.ConsumedCapacity
+            Meter.recordConsumedCapacity "Scan" response.ConsumedCapacity
+            activity
+            |> Activity.addCount response.Count
+            |> Activity.addScannedCount response.ScannedCount
+            |> Activity.stop // Explicitly stop activity as it is still in scope
 
-                downloaded.AddRange response.Items
-                consumedCapacity.Add response.ConsumedCapacity
-                Meter.recordConsumedCapacity "Scan" response.ConsumedCapacity
-                activity
-                |> Activity.addCount response.Count
-                |> Activity.addScannedCount response.ScannedCount
-                |> Activity.stop // Explicitly stop activity as it is still in scope
-
-                if response.LastEvaluatedKey.Count > 0 then
-                    lastEvaluatedKey <- Some response.LastEvaluatedKey
-                    if limit.IsDownloadIncomplete downloaded.Count then
-                        do! aux lastEvaluatedKey
-                else
-                    lastEvaluatedKey <- None
-            }
-
+            if response.LastEvaluatedKey.Count > 0 then
+                lastEvaluatedKey <- Some response.LastEvaluatedKey
+                if limit.IsDownloadIncomplete downloaded.Count then
+                    do! aux lastEvaluatedKey
+            else
+                lastEvaluatedKey <- None
+        }
+        task {
             do! aux (exclusiveStartKey |> Option.map template.ToAttributeValues)
 
             return (downloaded, lastEvaluatedKey |> Option.map template.ExtractKey)
@@ -464,10 +458,11 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
         (projectionExpr: ProjectionExpr.ProjectionExpr option)
         (limit: int option)
         (consistentRead: bool option)
+        (ct: CancellationToken)
         =
-        async {
+        task {
 
-            let! downloaded, _ = scanPaginatedAsync filterCondition projectionExpr (LimitType.AllOrCount limit) None consistentRead
+            let! downloaded, _ = scanPaginatedAsync filterCondition projectionExpr (LimitType.AllOrCount limit) None consistentRead ct
 
             return downloaded
         }
@@ -511,7 +506,8 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <summary>Asynchronously puts a record item in the table.</summary>
     /// <param name="item">Item to be written.</param>
     /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
-    member _.PutItemAsync(item: 'TRecord, ?precondition: ConditionExpression<'TRecord>) : Async<TableKey> = async {
+    /// <param name="ct">Task cancellation token.</param>
+    member _.PutItemAsync(item: 'TRecord, ?precondition: ConditionExpression<'TRecord>, ?ct: CancellationToken) : Task<TableKey> = task {
         let attrValues = template.ToAttributeValues(item)
         use activity = Activity.startTableActivity tableName "PutItem"
         let request =
@@ -523,8 +519,9 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
             request.ReturnValuesOnConditionCheckFailure <- ReturnValuesOnConditionCheckFailure.ALL_OLD
         | _ -> ()
 
-        let! ct = Async.CancellationToken
-        let! response = client.PutItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+        let! response =
+            client.PutItemAsync(request, defaultArg ct CancellationToken.None)
+            |> Task.addActivityException activity
         Meter.recordConsumedCapacity "PutItem" response.ConsumedCapacity
 
         return template.ExtractKey item
@@ -533,8 +530,9 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <summary>Asynchronously puts a record item in the table.</summary>
     /// <param name="item">Item to be written.</param>
     /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
-    member t.PutItemAsync(item: 'TRecord, precondition: Expr<'TRecord -> bool>) =
-        t.PutItemAsync(item, template.PrecomputeConditionalExpr precondition)
+    /// <param name="ct">Task cancellation token.</param>
+    member t.PutItemAsync(item: 'TRecord, precondition: Expr<'TRecord -> bool>, ?ct: CancellationToken) =
+        t.PutItemAsync(item, template.PrecomputeConditionalExpr precondition, ?ct = ct)
 
     /// <summary>
     ///     Asynchronously puts a collection of items to the table as a batch write operation.
@@ -542,7 +540,7 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// </summary>
     /// <returns>Any unprocessed items due to throttling.</returns>
     /// <param name="items">Items to be written.</param>
-    member _.BatchPutItemsAsync(items: seq<'TRecord>) : Async<'TRecord[]> = async {
+    member _.BatchPutItemsAsync(items: seq<'TRecord>, ?ct: CancellationToken) : Task<'TRecord[]> = task {
         use activity = Activity.startTableActivity tableName "BatchWriteItem"
         let mkWriteRequest (item: 'TRecord) =
             let attrValues = template.ToAttributeValues(item)
@@ -555,8 +553,9 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
         let writeRequests = items |> Seq.map mkWriteRequest |> rlist
         let pbr = BatchWriteItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
         pbr.RequestItems[tableName] <- writeRequests
-        let! ct = Async.CancellationToken
-        let! response = client.BatchWriteItemAsync(pbr, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+        let! response =
+            client.BatchWriteItemAsync(pbr, defaultArg ct CancellationToken.None)
+            |> Task.addActivityException activity
         let unprocessed =
             match response.UnprocessedItems.TryGetValue tableName with
             | true, reqs ->
@@ -576,14 +575,16 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="updater">Table update expression.</param>
     /// <param name="precondition">Specifies a precondition expression that any existing item should satisfy. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
+    /// <param name="ct">Task cancellation token.</param>
     member _.UpdateItemAsync
         (
             key: TableKey,
             updater: UpdateExpression<'TRecord>,
             ?precondition: ConditionExpression<'TRecord>,
-            ?returnLatest: bool
-        ) : Async<'TRecord> =
-        async {
+            ?returnLatest: bool,
+            ?ct: CancellationToken
+        ) : Task<'TRecord> =
+        task {
             use activity = Activity.startTableActivity tableName "UpdateItem"
             let kav = template.ToAttributeValues(key)
             let request = UpdateItemRequest(Key = kav, TableName = tableName, ReturnConsumedCapacity = returnConsumedCapacity)
@@ -602,8 +603,9 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
                 request.ReturnValuesOnConditionCheckFailure <- ReturnValuesOnConditionCheckFailure.ALL_OLD
             | _ -> ()
 
-            let! ct = Async.CancellationToken
-            let! response = client.UpdateItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+            let! response =
+                client.UpdateItemAsync(request, defaultArg ct CancellationToken.None)
+                |> Task.addActivityException activity
 
             Meter.recordConsumedCapacity "UpdateItem" response.ConsumedCapacity
 
@@ -615,32 +617,36 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="updateExpr">Table update expression.</param>
     /// <param name="precondition">Specifies a precondition expression that any existing item should satisfy. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
+    /// <param name="ct">Task cancellation token.</param>
     member t.UpdateItemAsync
         (
             key: TableKey,
             updateExpr: Expr<'TRecord -> 'TRecord>,
             ?precondition: Expr<'TRecord -> bool>,
-            ?returnLatest: bool
+            ?returnLatest: bool,
+            ?ct: CancellationToken
         ) =
         let updater = template.PrecomputeUpdateExpr updateExpr
         let precondition = precondition |> Option.map template.PrecomputeConditionalExpr
-        t.UpdateItemAsync(key, updater, ?returnLatest = returnLatest, ?precondition = precondition)
+        t.UpdateItemAsync(key, updater, ?returnLatest = returnLatest, ?precondition = precondition, ?ct = ct)
 
     /// <summary>Asynchronously updates item with supplied key using provided update operation expression.</summary>
     /// <param name="key">Key of item to be updated.</param>
     /// <param name="updateExpr">Table update expression.</param>
     /// <param name="precondition">Specifies a precondition expression that any existing item should satisfy. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
     /// <param name="returnLatest">Specifies the operation should return the latest (true) or older (false) version of the item. Defaults to latest.</param>
+    /// <param name="ct">Task cancellation token.</param>
     member t.UpdateItemAsync
         (
             key: TableKey,
             updateExpr: Expr<'TRecord -> UpdateOp>,
             ?precondition: Expr<'TRecord -> bool>,
-            ?returnLatest: bool
+            ?returnLatest: bool,
+            ?ct: CancellationToken
         ) =
         let updater = template.PrecomputeUpdateExpr updateExpr
         let precondition = precondition |> Option.map template.PrecomputeConditionalExpr
-        t.UpdateItemAsync(key, updater, ?returnLatest = returnLatest, ?precondition = precondition)
+        t.UpdateItemAsync(key, updater, ?returnLatest = returnLatest, ?precondition = precondition, ?ct = ct)
 
 
     /// <summary>
@@ -648,8 +654,9 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// </summary>
     /// <param name="key">Key of item to be fetched.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member _.TryGetItemAsync(key: TableKey, ?consistentRead: bool) : Async<'TRecord option> = async {
-        let! response = tryGetItemAsync key consistentRead None
+    /// <param name="ct">Task cancellation token.</param>
+    member _.TryGetItemAsync(key: TableKey, ?consistentRead: bool, ?ct: CancellationToken) : Task<'TRecord option> = task {
+        let! response = tryGetItemAsync key consistentRead None (defaultArg ct CancellationToken.None)
         return response |> Option.map template.OfAttributeValues
     }
 
@@ -658,7 +665,9 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     ///     Asynchronously checks whether item of supplied key exists in table.
     /// </summary>
     /// <param name="key">Key to be checked.</param>
-    member _.ContainsKeyAsync(key: TableKey) : Async<bool> = async {
+    /// <param name="ct">Task cancellation token.</param>
+    /// <returns>True if item with given key exists, false otherwise.</returns>
+    member _.ContainsKeyAsync(key: TableKey, ?ct: CancellationToken) : Task<bool> = task {
         use activity =
             Activity.startTableActivity tableName "GetItem"
             |> Activity.addConsistentRead false
@@ -668,23 +677,11 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
         let request = GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity)
         request.ExpressionAttributeNames.Add("#HKEY", template.PrimaryKey.HashKey.AttributeName)
         request.ProjectionExpression <- "#HKEY"
-        let! ct = Async.CancellationToken
-        let! response = client.GetItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+        let! response =
+            client.GetItemAsync(request, defaultArg ct CancellationToken.None)
+            |> Task.addActivityException activity
         Meter.recordConsumedCapacity "GetItem" response.ConsumedCapacity
         return response.IsItemSet
-    }
-
-
-    /// <summary>
-    ///     Asynchronously fetches item of given key from table.<br/>
-    ///     Throws <c>ResourceNotFoundException</c> if no item found (NOTE while that specific exception is misleading, fixing it is a breaking change).<br/>
-    ///     See <c>TryGetItemAsync</c> if you need to implement fallback logic in the case where it is not found
-    /// </summary>
-    /// <param name="key">Key of item to be fetched.</param>
-    /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member _.GetItemAsync(key: TableKey, ?consistentRead: bool) : Async<'TRecord> = async {
-        let! item = getItemAsync key consistentRead None
-        return template.OfAttributeValues item
     }
 
 
@@ -696,15 +693,17 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="key">Key of item to be fetched.</param>
     /// <param name="projection">Projection expression to be applied to item.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member _.GetItemProjectedAsync
+    /// <param name="ct">Task cancellation token.</param>
+    member _.TryGetItemProjectedAsync
         (
             key: TableKey,
             projection: ProjectionExpression<'TRecord, 'TProjection>,
-            ?consistentRead: bool
-        ) : Async<'TProjection> =
-        async {
-            let! item = getItemAsync key consistentRead (Some projection.ProjectionExpr)
-            return projection.UnPickle item
+            ?consistentRead: bool,
+            ?ct: CancellationToken
+        ) : Task<'TProjection option> =
+        task {
+            let! item = tryGetItemAsync key consistentRead (Some projection.ProjectionExpr) (defaultArg ct CancellationToken.None)
+            return item |> Option.map projection.UnPickle
         }
 
     /// <summary>
@@ -715,16 +714,24 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="key">Key of item to be fetched.</param>
     /// <param name="projection">Projection expression to be applied to item.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member t.GetItemProjectedAsync(key: TableKey, projection: Expr<'TRecord -> 'TProjection>, ?consistentRead: bool) : Async<'TProjection> =
-        t.GetItemProjectedAsync(key, (template.PrecomputeProjectionExpr projection), ?consistentRead = consistentRead)
+    /// <param name="ct">Task cancellation token.</param>
+    member t.TryGetItemProjectedAsync
+        (
+            key: TableKey,
+            projection: Expr<'TRecord -> 'TProjection>,
+            ?consistentRead: bool,
+            ?ct: CancellationToken
+        ) : Task<'TProjection option> =
+        t.TryGetItemProjectedAsync(key, (template.PrecomputeProjectionExpr projection), ?consistentRead = consistentRead, ?ct = ct)
 
     /// <summary>
     ///     Asynchronously performs a batch fetch of items with supplied keys.
     /// </summary>
     /// <param name="keys">Keys of items to be fetched.</param>
     /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
-    member _.BatchGetItemsAsync(keys: seq<TableKey>, ?consistentRead: bool) : Async<'TRecord[]> = async {
-        let! response = batchGetItemsAsync keys consistentRead None
+    /// <param name="ct">Task cancellation token.</param>
+    member _.BatchGetItemsAsync(keys: seq<TableKey>, ?consistentRead: bool, ?ct: CancellationToken) : Task<'TRecord[]> = task {
+        let! response = batchGetItemsAsync keys consistentRead None (defaultArg ct CancellationToken.None)
         return response |> Seq.map template.OfAttributeValues |> Seq.toArray
     }
 
@@ -735,15 +742,16 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="keys">Keys of items to be fetched.</param>
     /// <param name="projection">Projection expression to be applied to item.</param>
     /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
+    /// <param name="ct">Task cancellation token.</param>
     member _.BatchGetItemsProjectedAsync<'TProjection>
         (
             keys: seq<TableKey>,
             projection: ProjectionExpression<'TRecord, 'TProjection>,
-            ?consistentRead: bool
-        ) : Async<'TProjection[]> =
-        async {
-
-            let! response = batchGetItemsAsync keys consistentRead (Some projection.ProjectionExpr)
+            ?consistentRead: bool,
+            ?ct: CancellationToken
+        ) : Task<'TProjection[]> =
+        task {
+            let! response = batchGetItemsAsync keys consistentRead (Some projection.ProjectionExpr) (defaultArg ct CancellationToken.None)
             return response |> Seq.map projection.UnPickle |> Seq.toArray
         }
 
@@ -753,20 +761,23 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="keys">Keys of items to be fetched.</param>
     /// <param name="projection">Projection expression to be applied to item.</param>
     /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
+    /// <param name="ct">Task cancellation token.</param>
     member t.BatchGetItemsProjectedAsync<'TProjection>
         (
             keys: seq<TableKey>,
             projection: Expr<'TRecord -> 'TProjection>,
-            ?consistentRead: bool
-        ) : Async<'TProjection[]> =
-        t.BatchGetItemsProjectedAsync(keys, template.PrecomputeProjectionExpr projection, ?consistentRead = consistentRead)
+            ?consistentRead: bool,
+            ?ct: CancellationToken
+        ) : Task<'TProjection[]> =
+        t.BatchGetItemsProjectedAsync(keys, template.PrecomputeProjectionExpr projection, ?consistentRead = consistentRead, ?ct = ct)
 
 
     /// <summary>Asynchronously deletes item of given key from table.</summary>
     /// <returns>The deleted item, or None if the item didn’t exist.</returns>
     /// <param name="key">Key of item to be deleted.</param>
     /// <param name="precondition">Specifies a precondition expression that existing item should satisfy. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
-    member _.DeleteItemAsync(key: TableKey, ?precondition: ConditionExpression<'TRecord>) : Async<'TRecord option> = async {
+    /// <param name="ct">Task cancellation token.</param>
+    member _.DeleteItemAsync(key: TableKey, ?precondition: ConditionExpression<'TRecord>, ?ct: CancellationToken) : Task<'TRecord option> = task {
         use activity = Activity.startTableActivity tableName "DeleteItem"
         let kav = template.ToAttributeValues key
         let request = DeleteItemRequest(tableName, kav, ReturnValues = ReturnValue.ALL_OLD, ReturnConsumedCapacity = returnConsumedCapacity)
@@ -777,8 +788,9 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
             request.ReturnValuesOnConditionCheckFailure <- ReturnValuesOnConditionCheckFailure.ALL_OLD
         | None -> ()
 
-        let! ct = Async.CancellationToken
-        let! response = client.DeleteItemAsync(request, ct) |> Task.addActivityException activity |> Async.AwaitTaskCorrect
+        let! response =
+            client.DeleteItemAsync(request, defaultArg ct CancellationToken.None)
+            |> Task.addActivityException activity
 
         Meter.recordConsumedCapacity "DeleteItem" response.ConsumedCapacity
 
@@ -792,8 +804,9 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <returns>The deleted item, or None if the item didn’t exist.</returns>
     /// <param name="key">Key of item to be deleted.</param>
     /// <param name="precondition">Specifies a precondition expression that existing item should satisfy. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
-    member t.DeleteItemAsync(key: TableKey, precondition: Expr<'TRecord -> bool>) : Async<'TRecord option> =
-        t.DeleteItemAsync(key, template.PrecomputeConditionalExpr precondition)
+    /// <param name="ct">Task cancellation token.</param>
+    member t.DeleteItemAsync(key: TableKey, precondition: Expr<'TRecord -> bool>, ?ct: CancellationToken) : Task<'TRecord option> =
+        t.DeleteItemAsync(key, template.PrecomputeConditionalExpr precondition, ?ct = ct)
 
 
     /// <summary>
@@ -801,7 +814,8 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// </summary>
     /// <returns>Any unprocessed keys due to throttling.</returns>
     /// <param name="keys">Keys of items to be deleted.</param>
-    member _.BatchDeleteItemsAsync(keys: seq<TableKey>) = async {
+    /// <param name="ct">Task cancellation token.</param>
+    member _.BatchDeleteItemsAsync(keys: seq<TableKey>, ?ct: CancellationToken) = task {
         use activity = Activity.startTableActivity tableName "BatchWriteItem"
         let mkDeleteRequest (key: TableKey) =
             let kav = template.ToAttributeValues(key)
@@ -815,11 +829,9 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
         let deleteRequests = keys |> Seq.map mkDeleteRequest |> rlist
         request.RequestItems[tableName] <- deleteRequests
 
-        let! ct = Async.CancellationToken
         let! response =
-            client.BatchWriteItemAsync(request, ct)
+            client.BatchWriteItemAsync(request, defaultArg ct CancellationToken.None)
             |> Task.addActivityException activity
-            |> Async.AwaitTaskCorrect
 
         let unprocessed =
             match response.UnprocessedItems.TryGetValue tableName with
@@ -842,18 +854,28 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="limit">Maximum number of items to evaluate.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    /// <param name="ct">Task cancellation token.</param>
     member _.QueryAsync
         (
             keyCondition: ConditionExpression<'TRecord>,
             ?filterCondition: ConditionExpression<'TRecord>,
             ?limit: int,
             ?consistentRead: bool,
-            ?scanIndexForward: bool
-        ) : Async<'TRecord[]> =
-        async {
+            ?scanIndexForward: bool,
+            ?ct: CancellationToken
+        ) : Task<'TRecord[]> =
+        task {
 
             let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
-            let! downloaded = queryAsync keyCondition.Conditional filterCondition None limit consistentRead scanIndexForward
+            let! downloaded =
+                queryAsync
+                    keyCondition.Conditional
+                    filterCondition
+                    None
+                    limit
+                    consistentRead
+                    scanIndexForward
+                    (defaultArg ct CancellationToken.None)
             return downloaded |> Seq.map template.OfAttributeValues |> Seq.toArray
         }
 
@@ -865,18 +887,27 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="limit">Maximum number of items to evaluate.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    /// <param name="ct">Task cancellation token.</param>
     member t.QueryAsync
         (
             keyCondition: Expr<'TRecord -> bool>,
             ?filterCondition: Expr<'TRecord -> bool>,
             ?limit: int,
             ?consistentRead: bool,
-            ?scanIndexForward: bool
-        ) : Async<'TRecord[]> =
+            ?scanIndexForward: bool,
+            ?ct: CancellationToken
+        ) : Task<'TRecord[]> =
 
         let kc = template.PrecomputeConditionalExpr keyCondition
         let fc = filterCondition |> Option.map template.PrecomputeConditionalExpr
-        t.QueryAsync(kc, ?filterCondition = fc, ?limit = limit, ?consistentRead = consistentRead, ?scanIndexForward = scanIndexForward)
+        t.QueryAsync(
+            kc,
+            ?filterCondition = fc,
+            ?limit = limit,
+            ?consistentRead = consistentRead,
+            ?scanIndexForward = scanIndexForward,
+            ?ct = ct
+        )
 
 
     /// <summary>
@@ -890,6 +921,7 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="limit">Maximum number of items to evaluate.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    /// <param name="ct">Task cancellation token.</param>
     member _.QueryProjectedAsync<'TProjection>
         (
             keyCondition: ConditionExpression<'TRecord>,
@@ -897,12 +929,21 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
             ?filterCondition: ConditionExpression<'TRecord>,
             ?limit: int,
             ?consistentRead: bool,
-            ?scanIndexForward: bool
-        ) : Async<'TProjection[]> =
-        async {
+            ?scanIndexForward: bool,
+            ?ct: CancellationToken
+        ) : Task<'TProjection[]> =
+        task {
 
             let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
-            let! downloaded = queryAsync keyCondition.Conditional filterCondition None limit consistentRead scanIndexForward
+            let! downloaded =
+                queryAsync
+                    keyCondition.Conditional
+                    filterCondition
+                    None
+                    limit
+                    consistentRead
+                    scanIndexForward
+                    (defaultArg ct CancellationToken.None)
             return downloaded |> Seq.map projection.UnPickle |> Seq.toArray
         }
 
@@ -917,6 +958,7 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="limit">Maximum number of items to evaluate.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    /// <param name="ct">Task cancellation token.</param>
     member t.QueryProjectedAsync<'TProjection>
         (
             keyCondition: Expr<'TRecord -> bool>,
@@ -924,8 +966,9 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
             ?filterCondition: Expr<'TRecord -> bool>,
             ?limit: int,
             ?consistentRead: bool,
-            ?scanIndexForward: bool
-        ) : Async<'TProjection[]> =
+            ?scanIndexForward: bool,
+            ?ct: CancellationToken
+        ) : Task<'TProjection[]> =
 
         let filterCondition = filterCondition |> Option.map template.PrecomputeConditionalExpr
         t.QueryProjectedAsync(
@@ -934,7 +977,8 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
             ?filterCondition = filterCondition,
             ?limit = limit,
             ?consistentRead = consistentRead,
-            ?scanIndexForward = scanIndexForward
+            ?scanIndexForward = scanIndexForward,
+            ?ct = ct
         )
 
 
@@ -947,6 +991,7 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    /// <param name="ct">Task cancellation token.</param>
     member _.QueryPaginatedAsync
         (
             keyCondition: ConditionExpression<'TRecord>,
@@ -954,9 +999,10 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
             ?limit: int,
             ?exclusiveStartKey: IndexKey,
             ?consistentRead: bool,
-            ?scanIndexForward: bool
-        ) : Async<PaginatedResult<'TRecord, IndexKey>> =
-        async {
+            ?scanIndexForward: bool,
+            ?ct: CancellationToken
+        ) : Task<PaginatedResult<'TRecord, IndexKey>> =
+        task {
 
             let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
             let! downloaded, lastEvaluatedKey =
@@ -968,6 +1014,7 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
                     exclusiveStartKey
                     consistentRead
                     scanIndexForward
+                    (defaultArg ct CancellationToken.None)
             return
                 { Records = downloaded |> Seq.map template.OfAttributeValues |> Seq.toArray
                   LastEvaluatedKey = lastEvaluatedKey }
@@ -982,6 +1029,7 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    /// <param name="ct">Task cancellation token.</param>
     member t.QueryPaginatedAsync
         (
             keyCondition: Expr<'TRecord -> bool>,
@@ -989,8 +1037,9 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
             ?limit: int,
             ?exclusiveStartKey: IndexKey,
             ?consistentRead: bool,
-            ?scanIndexForward: bool
-        ) : Async<PaginatedResult<'TRecord, IndexKey>> =
+            ?scanIndexForward: bool,
+            ?ct: CancellationToken
+        ) : Task<PaginatedResult<'TRecord, IndexKey>> =
         let kc = template.PrecomputeConditionalExpr keyCondition
         let fc = filterCondition |> Option.map template.PrecomputeConditionalExpr
         t.QueryPaginatedAsync(
@@ -999,7 +1048,8 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
             ?limit = limit,
             ?exclusiveStartKey = exclusiveStartKey,
             ?consistentRead = consistentRead,
-            ?scanIndexForward = scanIndexForward
+            ?scanIndexForward = scanIndexForward,
+            ?ct = ct
         )
 
 
@@ -1015,6 +1065,7 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    /// <param name="ct">Task cancellation token.</param>
     member _.QueryProjectedPaginatedAsync<'TProjection>
         (
             keyCondition: ConditionExpression<'TRecord>,
@@ -1023,9 +1074,10 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
             ?limit: int,
             ?exclusiveStartKey: IndexKey,
             ?consistentRead: bool,
-            ?scanIndexForward: bool
-        ) : Async<PaginatedResult<'TProjection, IndexKey>> =
-        async {
+            ?scanIndexForward: bool,
+            ?ct: CancellationToken
+        ) : Task<PaginatedResult<'TProjection, IndexKey>> =
+        task {
 
             let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
             let! downloaded, lastEvaluatedKey =
@@ -1037,6 +1089,7 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
                     exclusiveStartKey
                     consistentRead
                     scanIndexForward
+                    (defaultArg ct CancellationToken.None)
             return
                 { Records = downloaded |> Seq.map projection.UnPickle |> Seq.toArray
                   LastEvaluatedKey = lastEvaluatedKey }
@@ -1054,6 +1107,7 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     /// <param name="scanIndexForward">Specifies the order in which to evaluate results. Either ascending (true) or descending (false).</param>
+    /// <param name="ct">Task cancellation token.</param>
     member t.QueryProjectedPaginatedAsync<'TProjection>
         (
             keyCondition: Expr<'TRecord -> bool>,
@@ -1062,8 +1116,9 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
             ?limit: int,
             ?exclusiveStartKey: IndexKey,
             ?consistentRead: bool,
-            ?scanIndexForward: bool
-        ) : Async<PaginatedResult<'TProjection, IndexKey>> =
+            ?scanIndexForward: bool,
+            ?ct: CancellationToken
+        ) : Task<PaginatedResult<'TProjection, IndexKey>> =
         let filterCondition = filterCondition |> Option.map template.PrecomputeConditionalExpr
         t.QueryProjectedPaginatedAsync(
             template.PrecomputeConditionalExpr keyCondition,
@@ -1072,7 +1127,8 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
             ?limit = limit,
             ?exclusiveStartKey = exclusiveStartKey,
             ?consistentRead = consistentRead,
-            ?scanIndexForward = scanIndexForward
+            ?scanIndexForward = scanIndexForward,
+            ?ct = ct
         )
 
 
@@ -1082,11 +1138,19 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="filterCondition">Filter condition expression.</param>
     /// <param name="limit">Maximum number of items to evaluate.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member _.ScanAsync(?filterCondition: ConditionExpression<'TRecord>, ?limit: int, ?consistentRead: bool) : Async<'TRecord[]> = async {
-        let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
-        let! downloaded = scanAsync filterCondition None limit consistentRead
-        return downloaded |> Seq.map template.OfAttributeValues |> Seq.toArray
-    }
+    /// <param name="ct">Task cancellation token.</param>
+    member _.ScanAsync
+        (
+            ?filterCondition: ConditionExpression<'TRecord>,
+            ?limit: int,
+            ?consistentRead: bool,
+            ?ct: CancellationToken
+        ) : Task<'TRecord[]> =
+        task {
+            let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+            let! downloaded = scanAsync filterCondition None limit consistentRead (defaultArg ct CancellationToken.None)
+            return downloaded |> Seq.map template.OfAttributeValues |> Seq.toArray
+        }
 
     /// <summary>
     ///     Asynchronously scans table with given condition expressions.
@@ -1094,9 +1158,16 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="filterCondition">Filter condition expression.</param>
     /// <param name="limit">Maximum number of items to evaluate.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
-    member t.ScanAsync(filterCondition: Expr<'TRecord -> bool>, ?limit: int, ?consistentRead: bool) : Async<'TRecord[]> =
+    /// <param name="ct">Task cancellation token.</param>
+    member t.ScanAsync
+        (
+            filterCondition: Expr<'TRecord -> bool>,
+            ?limit: int,
+            ?consistentRead: bool,
+            ?ct: CancellationToken
+        ) : Task<'TRecord[]> =
         let cond = template.PrecomputeConditionalExpr filterCondition
-        t.ScanAsync(cond, ?limit = limit, ?consistentRead = consistentRead)
+        t.ScanAsync(cond, ?limit = limit, ?consistentRead = consistentRead, ?ct = ct)
 
 
     /// <summary>
@@ -1108,16 +1179,19 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="filterCondition">Filter condition expression.</param>
     /// <param name="limit">Maximum number of items to evaluate.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="ct">Task cancellation token.</param>
     member _.ScanProjectedAsync<'TProjection>
         (
             projection: ProjectionExpression<'TRecord, 'TProjection>,
             ?filterCondition: ConditionExpression<'TRecord>,
             ?limit: int,
-            ?consistentRead: bool
-        ) : Async<'TProjection[]> =
-        async {
+            ?consistentRead: bool,
+            ?ct: CancellationToken
+        ) : Task<'TProjection[]> =
+        task {
             let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
-            let! downloaded = scanAsync filterCondition (Some projection.ProjectionExpr) limit consistentRead
+            let! downloaded =
+                scanAsync filterCondition (Some projection.ProjectionExpr) limit consistentRead (defaultArg ct CancellationToken.None)
             return downloaded |> Seq.map projection.UnPickle |> Seq.toArray
         }
 
@@ -1130,19 +1204,22 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="filterCondition">Filter condition expression.</param>
     /// <param name="limit">Maximum number of items to evaluate.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="ct">Task cancellation token.</param>
     member t.ScanProjectedAsync<'TProjection>
         (
             projection: Expr<'TRecord -> 'TProjection>,
             ?filterCondition: Expr<'TRecord -> bool>,
             ?limit: int,
-            ?consistentRead: bool
-        ) : Async<'TProjection[]> =
+            ?consistentRead: bool,
+            ?ct: CancellationToken
+        ) : Task<'TProjection[]> =
         let filterCondition = filterCondition |> Option.map template.PrecomputeConditionalExpr
         t.ScanProjectedAsync(
             template.PrecomputeProjectionExpr projection,
             ?filterCondition = filterCondition,
             ?limit = limit,
-            ?consistentRead = consistentRead
+            ?consistentRead = consistentRead,
+            ?ct = ct
         )
 
 
@@ -1153,17 +1230,25 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
     /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="ct">Task cancellation token.</param>
     member _.ScanPaginatedAsync
         (
             ?filterCondition: ConditionExpression<'TRecord>,
             ?limit: int,
             ?exclusiveStartKey: TableKey,
-            ?consistentRead: bool
-        ) : Async<PaginatedResult<'TRecord, TableKey>> =
-        async {
+            ?consistentRead: bool,
+            ?ct: CancellationToken
+        ) : Task<PaginatedResult<'TRecord, TableKey>> =
+        task {
             let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
             let! downloaded, lastEvaluatedKey =
-                scanPaginatedAsync filterCondition None (LimitType.DefaultOrCount limit) exclusiveStartKey consistentRead
+                scanPaginatedAsync
+                    filterCondition
+                    None
+                    (LimitType.DefaultOrCount limit)
+                    exclusiveStartKey
+                    consistentRead
+                    (defaultArg ct CancellationToken.None)
             return
                 { Records = downloaded |> Seq.map template.OfAttributeValues |> Seq.toArray
                   LastEvaluatedKey = lastEvaluatedKey }
@@ -1176,15 +1261,17 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
     /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="ct">Task cancellation token.</param>
     member t.ScanPaginatedAsync
         (
             filterCondition: Expr<'TRecord -> bool>,
             ?limit: int,
             ?exclusiveStartKey: TableKey,
-            ?consistentRead: bool
-        ) : Async<PaginatedResult<'TRecord, TableKey>> =
+            ?consistentRead: bool,
+            ?ct: CancellationToken
+        ) : Task<PaginatedResult<'TRecord, TableKey>> =
         let cond = template.PrecomputeConditionalExpr filterCondition
-        t.ScanPaginatedAsync(cond, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
+        t.ScanPaginatedAsync(cond, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead, ?ct = ct)
 
 
     /// <summary>
@@ -1197,15 +1284,17 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
     /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="ct">Task cancellation token.</param>
     member _.ScanProjectedPaginatedAsync<'TProjection>
         (
             projection: ProjectionExpression<'TRecord, 'TProjection>,
             ?filterCondition: ConditionExpression<'TRecord>,
             ?limit: int,
             ?exclusiveStartKey: TableKey,
-            ?consistentRead: bool
-        ) : Async<PaginatedResult<'TProjection, TableKey>> =
-        async {
+            ?consistentRead: bool,
+            ?ct: CancellationToken
+        ) : Task<PaginatedResult<'TProjection, TableKey>> =
+        task {
             let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
             let! downloaded, lastEvaluatedKey =
                 scanPaginatedAsync
@@ -1214,6 +1303,7 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
                     (LimitType.DefaultOrCount limit)
                     exclusiveStartKey
                     consistentRead
+                    (defaultArg ct CancellationToken.None)
             return
                 { Records = downloaded |> Seq.map projection.UnPickle |> Seq.toArray
                   LastEvaluatedKey = lastEvaluatedKey }
@@ -1229,21 +1319,24 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="limit">Maximum number of items per page - DynamoDB default is used if not specified.</param>
     /// <param name="exclusiveStartKey">LastEvaluatedKey from the previous page.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
+    /// <param name="ct">Task cancellation token.</param>
     member t.ScanProjectedPaginatedAsync<'TProjection>
         (
             projection: Expr<'TRecord -> 'TProjection>,
             ?filterCondition: Expr<'TRecord -> bool>,
             ?limit: int,
             ?exclusiveStartKey: TableKey,
-            ?consistentRead: bool
-        ) : Async<PaginatedResult<'TProjection, TableKey>> =
+            ?consistentRead: bool,
+            ?ct: CancellationToken
+        ) : Task<PaginatedResult<'TProjection, TableKey>> =
         let filterCondition = filterCondition |> Option.map template.PrecomputeConditionalExpr
         t.ScanProjectedPaginatedAsync(
             template.PrecomputeProjectionExpr projection,
             ?filterCondition = filterCondition,
             ?limit = limit,
             ?exclusiveStartKey = exclusiveStartKey,
-            ?consistentRead = consistentRead
+            ?consistentRead = consistentRead,
+            ?ct = ct
         )
 
 
@@ -1256,14 +1349,22 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="throughput">Throughput configuration to use for the table.</param>
     /// <param name="streaming">Optional streaming configuration to apply for the table. Default: Disabled..</param>
     /// <param name="customize">Callback to post-process the <c>CreateTableRequest</c>.</param>
-    member _.VerifyOrCreateTableAsync(throughput: Throughput, ?streaming, ?customize) : Async<TableDescription> =
-        Provisioning.verifyOrCreate (client, tableName, template) (Some throughput) streaming customize
+    /// <param name="ct">Task cancellation token.</param>
+    member _.VerifyOrCreateTableAsync(throughput: Throughput, ?streaming, ?customize, ?ct: CancellationToken) : Task<TableDescription> =
+        Provisioning.verifyOrCreate
+            (client, tableName, template)
+            (Some throughput)
+            streaming
+            customize
+            (defaultArg ct CancellationToken.None)
 
     /// <summary>
     /// Asynchronously verify that the table exists and is compatible with record key schema, or throw.<br/>
     /// See also <c>VerifyOrCreateTableAsync</c>, which performs the same check, but can create or re-provision the Table if required.
     /// </summary>
-    member _.VerifyTableAsync() : Async<unit> = Provisioning.validateOnly (client, tableName, template)
+    /// <param name="ct">Task cancellation token.</param>
+    member _.VerifyTableAsync(?ct: CancellationToken) : Task<unit> =
+        Provisioning.validateOnly (client, tableName, template) (defaultArg ct CancellationToken.None)
 
     /// <summary>
     /// Adjusts the Table's configuration via <c>UpdateTable</c> if the <c>throughput</c> or <c>streaming</c> are not as specified.<br/>
@@ -1274,22 +1375,31 @@ type TableContext<'TRecord> internal (client: IAmazonDynamoDB, tableName: string
     /// <param name="streaming">Optional streaming configuration to apply for the table. Default (if creating): Disabled. Default: (if existing) do not change.</param>
     /// <param name="custom">Callback to post-process the <c>UpdateTableRequest</c>. <c>UpdateTable</c> is inhibited if it returns <c>false</c> and no other configuration requires a change.</param>
     /// <param name="currentTableDescription">Current table configuration, if known. Retrieved via <c>DescribeTable</c> if not supplied.</param>
-    member _.UpdateTableIfRequiredAsync(?throughput: Throughput, ?streaming, ?custom, ?currentTableDescription) : Async<TableDescription> = async {
-        let! tableDescription = async {
-            match currentTableDescription with
-            | Some d -> return d
-            | None ->
-                match! Provisioning.tryDescribe (client, tableName) with
+    /// <param name="ct">Task cancellation token.</param>
+    member _.UpdateTableIfRequiredAsync
+        (
+            ?throughput: Throughput,
+            ?streaming,
+            ?custom,
+            ?currentTableDescription,
+            ?ct: CancellationToken
+        ) : Task<TableDescription> =
+        task {
+            let! tableDescription = task {
+                match currentTableDescription with
                 | Some d -> return d
                 | None ->
-                    return
-                        invalidOp
-                            "Table is not currently Active. Please use VerifyTableAsync or VerifyOrCreateTableAsync to guard against this state."
+                    match! Provisioning.tryDescribe (client, tableName, defaultArg ct CancellationToken.None) with
+                    | Some d -> return d
+                    | None ->
+                        return
+                            invalidOp
+                                "Table is not currently Active. Please use VerifyTableAsync or VerifyOrCreateTableAsync to guard against this state."
+            }
+            match UpdateTableRequest.createIfRequired tableName tableDescription throughput streaming custom with
+            | None -> return tableDescription
+            | Some request -> return! UpdateTableRequest.execute client request (defaultArg ct CancellationToken.None)
         }
-        match UpdateTableRequest.createIfRequired tableName tableDescription throughput streaming custom with
-        | None -> return tableDescription
-        | Some request -> return! UpdateTableRequest.execute client request
-    }
 
     /// <summary>Creates a new `Transaction`, using the DynamoDB client and metricsCollector configured for this `TableContext`</summary>
     member _.CreateTransaction() = Transaction(client)
@@ -1382,18 +1492,17 @@ and Transaction(client: IAmazonDynamoDB) =
     ///     See the DynamoDB <a href="https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_TransactWriteItems.html"><c>TransactWriteItems</c> API documentation</a> for full details of semantics and charges.<br/>
     /// </summary>
     /// <param name="clientRequestToken">The <c>ClientRequestToken</c> to supply as an idempotency key (10 minute window).</param>
-    member _.TransactWriteItems(?clientRequestToken) : Async<unit> = async {
+    /// <param name="cancellationToken">Task cancellation token.</param>
+    member _.TransactWriteItems(?clientRequestToken, ?cancellationToken) : Task<unit> = task {
         if transactionItems.Count = 0 || transactionItems.Count > 100 then
             raise
             <| System.ArgumentOutOfRangeException(nameof transactionItems, "must be between 1 and 100 items.")
         use activity = Activity.startMultipleTableActivity (transactionItems |> Seq.map tableNameForItem) "TransactWriteItems"
         let req = TransactWriteItemsRequest(ReturnConsumedCapacity = returnConsumedCapacity, TransactItems = transactionItems)
         clientRequestToken |> Option.iter (fun x -> req.ClientRequestToken <- x)
-        let! ct = Async.CancellationToken
         let! response =
-            client.TransactWriteItemsAsync(req, ct)
+            client.TransactWriteItemsAsync(req, cancellationToken = defaultArg cancellationToken CancellationToken.None)
             |> Task.addActivityException activity
-            |> Async.AwaitTaskCorrect
 
         response.ConsumedCapacity |> Seq.iter (fun c -> Meter.recordConsumedCapacity "TransactWriteItems" c)
     }
@@ -1409,18 +1518,19 @@ type TableContext internal () =
             tableName: string,
             ?verifyTable: bool,
             ?createIfNotExists: bool,
-            ?provisionedThroughput: ProvisionedThroughput
+            ?provisionedThroughput: ProvisionedThroughput,
+            ?ct: CancellationToken
         ) =
-        async {
+        task {
             let context = TableContext<'TRecord>(client, tableName)
             if createIfNotExists = Some true then
                 let throughput =
                     match provisionedThroughput with
                     | Some p -> p
                     | None -> ProvisionedThroughput(10L, 10L)
-                do! context.VerifyOrCreateTableAsync(Throughput.Provisioned throughput) |> Async.Ignore
+                do! context.VerifyOrCreateTableAsync(Throughput.Provisioned throughput, ?ct = ct) |> Task.Ignore
             elif verifyTable <> Some false then
-                do! context.VerifyTableAsync()
+                do! context.VerifyTableAsync(?ct = ct)
             return context
         }
 
@@ -1444,7 +1554,7 @@ module Scripting =
         /// <param name="tableName">Table name to target.</param>
         static member Initialize<'TRecord>(client: IAmazonDynamoDB, tableName: string) : TableContext<'TRecord> =
             let context = TableContext<'TRecord>(client, tableName)
-            context.VerifyTableAsync() |> Async.RunSynchronously
+            context.VerifyTableAsync() |> Task.RunSynchronously
             context
 
         /// Creates a DynamoDB client instance for the specified F# record type, client and table name.<br/>
@@ -1455,7 +1565,7 @@ module Scripting =
         /// <param name="throughput">Throughput to configure if the Table does not yet exist.</param>
         static member Initialize<'TRecord>(client: IAmazonDynamoDB, tableName: string, throughput) : TableContext<'TRecord> =
             let context = TableContext<'TRecord>(client, tableName)
-            let _desc = context.VerifyOrCreateTableAsync(throughput) |> Async.RunSynchronously
+            let _desc = context.VerifyOrCreateTableAsync(throughput) |> Task.RunSynchronously
             context
 
     type TableContext<'TRecord> with
@@ -1466,15 +1576,14 @@ module Scripting =
         /// <param name="item">Item to be written.</param>
         /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         member t.PutItem(item: 'TRecord, ?precondition: ConditionExpression<'TRecord>) =
-            t.PutItemAsync(item, ?precondition = precondition) |> Async.RunSynchronously
+            t.PutItemAsync(item, ?precondition = precondition) |> Task.RunSynchronously
 
         /// <summary>
         ///     Puts a record item in the table.
         /// </summary>
         /// <param name="item">Item to be written.</param>
         /// <param name="precondition">Precondition to satisfy where item already exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
-        member t.PutItem(item: 'TRecord, precondition: Expr<'TRecord -> bool>) =
-            t.PutItemAsync(item, precondition) |> Async.RunSynchronously
+        member t.PutItem(item: 'TRecord, precondition: Expr<'TRecord -> bool>) = t.PutItemAsync(item, precondition) |> Task.RunSynchronously
 
 
         /// <summary>
@@ -1483,7 +1592,7 @@ module Scripting =
         /// </summary>
         /// <returns>Any unprocessed items due to throttling.</returns>
         /// <param name="items">Items to be written.</param>
-        member t.BatchPutItems(items: seq<'TRecord>) = t.BatchPutItemsAsync(items) |> Async.RunSynchronously
+        member t.BatchPutItems(items: seq<'TRecord>) = t.BatchPutItemsAsync(items) |> Task.RunSynchronously
 
 
         /// <summary>
@@ -1501,7 +1610,7 @@ module Scripting =
                 ?returnLatest: bool
             ) =
             t.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
         /// <summary>
         ///     Updates item with supplied key using provided record update expression.
@@ -1518,7 +1627,7 @@ module Scripting =
                 ?returnLatest: bool
             ) =
             t.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
         /// <summary>
         ///     Updates item with supplied key using provided record update operation.
@@ -1535,31 +1644,21 @@ module Scripting =
                 ?returnLatest: bool
             ) =
             t.UpdateItemAsync(key, updater, ?precondition = precondition, ?returnLatest = returnLatest)
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
 
         /// <summary>
         ///     Checks whether item of supplied key exists in table.
         /// </summary>
         /// <param name="key">Key to be checked.</param>
-        member t.ContainsKey(key: TableKey) = t.ContainsKeyAsync(key) |> Async.RunSynchronously
+        member t.ContainsKey(key: TableKey) = t.ContainsKeyAsync(key) |> Task.RunSynchronously
 
         /// <summary>
         ///     Fetches item of given key from table.
         /// </summary>
         /// <param name="key">Key of item to be fetched.</param>
-        member r.GetItem(key: TableKey) = r.GetItemAsync(key) |> Async.RunSynchronously
+        member r.TryGetItem(key: TableKey) = r.TryGetItemAsync(key) |> Task.RunSynchronously
 
-
-        /// <summary>
-        ///     Fetches item of given key from table.
-        ///     Uses supplied projection expression to narrow downloaded attributes.
-        ///     Projection type must be a tuple of zero or more non-conflicting properties.
-        /// </summary>
-        /// <param name="key">Key of item to be fetched.</param>
-        /// <param name="projection">Projection expression to be applied to item.</param>
-        member t.GetItemProjected(key: TableKey, projection: ProjectionExpression<'TRecord, 'TProjection>) : 'TProjection =
-            t.GetItemProjectedAsync(key, projection) |> Async.RunSynchronously
 
         /// <summary>
         ///     Fetches item of given key from table.
@@ -1568,9 +1667,19 @@ module Scripting =
         /// </summary>
         /// <param name="key">Key of item to be fetched.</param>
         /// <param name="projection">Projection expression to be applied to item.</param>
-        member t.GetItemProjected(key: TableKey, projection: Expr<'TRecord -> 'TProjection>) : 'TProjection =
+        member t.TryGetItemProjected(key: TableKey, projection: ProjectionExpression<'TRecord, 'TProjection>) : 'TProjection option =
+            t.TryGetItemProjectedAsync(key, projection) |> Task.RunSynchronously
+
+        /// <summary>
+        ///     Fetches item of given key from table.
+        ///     Uses supplied projection expression to narrow downloaded attributes.
+        ///     Projection type must be a tuple of zero or more non-conflicting properties.
+        /// </summary>
+        /// <param name="key">Key of item to be fetched.</param>
+        /// <param name="projection">Projection expression to be applied to item.</param>
+        member t.TryGetItemProjected(key: TableKey, projection: Expr<'TRecord -> 'TProjection>) : 'TProjection option =
             // TOCONSIDER implement in terms of Async equivalent as per the rest
-            t.GetItemProjected(key, t.Template.PrecomputeProjectionExpr projection)
+            t.TryGetItemProjected(key, t.Template.PrecomputeProjectionExpr projection)
 
 
         /// <summary>
@@ -1579,7 +1688,7 @@ module Scripting =
         /// <param name="keys">Keys of items to be fetched.</param>
         /// <param name="consistentRead">Perform consistent read. Defaults to false.</param>
         member t.BatchGetItems(keys: seq<TableKey>, ?consistentRead: bool) =
-            t.BatchGetItemsAsync(keys, ?consistentRead = consistentRead) |> Async.RunSynchronously
+            t.BatchGetItemsAsync(keys, ?consistentRead = consistentRead) |> Task.RunSynchronously
 
 
         /// <summary>
@@ -1595,7 +1704,7 @@ module Scripting =
                 ?consistentRead: bool
             ) : 'TProjection[] =
             t.BatchGetItemsProjectedAsync(keys, projection, ?consistentRead = consistentRead)
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
 
         /// <summary>
@@ -1611,13 +1720,13 @@ module Scripting =
                 ?consistentRead: bool
             ) : 'TProjection[] =
             t.BatchGetItemsProjectedAsync(keys, projection, ?consistentRead = consistentRead)
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
         /// <summary>Deletes item of given key from table.</summary>
         /// <param name="key">Key of item to be deleted.</param>
         /// <param name="precondition">Precondition to satisfy where item exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         member t.DeleteItem(key: TableKey, ?precondition: ConditionExpression<'TRecord>) =
-            t.DeleteItemAsync(key, ?precondition = precondition) |> Async.RunSynchronously
+            t.DeleteItemAsync(key, ?precondition = precondition) |> Task.RunSynchronously
 
         /// <summary>
         ///     Deletes item of given key from table.
@@ -1625,7 +1734,7 @@ module Scripting =
         /// <param name="key">Key of item to be deleted.</param>
         /// <param name="precondition">Precondition to satisfy where item exists. Use <c>Precondition.CheckFailed</c> to identify Precondition Check failures.</param>
         member t.DeleteItem(key: TableKey, precondition: Expr<'TRecord -> bool>) =
-            t.DeleteItemAsync(key, precondition) |> Async.RunSynchronously
+            t.DeleteItemAsync(key, precondition) |> Task.RunSynchronously
 
 
         /// <summary>
@@ -1633,7 +1742,7 @@ module Scripting =
         /// </summary>
         /// <returns>Any unprocessed keys due to throttling.</returns>
         /// <param name="keys">Keys of items to be deleted.</param>
-        member t.BatchDeleteItems(keys: seq<TableKey>) = t.BatchDeleteItemsAsync(keys) |> Async.RunSynchronously
+        member t.BatchDeleteItems(keys: seq<TableKey>) = t.BatchDeleteItemsAsync(keys) |> Task.RunSynchronously
 
 
         /// <summary>
@@ -1659,7 +1768,7 @@ module Scripting =
                 ?consistentRead = consistentRead,
                 ?scanIndexForward = scanIndexForward
             )
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
         /// <summary>
         ///     Queries table with given condition expressions.
@@ -1684,7 +1793,7 @@ module Scripting =
                 ?consistentRead = consistentRead,
                 ?scanIndexForward = scanIndexForward
             )
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
 
         /// <summary>
@@ -1715,7 +1824,7 @@ module Scripting =
                 ?consistentRead = consistentRead,
                 ?scanIndexForward = scanIndexForward
             )
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
         /// <summary>
         ///     Queries table with given condition expressions.
@@ -1745,7 +1854,7 @@ module Scripting =
                 ?consistentRead = consistentRead,
                 ?scanIndexForward = scanIndexForward
             )
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
 
         /// <summary>
@@ -1774,7 +1883,7 @@ module Scripting =
                 ?consistentRead = consistentRead,
                 ?scanIndexForward = scanIndexForward
             )
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
         /// <summary>
         ///     Queries table with given condition expressions.
@@ -1802,8 +1911,7 @@ module Scripting =
                 ?consistentRead = consistentRead,
                 ?scanIndexForward = scanIndexForward
             )
-            |> Async.RunSynchronously
-
+            |> Task.RunSynchronously
 
         /// <summary>
         ///     Queries table with given condition expressions.
@@ -1836,7 +1944,7 @@ module Scripting =
                 ?consistentRead = consistentRead,
                 ?scanIndexForward = scanIndexForward
             )
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
         /// <summary>
         ///     Queries table with given condition expressions.
@@ -1869,8 +1977,7 @@ module Scripting =
                 ?consistentRead = consistentRead,
                 ?scanIndexForward = scanIndexForward
             )
-            |> Async.RunSynchronously
-
+            |> Task.RunSynchronously
 
         /// <summary>
         ///     Scans table with given condition expressions.
@@ -1880,7 +1987,7 @@ module Scripting =
         /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
         member t.Scan(?filterCondition: ConditionExpression<'TRecord>, ?limit: int, ?consistentRead: bool) : 'TRecord[] =
             t.ScanAsync(?filterCondition = filterCondition, ?limit = limit, ?consistentRead = consistentRead)
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
         /// <summary>
         ///     Scans table with given condition expressions.
@@ -1890,7 +1997,7 @@ module Scripting =
         /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
         member t.Scan(filterCondition: Expr<'TRecord -> bool>, ?limit: int, ?consistentRead: bool) : 'TRecord[] =
             t.ScanAsync(filterCondition, ?limit = limit, ?consistentRead = consistentRead)
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
 
         /// <summary>
@@ -1910,7 +2017,7 @@ module Scripting =
                 ?consistentRead: bool
             ) : 'TProjection[] =
             t.ScanProjectedAsync(projection, ?filterCondition = filterCondition, ?limit = limit, ?consistentRead = consistentRead)
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
         /// <summary>
         ///     Scans table with given condition expressions.
@@ -1929,7 +2036,7 @@ module Scripting =
                 ?consistentRead: bool
             ) : 'TProjection[] =
             t.ScanProjectedAsync(projection, ?filterCondition = filterCondition, ?limit = limit, ?consistentRead = consistentRead)
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
         /// <summary>
         ///     Scans table with given condition expressions.
@@ -1951,7 +2058,7 @@ module Scripting =
                 ?exclusiveStartKey = exclusiveStartKey,
                 ?consistentRead = consistentRead
             )
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
 
         /// <summary>
@@ -1969,7 +2076,7 @@ module Scripting =
                 ?consistentRead: bool
             ) : PaginatedResult<'TRecord, TableKey> =
             t.ScanPaginatedAsync(filterCondition, ?limit = limit, ?exclusiveStartKey = exclusiveStartKey, ?consistentRead = consistentRead)
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
 
         /// <summary>
@@ -1997,7 +2104,7 @@ module Scripting =
                 ?exclusiveStartKey = exclusiveStartKey,
                 ?consistentRead = consistentRead
             )
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
         /// <summary>
         ///     Scans table with given condition expressions.
@@ -2024,14 +2131,14 @@ module Scripting =
                 ?exclusiveStartKey = exclusiveStartKey,
                 ?consistentRead = consistentRead
             )
-            |> Async.RunSynchronously
+            |> Task.RunSynchronously
 
 
         /// <summary>Updates the underlying table with supplied provisioned throughput.</summary>
         /// <param name="provisionedThroughput">Provisioned throughput to use on table.</param>
         member t.UpdateProvisionedThroughput(provisionedThroughput: ProvisionedThroughput) : unit =
             let spec = Throughput.Provisioned provisionedThroughput
-            t.UpdateTableIfRequiredAsync(spec) |> Async.Ignore |> Async.RunSynchronously
+            t.UpdateTableIfRequiredAsync(spec) |> Task.Ignore |> Task.RunSynchronously
 
 /// Helpers for working with <c>Transaction</c>
 module Transaction =

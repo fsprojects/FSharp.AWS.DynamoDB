@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFrameworks>netstandard2.0;netstandard2.1</TargetFrameworks>
     <OutputPath>..\..\bin\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
@@ -34,5 +34,8 @@
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="TypeShape" />
     <PackageReference Include="System.Diagnostics.DiagnosticSource" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)'=='netstandard2.0'">
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
   </ItemGroup>
 </Project>

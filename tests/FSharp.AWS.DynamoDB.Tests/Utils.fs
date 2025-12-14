@@ -17,6 +17,7 @@ open Amazon.Runtime
 [<AutoOpen>]
 module Utils =
     open System.Diagnostics
+    open System.Threading.Tasks
 
     let guid () = Guid.NewGuid().ToString("N")
 
@@ -43,6 +44,27 @@ module Utils =
         |> Async.AwaitTask
         |> Async.RunSynchronously
         |> ignore
+
+    let raisesAsync<'t, 'a when 'a :> exn> (f: unit -> Task<'t>) = task {
+        try
+            let! _ = f ()
+            failwithf "Expected exception of type %s but no exception was thrown" typeof<'a>.FullName
+        with ex ->
+            if ex.GetType() <> typeof<'a> then
+                failwithf "Expected exception of type %s but got exception of type %s" typeof<'a>.FullName (ex.GetType().FullName)
+    }
+
+    let inline raisesAsyncWith<'t, 'a when 'a :> exn> (f: unit -> Task<'t>) (c: 'a -> bool) = task {
+        try
+            let! _ = f ()
+            failwithf "Expected exception of type %s but no exception was thrown" typeof<'a>.FullName
+        with
+        | :? 'a as ex ->
+            if not (c ex) then
+                failwithf "Exception of type %s did not satisfy the condition" typeof<'a>.FullName
+        | ex -> failwithf "Expected exception of type %s but got exception of type %s" typeof<'a>.FullName (ex.GetType().FullName)
+    }
+
 
     type FsCheckGenerators =
         static member MemoryStream =

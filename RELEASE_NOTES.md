@@ -1,3 +1,8 @@
+### 1.0.0-alpha
+* **Breaking** Removed obsolete table creation/initialization methods (`TableContext.Create`, `TableContext.CreateAsync`, `UpdateProvisionedThroughputAsync` and `VerifyTableAsync`)
+* **Breaking** Removed `metricsCollector` - use the Activity/OpenTelemetry support for observability instead
+* **Breaking** Removed `GetItemAsync` - use `TryGetItemAsync` and unwrap if needed. Similarly changed `GetItemProjectedAsync` to `TryGetItemProjectedAsync`
+
 ### 0.12.4-beta
 * Added OpenTelemetry instrumentation
 

@@ -401,8 +401,8 @@ type ``Update Expression Tests``(fixture: TableFixture) =
 
         |> shouldFailwith<_, ConditionalCheckFailedException>
 
-        let item' = table.GetItem key
-        test <@ item.Value = item'.Value @>
+        let item' = table.TryGetItem key
+        test <@ Some item.Value = (item' |> Option.map _.Value) @>
 
     [<Fact>]
     let ``SET an attribute`` () =
@@ -460,8 +460,8 @@ type ``Update Expression Tests``(fixture: TableFixture) =
 
         |> shouldFailwith<_, ArgumentException>
 
-        let item' = table.GetItem key
-        test <@ item.Value = item'.Value @>
+        let item' = table.TryGetItem key
+        test <@ Some item.Value = (item' |> Option.map _.Value) @>
 
     [<Fact>]
     let ``Simple Parametric Updater 1`` () =

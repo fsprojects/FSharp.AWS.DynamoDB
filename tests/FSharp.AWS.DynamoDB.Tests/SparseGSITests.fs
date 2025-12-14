@@ -34,8 +34,8 @@ type ``Sparse GSI Tests``(fixture: TableFixture) =
     let ``GSI Put Operation`` () =
         let value = mkItem ()
         let key = table.PutItem value
-        let value' = table.GetItem key
-        test <@ value = value' @>
+        let value' = table.TryGetItem key
+        test <@ Some value = value' @>
 
     [<Fact>]
     let ``GSI Query Operation (match)`` () =

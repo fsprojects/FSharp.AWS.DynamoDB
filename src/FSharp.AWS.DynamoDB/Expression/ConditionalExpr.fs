@@ -290,11 +290,11 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
             | Comparison <@ (<=) @> (p, [ left; right ]) -> extractComparison p LE left right
             | Comparison <@ (>=) @> (p, [ left; right ]) -> extractComparison p GE left right
 
-            | SpecificCall2 <@ fun (x: string) y -> x.StartsWith y @> (Some(AttributeGet attr), _, _, [ value ]) ->
+            | SpecificCall2 <@ fun (x: string) (y: string) -> x.StartsWith y @> (Some(AttributeGet attr), _, _, [ value ]) ->
                 let op = extractOperand None value
                 BeginsWith(attr.Id, op)
 
-            | SpecificCall2 <@ fun (x: string) y -> x.Contains y @> (Some(AttributeGet attr), _, _, [ value ]) ->
+            | SpecificCall2 <@ fun (x: string) (y: string) -> x.Contains y @> (Some(AttributeGet attr), _, _, [ value ]) ->
                 let op = extractOperand None value
                 Contains(attr.Id, op)
 

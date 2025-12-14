@@ -295,6 +295,30 @@ module internal Utils =
                         sc ())
                 |> ignore)
 
+    type Task with
+
+        /// <summary>
+        ///   Ignores the result of the given task, returning a `Task<unit>`.
+        /// </summary>
+        static member Ignore(t: Task<'T>) = task {
+            let! _ = t
+            return ()
+        }
+
+        /// <summary>
+        ///   Synchronously runs the given task, unwrapping AggregateException if possible.
+        /// </summary>
+        static member RunSynchronously(t: Task<'T>) : 'T =
+            try
+                t.Wait()
+                t.Result
+            with :? AggregateException as aggEx ->
+                if aggEx.InnerExceptions.Count = 1 then
+                    raise aggEx.InnerExceptions[0]
+                else
+                    raise aggEx
+
+
     [<RequireQualifiedAccess>]
     module Seq =
         let joinBy (pred: 'T -> 'S -> bool) (ts: seq<'T>) (ss: seq<'S>) : seq<'T * 'S> = seq {

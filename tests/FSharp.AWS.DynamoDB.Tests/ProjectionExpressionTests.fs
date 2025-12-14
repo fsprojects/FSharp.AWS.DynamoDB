@@ -1,6 +1,7 @@
 ﻿namespace FSharp.AWS.DynamoDB.Tests
 
 open System
+open System.Threading.Tasks
 
 open Microsoft.FSharp.Quotations
 
@@ -125,84 +126,84 @@ type ``Projection Expression Tests``(fixture: TableFixture) =
     let ``Null value projection`` () =
         let item = mkItem ()
         let key = table.PutItem(item)
-        table.GetItemProjected(key, <@ fun _ -> () @>)
-        table.GetItemProjected(key, <@ ignore @>)
+        table.TryGetItemProjected(key, <@ fun _ -> () @>) |> ignore
+        table.TryGetItemProjected(key, <@ ignore @>)
 
     [<Fact>]
     let ``Single value projection`` () =
         let item = mkItem ()
         let key = table.PutItem(item)
-        let guid = table.GetItemProjected(key, <@ fun r -> r.Guid @>)
-        test <@ item.Guid = guid @>
+        let guid = table.TryGetItemProjected(key, <@ fun r -> r.Guid @>)
+        test <@ Some item.Guid = guid @>
 
     [<Fact>]
     let ``Map projection`` () =
         let item = mkItem ()
         let key = table.PutItem(item)
-        let map = table.GetItemProjected(key, <@ fun r -> r.Map @>)
-        test <@ item.Map = map @>
+        let map = table.TryGetItemProjected(key, <@ fun r -> r.Map @>)
+        test <@ item.Map = (map |> Option.defaultValue Map.empty) @>
 
     [<Fact>]
     let ``Option-None projection`` () =
         let item = { mkItem () with Optional = None }
         let key = table.PutItem(item)
-        let opt = table.GetItemProjected(key, <@ fun r -> r.Optional @>)
-        test <@ None = opt @>
+        let opt = table.TryGetItemProjected(key, <@ fun r -> r.Optional @>)
+        test <@ None = (opt |> Option.get) @>
 
     [<Fact>]
     let ``Option-Some projection`` () =
         let item = { mkItem () with Optional = Some "test" }
         let key = table.PutItem(item)
-        let opt = table.GetItemProjected(key, <@ fun r -> r.Optional @>)
-        test <@ item.Optional = opt @>
+        let opt = table.TryGetItemProjected(key, <@ fun r -> r.Optional @>)
+        test <@ item.Optional = (opt |> Option.get) @> // TODO: Should TryGetItemProjected flatten the optional?
 
     [<Fact>]
     let ``Multi-value projection`` () =
         let item = mkItem ()
         let key = table.PutItem(item)
-        let result = table.GetItemProjected(key, <@ fun r -> r.Bool, r.ByteSet, r.Bytes @>)
-        test <@ (item.Bool, item.ByteSet, item.Bytes) = result @>
+        let result = table.TryGetItemProjected(key, <@ fun r -> r.Bool, r.ByteSet, r.Bytes @>)
+        test <@ Some(item.Bool, item.ByteSet, item.Bytes) = result @>
 
     [<Fact>]
     let ``Nested value projection 1`` () =
         let item = { mkItem () with Map = Map.ofList [ "Nested", 42L ] }
         let key = table.PutItem(item)
-        let result = table.GetItemProjected(key, <@ fun r -> r.Nested.NV, r.NestedList[0].NV, r.Map["Nested"] @>)
-        test <@ (item.Nested.NV, item.NestedList[0].NV, item.Map["Nested"]) = result @>
+        let result = table.TryGetItemProjected(key, <@ fun r -> r.Nested.NV, r.NestedList[0].NV, r.Map["Nested"] @>)
+        test <@ Some(item.Nested.NV, item.NestedList[0].NV, item.Map["Nested"]) = result @>
 
     [<Fact>]
     let ``Nested value projection 2`` () =
         let item = { mkItem () with List = [ 1L; 2L; 3L ] }
         let key = table.PutItem(item)
-        let result = table.GetItemProjected(key, <@ fun r -> r.List[0], r.List[1] @>)
-        test <@ (item.List[0], item.List[1]) = result @>
+        let result = table.TryGetItemProjected(key, <@ fun r -> r.List[0], r.List[1] @>)
+        test <@ Some(item.List[0], item.List[1]) = result @>
 
     [<Fact>]
-    let ``Projected query`` () =
+    let ``Projected query`` () = task {
         let hKey = guid ()
 
-        seq { for i in 1..200 -> { mkItem () with HashKey = hKey; RangeKey = string i } }
-        |> Seq.splitInto 25
-        |> Seq.map table.BatchPutItemsAsync
-        |> Async.Parallel
-        |> Async.Ignore
-        |> Async.RunSynchronously
+        let! _ =
+            seq { for i in 1..200 -> { mkItem () with HashKey = hKey; RangeKey = string i } }
+            |> Seq.splitInto 25
+            |> Seq.map table.BatchPutItemsAsync
+            |> Task.WhenAll
 
-        let results = table.QueryProjected(<@ fun r -> r.HashKey = hKey @>, <@ fun r -> r.RangeKey @>)
+        let! results = table.QueryProjectedAsync(<@ fun r -> r.HashKey = hKey @>, <@ fun r -> r.RangeKey @>)
         test <@ set [ 1..200 ] = (results |> Seq.map int |> set) @>
+    }
 
     [<Fact>]
-    let ``Projected scan`` () =
+    let ``Projected scan`` () = task {
         let hKey = guid ()
 
-        seq { for i in 1..200 -> { mkItem () with HashKey = hKey; RangeKey = string i } }
-        |> Seq.splitInto 25
-        |> Seq.map table.BatchPutItemsAsync
-        |> Async.Parallel
-        |> Async.Ignore
-        |> Async.RunSynchronously
+        let! _ =
+            seq { for i in 1..200 -> { mkItem () with HashKey = hKey; RangeKey = string i } }
+            |> Seq.splitInto 25
+            |> Seq.map table.BatchPutItemsAsync
+            |> Task.WhenAll
 
-        let results = table.ScanProjected(<@ fun r -> r.RangeKey @>, filterCondition = <@ fun r -> r.HashKey = hKey @>)
+        let! results = table.ScanProjectedAsync(<@ fun r -> r.RangeKey @>, filterCondition = <@ fun r -> r.HashKey = hKey @>)
         test <@ set [ 1..200 ] = (results |> Seq.map int |> set) @>
+    }
 
     interface IClassFixture<TableFixture>
