@@ -383,40 +383,44 @@ type TableKeySchemata with
 
         TableKeySchemata(
             [| yield primaryKey
-               yield! td.GlobalSecondaryIndexes |> Seq.map mkGlobalSecondaryIndex
-               yield! td.LocalSecondaryIndexes |> Seq.map mkLocalSecondaryIndex |]
+               if td.GlobalSecondaryIndexes <> null then
+                   yield! td.GlobalSecondaryIndexes |> Seq.map mkGlobalSecondaryIndex
+               if td.LocalSecondaryIndexes <> null then
+                   yield! td.LocalSecondaryIndexes |> Seq.map mkLocalSecondaryIndex |]
         )
 
     /// Applies the settings implied by the schema to the supplied CreateTableRequest
     member schema.ApplyToCreateTableRequest(ctr: CreateTableRequest) =
         let inline mkKSE n t = KeySchemaElement(n, t)
 
-        let keyAttrs = new Dictionary<string, KeyAttributeSchema>()
+        let keyAttrs = Dictionary<string, KeyAttributeSchema>()
         for tks in schema.Schemata do
             keyAttrs.[tks.HashKey.AttributeName] <- tks.HashKey
             tks.RangeKey |> Option.iter (fun rk -> keyAttrs.[rk.AttributeName] <- rk)
 
             match tks.Type with
             | PrimaryKey ->
+                if ctr.KeySchema = null then ctr.KeySchema <- ResizeArray()
                 ctr.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
                 tks.RangeKey |> Option.iter (fun rk -> ctr.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
 
             | GlobalSecondaryIndex name ->
-                let gsi = new GlobalSecondaryIndex()
-                gsi.IndexName <- name
+                let gsi = new GlobalSecondaryIndex(IndexName = name, KeySchema = ResizeArray())
                 gsi.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
                 tks.RangeKey |> Option.iter (fun rk -> gsi.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
                 gsi.Projection <- Projection(ProjectionType = ProjectionType.ALL)
+                if ctr.GlobalSecondaryIndexes = null then ctr.GlobalSecondaryIndexes <- ResizeArray()
                 ctr.GlobalSecondaryIndexes.Add gsi
 
             | LocalSecondaryIndex name ->
-                let lsi = new LocalSecondaryIndex()
-                lsi.IndexName <- name
+                let lsi = new LocalSecondaryIndex(IndexName = name, KeySchema = ResizeArray())
                 lsi.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
                 tks.RangeKey |> Option.iter (fun rk -> lsi.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
                 lsi.Projection <- Projection(ProjectionType = ProjectionType.ALL)
+                if ctr.LocalSecondaryIndexes = null then ctr.LocalSecondaryIndexes <- ResizeArray()
                 ctr.LocalSecondaryIndexes.Add lsi
 
         for attr in keyAttrs.Values do
             let ad = AttributeDefinition(attr.AttributeName, attr.KeyType)
+            if ctr.AttributeDefinitions = null then ctr.AttributeDefinitions <- ResizeArray()
             ctr.AttributeDefinitions.Add ad

@@ -30,8 +30,9 @@ module internal Throughput =
         | Throughput.Provisioned t ->
             req.BillingMode <- BillingMode.PROVISIONED
             req.ProvisionedThroughput <- t
-            for gsi in req.GlobalSecondaryIndexes do
-                gsi.ProvisionedThroughput <- t
+            if req.GlobalSecondaryIndexes <> null then
+                for gsi in req.GlobalSecondaryIndexes do
+                    gsi.ProvisionedThroughput <- t
         | Throughput.OnDemand -> req.BillingMode <- BillingMode.PAY_PER_REQUEST
     let requiresUpdate (desc: TableDescription) =
         function
@@ -291,7 +292,7 @@ type TableContext<'TRecord>
     let batchGetItemsAsync (keys: seq<TableKey>) (consistentRead: bool option) (projExpr: ProjectionExpr.ProjectionExpr option) = async {
 
         let consistentRead = defaultArg consistentRead false
-        let kna = KeysAndAttributes()
+        let kna = KeysAndAttributes(AttributesToGet = ResizeArray(), Keys = ResizeArray())
         kna.AttributesToGet.AddRange(template.Info.Properties |> Seq.map (fun p -> p.Name))
         kna.Keys.AddRange(keys |> Seq.map template.ToAttributeValues)
         kna.ConsistentRead <- consistentRead
@@ -301,7 +302,7 @@ type TableContext<'TRecord>
             let aw = AttributeWriter(kna.ExpressionAttributeNames, null)
             kna.ProjectionExpression <- projExpr.Write aw
 
-        let request = BatchGetItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
+        let request = BatchGetItemRequest(ReturnConsumedCapacity = returnConsumedCapacity, RequestItems = Dictionary())
         request.RequestItems[tableName] <- kna
 
         let! ct = Async.CancellationToken
@@ -450,7 +451,7 @@ type TableContext<'TRecord>
 
                 downloaded.AddRange response.Items
                 consumedCapacity.Add response.ConsumedCapacity
-                if response.LastEvaluatedKey.Count > 0 then
+                if response.LastEvaluatedKey <> null && response.LastEvaluatedKey.Count > 0 then
                     lastEvaluatedKey <- Some response.LastEvaluatedKey
                     if limit.IsDownloadIncomplete downloaded.Count then
                         do! aux lastEvaluatedKey
@@ -563,7 +564,7 @@ type TableContext<'TRecord>
         if items.Length > 25 then
             invalidArg "items" "item length must be less than or equal to 25."
         let writeRequests = items |> Seq.map mkWriteRequest |> rlist
-        let pbr = BatchWriteItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
+        let pbr = BatchWriteItemRequest(ReturnConsumedCapacity = returnConsumedCapacity, RequestItems = Dictionary())
         pbr.RequestItems[tableName] <- writeRequests
         let! ct = Async.CancellationToken
         let! response = client.BatchWriteItemAsync(pbr, ct) |> Async.AwaitTaskCorrect
@@ -674,7 +675,7 @@ type TableContext<'TRecord>
     /// <param name="key">Key to be checked.</param>
     member _.ContainsKeyAsync(key: TableKey) : Async<bool> = async {
         let kav = template.ToAttributeValues(key)
-        let request = GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity)
+        let request = GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity, ExpressionAttributeNames = Dictionary())
         request.ExpressionAttributeNames.Add("#HKEY", template.PrimaryKey.HashKey.AttributeName)
         request.ProjectionExpression <- "#HKEY"
         let! ct = Async.CancellationToken
@@ -791,7 +792,7 @@ type TableContext<'TRecord>
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "DeleteItem request returned error %O" response.HttpStatusCode
 
-        if response.Attributes.Count = 0 then
+        if response.Attributes = null || response.Attributes.Count = 0 then
             return None
         else
             return template.OfAttributeValues response.Attributes |> Some
@@ -819,7 +820,7 @@ type TableContext<'TRecord>
         let keys = Seq.toArray keys
         if keys.Length > 25 then
             invalidArg "items" "key length must be less than or equal to 25."
-        let request = BatchWriteItemRequest(ReturnConsumedCapacity = returnConsumedCapacity)
+        let request = BatchWriteItemRequest(ReturnConsumedCapacity = returnConsumedCapacity, RequestItems = Dictionary())
         let deleteRequests = keys |> Seq.map mkDeleteRequest |> rlist
         request.RequestItems[tableName] <- deleteRequests
 

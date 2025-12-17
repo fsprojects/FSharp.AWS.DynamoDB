@@ -249,10 +249,12 @@ type QuotedAttribute =
 
 /// Wrapper API for writing attribute names and values for Dynamo query expressions
 type AttributeWriter(names: Dictionary<string, string>, values: Dictionary<string, AttributeValue>) =
+    let names = if names = null then Dictionary() else names
+    let values = if values = null then Dictionary() else values
     static let cmp = new AttributeValueComparer()
     let vcontents = new Dictionary<AttributeValue, string>(cmp)
 
-    new() = new AttributeWriter(new Dictionary<_, _>(), new Dictionary<_, _>())
+    new() = AttributeWriter(Dictionary(), Dictionary())
 
     member __.Names = names
     member __.Values = values

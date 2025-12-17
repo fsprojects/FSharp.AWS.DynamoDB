@@ -30,19 +30,19 @@ type AttributeValueComparer() =
         if av.NULL.HasValue then
             av'.NULL = av.NULL
         elif av.BOOL.HasValue then
-            av.BOOL = av'.BOOL
+            av'.BOOL = av.BOOL
         elif notNull av.S then
             notNull av'.S && av.S = av'.S
         elif notNull av.N then
             notNull av'.N && av.N = av'.N
         elif notNull av.B then
             notNull av'.B && areEqualMemoryStreams av.B av'.B
-        elif av.SS.Count > 0 then
-            av'.SS.Count > 0 && areEqualResizeArrays av.SS av'.SS
-        elif av.NS.Count > 0 then
-            av'.NS.Count > 0 && areEqualResizeArrays av.NS av'.NS
-        elif av.BS.Count > 0 then
-            av'.BS.Count > 0 && av.BS.Count = av'.BS.Count && Seq.forall2 areEqualMemoryStreams av.BS av'.BS
+        elif av.IsSSSet then
+            av'.IsSSSet && areEqualResizeArrays av.SS av'.SS
+        elif av.IsNSSet then
+            av'.IsNSSet && areEqualResizeArrays av.NS av'.NS
+        elif av.IsBSSet then
+            av'.IsBSSet && av.BS.Count = av'.BS.Count && Seq.forall2 areEqualMemoryStreams av.BS av'.BS
         elif av.IsLSet then
             av'.IsLSet && av.L.Count = av'.L.Count && Seq.forall2 areEqualAttributeValues av.L av'.L
         elif av.IsMSet then
@@ -72,11 +72,11 @@ type AttributeValueComparer() =
             hash av.N
         elif notNull av.B then
             hash av.B.Length
-        elif av.SS.Count > 0 then
+        elif av.IsSSSet then
             getSeqHash hash av.SS
-        elif av.NS.Count > 0 then
+        elif av.IsNSSet then
             getSeqHash hash av.NS
-        elif av.BS.Count > 0 then
+        elif av.IsBSSet then
             av.BS |> getSeqHash (fun m -> hash m.Length)
         elif av.IsLSet then
             getSeqHash getAttributeValueHashCode av.L
