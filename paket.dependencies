@@ -14,7 +14,7 @@ nuget Unquote ~> 6.1.0
 # Also avoids Rider search finding stuff in FSharp.Core.xml
 nuget FSharp.Core >= 4.7.2 content: false, lowest_matching: true
 
-nuget AWSSDK.DynamoDBv2 ~> 3.7.5
+nuget AWSSDK.DynamoDBv2 ~> 4
 
 github eiriktsarpalis/TypeShape:10.0.0 src/TypeShape/TypeShape.fs
 

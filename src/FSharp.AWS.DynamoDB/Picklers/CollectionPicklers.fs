@@ -33,7 +33,7 @@ type ListPickler<'List, 'T when 'List :> seq<'T>>(ctor: seq<'T> -> 'List, nullV:
     override __.Pickle list = __.PickleCoerced list
 
     override __.UnPickle a =
-        if a.NULL then nullV
+        if a.NULL.GetValueOrDefault false then nullV
         elif a.IsLSet then a.L |> Seq.map tp.UnPickle |> ctor
         else invalidCast a
 
@@ -70,7 +70,7 @@ type BytesSetPickler() =
     override __.Pickle bss = __.PickleCoerced bss
 
     override __.UnPickle a =
-        if a.NULL then
+        if a.NULL.GetValueOrDefault false then
             Set.empty
         elif a.IsBSSet then
             a.BS |> Seq.map (fun ms -> ms.ToArray()) |> set
@@ -101,7 +101,7 @@ type NumSetPickler<'T when 'T: comparison>(tp: NumRepresentablePickler<'T>) =
     override __.Pickle set = __.PickleCoerced set
 
     override __.UnPickle a =
-        if a.NULL then Set.empty
+        if a.NULL.GetValueOrDefault false then Set.empty
         elif a.IsNSSet then a.NS |> Seq.map tp.Parse |> set
         else invalidCast a
 
@@ -129,7 +129,7 @@ type StringSetPickler<'T when 'T: comparison>(tp: StringRepresentablePickler<'T>
     override __.Pickle set = __.PickleCoerced set
 
     override __.UnPickle a =
-        if a.NULL then Set.empty
+        if a.NULL.GetValueOrDefault false then Set.empty
         elif a.IsSSSet then a.SS |> Seq.map tp.Parse |> set
         else invalidCast a
 
@@ -178,7 +178,7 @@ type MapPickler<'Value>(vp: Pickler<'Value>) =
 
 
     override __.UnPickle a =
-        if a.NULL then
+        if a.NULL.GetValueOrDefault false then
             Map.empty
         elif a.IsMSet then
             a.M |> Seq.map (fun kv -> kv.Key, vp.UnPickle kv.Value) |> Map.ofSeq

@@ -69,11 +69,11 @@ module internal Streaming =
         | Streaming.Disabled ->
             match desc.StreamSpecification with
             | null -> false
-            | s -> s.StreamEnabled
+            | s -> s.StreamEnabled.GetValueOrDefault false
         | Streaming.Enabled svt ->
             match desc.StreamSpecification with
             | null -> true
-            | s -> not s.StreamEnabled || s.StreamViewType <> svt
+            | s -> not (s.StreamEnabled.GetValueOrDefault false) || s.StreamViewType <> svt
     let applyToUpdateRequest (req: UpdateTableRequest) (Spec spec) = req.StreamSpecification <- spec
 
 module internal CreateTableRequest =

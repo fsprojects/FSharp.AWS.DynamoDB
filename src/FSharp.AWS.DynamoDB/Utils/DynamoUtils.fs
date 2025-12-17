@@ -27,10 +27,10 @@ type AttributeValueComparer() =
             areEqual
 
     static let rec areEqualAttributeValues (av: AttributeValue) (av': AttributeValue) =
-        if av.NULL then
-            av'.NULL
-        elif av.IsBOOLSet then
-            av'.IsBOOLSet && av.BOOL = av'.BOOL
+        if av.NULL.HasValue then
+            av'.NULL = av.NULL
+        elif av.BOOL.HasValue then
+            av.BOOL = av'.BOOL
         elif notNull av.S then
             notNull av'.S && av.S = av'.S
         elif notNull av.N then
@@ -62,7 +62,7 @@ type AttributeValueComparer() =
         h
 
     static let rec getAttributeValueHashCode (av: AttributeValue) =
-        if av.NULL then
+        if av.NULL.HasValue then
             0
         elif av.IsBOOLSet then
             hash av.BOOL
@@ -113,10 +113,10 @@ type AttributeValue with
     member inline av.IsBSSet = av.BS.Count > 0
 
     member av.Print() =
-        if av.NULL then
+        if av.NULL.GetValueOrDefault false then
             "{ NULL = true }"
         elif av.IsBOOLSet then
-            sprintf "{ BOOL = %b }" av.BOOL
+            sprintf "{ BOOL = %b }" (av.BOOL.GetValueOrDefault false)
         elif av.S <> null then
             sprintf "{ S = %s }" av.S
         elif av.N <> null then
