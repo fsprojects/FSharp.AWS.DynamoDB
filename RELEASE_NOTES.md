@@ -1,3 +1,5 @@
+### 0.13.0-beta
+* Targeted `AWSSDK.DynamoDBv2` v4 [#86](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/86)
 ### 0.12.3-beta
 * Removed erroneous `Dotnet.Reproduciblebuilds` dependency [#75](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/75)
 ### 0.12.2-beta
@@ -48,7 +50,7 @@
 
 ### 0.9.4-beta
 * Moved Sync-over-Async versions of `TableContext` operations into `namespace FSharp.AWS.DynamoDB.Scripting`
-* Added `WithMetricsCollector()` copy method to allow separating metrics by context (eg by request)
+* Added `WithMetricsCollector()` copy method to allow separating metrics by context (e.g. by request)
 * Ensured metrics are reported even for failed requests
 * Added `TryGetItemAsync` (same as `GetItemAsync`, but returns `None`, instead of throwing, if an item is not present)
 * Switched test framework to Xunit, assertions to Unquote, runner to `dotnet test` 
@@ -75,7 +77,7 @@
 ### 0.8.1-beta
 * Replace deprecated AWS ProfileManager usage
 * Bumped test project netcoreapp version to 3.1
-* Fixed 'Invalid UpdateExpression' exception for precomputed Map.remove operations (#20)
+* Fixed 'Invalid UpdateExpression' exception for precomputed `Map.remove` operations (#20)
 
 ### 0.8.0-beta
 * Move to netstandard2.0.
