@@ -25,7 +25,7 @@ type NestedAttribute =
     member nf.Print() =
         match nf with
         | FParam i -> sprintf "<$param%d>" i
-        | FField f when not <| isValidFieldName f -> sprintf "map keys must be 1 to 64k long (as utf8)." |> invalidArg f
+        | FField f when not <| isValidFieldName f -> invalidArg f "map keys must be 1 to 64k long (as utf8)."
         | FField f -> "." + f
         | FIndex i -> sprintf "[%d]" i
 
@@ -56,28 +56,28 @@ type AttributeId =
 
     member id.Tokens = seq {
         yield id.RootName
-        yield! id.NestedAttributes |> Seq.map (fun nf -> nf.Print())
+        yield! id.NestedAttributes |> Seq.map _.Print()
     }
 
     member id.IsHashKey =
         List.isEmpty id.NestedAttributes
         && id.KeySchemata
            |> Array.exists (function
-               | (_, KeyType.Hash) -> true
+               | _, KeyType.Hash -> true
                | _ -> false)
 
     member id.IsRangeKey =
         List.isEmpty id.NestedAttributes
         && id.KeySchemata
            |> Array.exists (function
-               | (_, KeyType.Range) -> true
+               | _, KeyType.Range -> true
                | _ -> false)
 
     member id.IsPrimaryKey =
         List.isEmpty id.NestedAttributes
         && id.KeySchemata
            |> Array.exists (function
-               | ({ Type = PrimaryKey }, _) -> true
+               | { Type = PrimaryKey }, _ -> true
                | _ -> false)
 
     member id.Append nf = { id with NestedAttributes = id.NestedAttributes @ [ nf ] }
@@ -85,14 +85,14 @@ type AttributeId =
         let applyField nf =
             match nf with
             | FParam i ->
-                match inputs.[i] with
+                match inputs[i] with
                 | :? string as f -> FField f
                 | :? int as i ->
                     if i < 0 then
                         raise <| ArgumentOutOfRangeException()
                     else
                         FIndex i
-                | _ -> raise <| new InvalidCastException()
+                | _ -> raise <| InvalidCastException()
             | _ -> nf
 
         { id with NestedAttributes = id.NestedAttributes |> List.map applyField }
@@ -107,7 +107,7 @@ type AttributeId =
 
 type PropertyMetadata with
 
-    /// Gets an attribute Id for given record property that
+    /// Gets an attribute id for given record property that
     /// is recognizable by DynamoDB
     member rp.AttrId = sprintf "#ATTR%d" rp.Index
 
@@ -137,7 +137,7 @@ type QuotedAttribute =
 
         aux ap
 
-    /// Gets an attribute identifier for given Quoted attribute instace
+    /// Gets an attribute identifier for given Quoted attribute instance
     member ap.Id =
         let rec getTokens acc ap =
             match ap with
@@ -250,8 +250,8 @@ type QuotedAttribute =
 /// Wrapper API for writing attribute names and values for Dynamo query, update and condition expressions
 /// Responsible for generating unique placeholders for attribute names and values
 type AttributeWriter(names: Dictionary<string, string>, values: Dictionary<string, AttributeValue>) =
-    static let cmp = new AttributeValueComparer()
-    let vcontents = new Dictionary<AttributeValue, string>(cmp)
+    static let cmp = AttributeValueComparer()
+    let ids = Dictionary<AttributeValue, string>(cmp)
 
     new() = AttributeWriter(Dictionary(), Dictionary())
 
@@ -259,21 +259,20 @@ type AttributeWriter(names: Dictionary<string, string>, values: Dictionary<strin
     member _.Values = if values.Count = 0 then null else values
 
     member _.WriteValue(av: AttributeValue) =
-        let ok, found = vcontents.TryGetValue av
-        if ok then
-            found
-        else
+        match ids.TryGetValue av with
+        | true, id -> id
+        | false, _ ->
             let id = sprintf ":val%d" values.Count
-            vcontents.Add(av, id)
+            ids.Add(av, id)
             values.Add(id, av)
             id
     member _.WriteAttribute(attr: AttributeId) =
         names[attr.RootId] <- attr.RootName
         attr.Id
 
-/// Recognizes exprs of shape <@ fun p1 p2 ... -> body @>
+/// Recognizes Expr values of shape <@ fun p1 p2 ... -> body @>
 let extractExprParams (recordInfo: RecordTableInfo) (expr: Expr) =
-    let vars = new Dictionary<Var, int>()
+    let vars = Dictionary<Var, int>()
     let rec aux i expr =
         match expr with
         | Lambda(v, body) when v.Type <> recordInfo.Type ->
@@ -297,26 +296,26 @@ let extractExprParams (recordInfo: RecordTableInfo) (expr: Expr) =
 type private AttributeNode = { Value: string; Children: ResizeArray<AttributeNode> }
 /// Detects conflicts in a collection of attribute paths
 let tryFindConflictingPaths (attrs: seq<AttributeId>) =
-    let root = new ResizeArray<AttributeNode>()
+    let root = ResizeArray<AttributeNode>()
     let tryAppendPath (attr: AttributeId) =
         let tokens = attr.Tokens
         let enum = tokens.GetEnumerator()
         let mutable ctx = root
         let mutable isNodeAdded = false
         let mutable isLeafFound = false
-        let acc = new ResizeArray<_>()
+        let acc = ResizeArray<_>()
         while not isLeafFound && enum.MoveNext() do
             let t = enum.Current
             let child =
                 match ctx.FindIndex(fun n -> n.Value = t) with
                 | -1 ->
                     isNodeAdded <- true
-                    let ch = { Value = t; Children = new ResizeArray<_>() }
+                    let ch = { Value = t; Children = ResizeArray<_>() }
                     ctx.Add ch
                     ch
 
                 | i ->
-                    let ch = ctx.[i]
+                    let ch = ctx[i]
                     if ch.Children.Count = 0 then
                         isLeafFound <- true
                     ch
@@ -329,7 +328,7 @@ let tryFindConflictingPaths (attrs: seq<AttributeId>) =
             Some(concat tokens, concat acc)
         elif not isNodeAdded then
             while ctx.Count > 0 do
-                let ch = ctx.[0]
+                let ch = ctx[0]
                 acc.Add ch.Value
                 ctx <- ch.Children
 

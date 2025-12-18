@@ -65,16 +65,17 @@ module internal Streaming =
         | Streaming.Enabled svt -> StreamSpecification(StreamEnabled = true, StreamViewType = svt)
         | Streaming.Disabled -> StreamSpecification(StreamEnabled = false)
     let applyToCreateRequest (req: CreateTableRequest) (Spec spec) = req.StreamSpecification <- spec
+    let private isStreamEnabled (x: StreamSpecification)= x.StreamEnabled.GetValueOrDefault false
     let requiresUpdate (desc: TableDescription) =
         function
         | Streaming.Disabled ->
             match desc.StreamSpecification with
             | null -> false
-            | s -> s.StreamEnabled.GetValueOrDefault false
+            | s -> isStreamEnabled s
         | Streaming.Enabled svt ->
             match desc.StreamSpecification with
             | null -> true
-            | s -> not (s.StreamEnabled.GetValueOrDefault false) || s.StreamViewType <> svt
+            | s -> not (isStreamEnabled s) || s.StreamViewType <> svt
     let applyToUpdateRequest (req: UpdateTableRequest) (Spec spec) = req.StreamSpecification <- spec
 
 module internal CreateTableRequest =
@@ -263,9 +264,9 @@ type TableContext<'TRecord>
         match proj with
         | None -> ()
         | Some proj ->
-            let aw = AttributeWriter(Dictionary(), null)
-            request.ProjectionExpression <- proj.Write aw
-            request.ExpressionAttributeNames <- aw.Names
+            let writer = AttributeWriter(Dictionary(), null)
+            request.ProjectionExpression <- proj.Write writer
+            request.ExpressionAttributeNames <- writer.Names
 
         match consistentRead with
         | None -> ()
@@ -294,7 +295,7 @@ type TableContext<'TRecord>
 
         let consistentRead = defaultArg consistentRead false
         let kna = KeysAndAttributes(AttributesToGet = ResizeArray(), Keys = ResizeArray())
-        kna.AttributesToGet.AddRange(template.Info.Properties |> Seq.map (fun p -> p.Name))
+        kna.AttributesToGet.AddRange(template.Info.Properties |> Seq.map _.Name)
         kna.Keys.AddRange(keys |> Seq.map template.ToAttributeValues)
         kna.ConsistentRead <- consistentRead
         match projExpr with
@@ -581,7 +582,7 @@ type TableContext<'TRecord>
             | true, reqs ->
                 reqs
                 |> Seq.choose (fun r -> r.PutRequest |> Option.ofObj)
-                |> Seq.map (fun w -> w.Item)
+                |> Seq.map _.Item
                 |> Seq.toArray
             | false, _ -> [||]
         maybeReport
@@ -844,7 +845,7 @@ type TableContext<'TRecord>
             | true, reqs ->
                 reqs
                 |> Seq.choose (fun r -> r.DeleteRequest |> Option.ofObj)
-                |> Seq.map (fun d -> d.Key)
+                |> Seq.map _.Key
                 |> Seq.toArray
             | false, _ -> [||]
         maybeReport
@@ -873,7 +874,7 @@ type TableContext<'TRecord>
         ) : Async<'TRecord[]> =
         async {
 
-            let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+            let filterCondition = filterCondition |> Option.map _.Conditional
             let! downloaded = queryAsync keyCondition.Conditional filterCondition None limit consistentRead scanIndexForward
             return downloaded |> Seq.map template.OfAttributeValues |> Seq.toArray
         }
@@ -922,7 +923,7 @@ type TableContext<'TRecord>
         ) : Async<'TProjection[]> =
         async {
 
-            let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+            let filterCondition = filterCondition |> Option.map _.Conditional
             let! downloaded = queryAsync keyCondition.Conditional filterCondition None limit consistentRead scanIndexForward
             return downloaded |> Seq.map projection.UnPickle |> Seq.toArray
         }
@@ -979,7 +980,7 @@ type TableContext<'TRecord>
         ) : Async<PaginatedResult<'TRecord, IndexKey>> =
         async {
 
-            let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+            let filterCondition = filterCondition |> Option.map _.Conditional
             let! downloaded, lastEvaluatedKey =
                 queryPaginatedAsync
                     keyCondition.Conditional
@@ -1048,7 +1049,7 @@ type TableContext<'TRecord>
         ) : Async<PaginatedResult<'TProjection, IndexKey>> =
         async {
 
-            let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+            let filterCondition = filterCondition |> Option.map _.Conditional
             let! downloaded, lastEvaluatedKey =
                 queryPaginatedAsync
                     keyCondition.Conditional
@@ -1104,7 +1105,7 @@ type TableContext<'TRecord>
     /// <param name="limit">Maximum number of items to evaluate.</param>
     /// <param name="consistentRead">Specify whether to perform consistent read operation.</param>
     member _.ScanAsync(?filterCondition: ConditionExpression<'TRecord>, ?limit: int, ?consistentRead: bool) : Async<'TRecord[]> = async {
-        let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+        let filterCondition = filterCondition |> Option.map _.Conditional
         let! downloaded = scanAsync filterCondition None limit consistentRead
         return downloaded |> Seq.map template.OfAttributeValues |> Seq.toArray
     }
@@ -1137,7 +1138,7 @@ type TableContext<'TRecord>
             ?consistentRead: bool
         ) : Async<'TProjection[]> =
         async {
-            let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+            let filterCondition = filterCondition |> Option.map _.Conditional
             let! downloaded = scanAsync filterCondition (Some projection.ProjectionExpr) limit consistentRead
             return downloaded |> Seq.map projection.UnPickle |> Seq.toArray
         }
@@ -1182,7 +1183,7 @@ type TableContext<'TRecord>
             ?consistentRead: bool
         ) : Async<PaginatedResult<'TRecord, TableKey>> =
         async {
-            let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+            let filterCondition = filterCondition |> Option.map _.Conditional
             let! downloaded, lastEvaluatedKey =
                 scanPaginatedAsync filterCondition None (LimitType.DefaultOrCount limit) exclusiveStartKey consistentRead
             return
@@ -1227,7 +1228,7 @@ type TableContext<'TRecord>
             ?consistentRead: bool
         ) : Async<PaginatedResult<'TProjection, TableKey>> =
         async {
-            let filterCondition = filterCondition |> Option.map (fun fc -> fc.Conditional)
+            let filterCondition = filterCondition |> Option.map _.Conditional
             let! downloaded, lastEvaluatedKey =
                 scanPaginatedAsync
                     filterCondition
@@ -1337,11 +1338,11 @@ type TableContext<'TRecord>
         Transaction(client, ?metricsCollector = metricsCollector)
 
 /// <summary>
-///    Represents a transactional set of operations to be applied atomically to a arbitrary number of DynamoDB tables.
+///    Represents a transactional set of operations to be applied atomically to an arbitrary number of DynamoDB tables.
 /// </summary>
 /// <param name="client">DynamoDB client instance</param>
 /// <param name="metricsCollector">Function to receive request metrics.</param>
-and Transaction(client: IAmazonDynamoDB, ?metricsCollector: (RequestMetrics -> unit)) =
+and Transaction(client: IAmazonDynamoDB, ?metricsCollector: RequestMetrics -> unit) =
     let transactionItems = ResizeArray<TransactWriteItem>()
 
     let reportMetrics collector (tableName: string) (operation: Operation) (consumedCapacity: ConsumedCapacity list) (itemCount: int) =
@@ -1455,7 +1456,7 @@ and Transaction(client: IAmazonDynamoDB, ?metricsCollector: (RequestMetrics -> u
         maybeReport
         |> Option.iter (fun r ->
             response.ConsumedCapacity
-            |> Seq.groupBy (fun x -> x.TableName)
+            |> Seq.groupBy _.TableName
             |> Seq.iter (fun (tableName, consumedCapacity) ->
                 r tableName Operation.TransactWriteItems (Seq.toList consumedCapacity) (Seq.length transactionItems)))
         if response.HttpStatusCode <> HttpStatusCode.OK then

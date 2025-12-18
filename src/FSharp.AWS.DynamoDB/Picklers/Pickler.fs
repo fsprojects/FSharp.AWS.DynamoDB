@@ -55,7 +55,7 @@ type Pickler() =
     /// True if DynamoDB representation preserves
     /// comparison semantics for query expressions
     abstract IsComparable: bool
-    default __.IsComparable = false
+    default _.IsComparable = false
 
     /// True if scalar DynamoDB instance
     member __.IsScalar =
@@ -85,7 +85,7 @@ type Pickler<'T>() =
     /// UnPickle value from AttributeValue instance
     abstract UnPickle: AttributeValue -> 'T
 
-    override __.Type = typeof<'T>
+    override _.Type = typeof<'T>
     override __.DefaultValueUntyped = __.DefaultValue :> obj
     override __.PickleUntyped o = __.Pickle(o :?> 'T)
     override __.UnPickleUntyped av = __.UnPickle av :> obj
@@ -120,7 +120,7 @@ type IPicklerResolver =
 
 let inline invalidCast (av: AttributeValue) : 'T =
     let msg = sprintf "could not convert value %A to type '%O'" (av.Print()) typeof<'T>
-    raise <| new InvalidCastException(msg)
+    raise <| InvalidCastException(msg)
 
 let getElemPickler (pickler: Pickler) = (unbox<ICollectionPickler> pickler).ElementPickler
 
@@ -131,4 +131,4 @@ type UnSupportedType =
             | None -> sprintf "unsupported record field type '%O'" fieldType
             | Some r -> sprintf "unsupported record field type '%O': %s" fieldType r
 
-        raise <| new ArgumentException(message)
+        raise <| ArgumentException(message)

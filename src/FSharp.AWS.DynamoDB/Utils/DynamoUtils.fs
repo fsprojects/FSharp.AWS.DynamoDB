@@ -21,7 +21,7 @@ type AttributeValueComparer() =
             let mutable areEqual = true
             let mutable i = 0
             while areEqual && i < ra.Count do
-                areEqual <- ra.[i] = ra'.[i]
+                areEqual <- ra[i] = ra'[i]
                 i <- i + 1
 
             areEqual
@@ -89,31 +89,32 @@ type AttributeValueComparer() =
     static member GetHashCode av = getAttributeValueHashCode av
 
     interface IEqualityComparer<AttributeValue> with
-        member __.Equals(l, r) = areEqualAttributeValues l r
-        member __.GetHashCode av = getAttributeValueHashCode av
+        member _.Equals(l, r) = areEqualAttributeValues l r
+        member _.GetHashCode av = getAttributeValueHashCode av
 
 /// Struct AttributeValue wrapper with modified equality semantics
 [<Struct; CustomEquality; NoComparison>]
 type AttributeValueEqWrapper(av: AttributeValue) =
-    member __.AttributeValue = av
-    override __.Equals(o) =
+    member _.AttributeValue = av
+    override _.Equals(o) =
         match o with
         | :? AttributeValueEqWrapper as av' -> AttributeValueComparer.Equals(av, av')
         | _ -> false
 
-    override __.GetHashCode() = AttributeValueComparer.GetHashCode av
+    override _.GetHashCode() = AttributeValueComparer.GetHashCode av
 
-let inline wrap av = new AttributeValueEqWrapper(av)
+let inline wrap av = AttributeValueEqWrapper(av)
 let inline unwrap (avw: AttributeValueEqWrapper) = avw.AttributeValue
 
 type AttributeValue with
 
+    member inline x.IsNULL = x.NULL.GetValueOrDefault false 
     member inline av.IsSSSet = av.SS.Count > 0
     member inline av.IsNSSet = av.NS.Count > 0
     member inline av.IsBSSet = av.BS.Count > 0
 
     member av.Print() =
-        if av.NULL.GetValueOrDefault false then
+        if av.IsNULL then
             "{ NULL = true }"
         elif av.IsBOOLSet then
             sprintf "{ BOOL = %b }" (av.BOOL.GetValueOrDefault false)
@@ -128,9 +129,9 @@ type AttributeValue with
         elif av.NS.Count > 0 then
             sprintf "{ SN = %A }" (Seq.toArray av.NS)
         elif av.BS.Count > 0 then
-            av.BS |> Seq.map (fun bs -> bs.ToArray()) |> Seq.toArray |> sprintf "{ BS = %A }"
+            av.BS |> Seq.map _.ToArray() |> Seq.toArray |> sprintf "{ BS = %A }"
         elif av.IsLSet then
-            av.L |> Seq.map (fun av -> av.Print()) |> Seq.toArray |> sprintf "{ L = %A }"
+            av.L |> Seq.map _.Print() |> Seq.toArray |> sprintf "{ L = %A }"
         elif av.IsMSet then
             av.M |> Seq.map (fun kv -> (kv.Key, kv.Value.Print())) |> Seq.toArray |> sprintf "{ M = %A }"
         else

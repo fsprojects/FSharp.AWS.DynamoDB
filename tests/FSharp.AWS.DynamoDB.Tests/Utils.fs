@@ -35,7 +35,7 @@ module Utils =
             UpdateItemRequest(
                 TableName = table.TableName,
                 Key = keyAttr,
-                AttributeUpdates = Dictionary(Map.ofSeq [ attribute, new AttributeValueUpdate(Action = AttributeAction.DELETE) ])
+                AttributeUpdates = Dictionary(Map [ attribute, AttributeValueUpdate(Action = AttributeAction.DELETE) ])
             )
         )
         |> Async.AwaitTask

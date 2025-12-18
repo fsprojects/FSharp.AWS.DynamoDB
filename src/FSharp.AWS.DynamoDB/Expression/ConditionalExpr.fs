@@ -144,7 +144,7 @@ let extractKeyCondition (qExpr: QueryExpr) =
         | None ->
             hk.KeySchemata
             |> Array.tryPick (function
-                | (ks, KeyType.Hash) -> Some ks
+                | ks, KeyType.Hash -> Some ks
                 | _ -> None)
         | Some rk ->
             Seq.joinBy (fun (ks, kt) (ks', kt') -> kt = KeyType.Hash && kt' = KeyType.Range && ks = ks') hk.KeySchemata rk.KeySchemata
@@ -163,7 +163,7 @@ let ensureNotTautological query =
 let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExpression =
     if not expr.IsClosed then
         invalidArg "expr" "supplied query is not a closed expression."
-    let invalidQuery () = invalidArg "expr" <| sprintf "Supplied expression is not a valid conditional."
+    let invalidQuery () = invalidArg "expr" "Supplied expression is not a valid conditional."
 
     let nParams, (|PVar|_|), expr' = extractExprParams recordInfo expr
 
@@ -233,12 +233,12 @@ let extractQueryExpr (recordInfo: RecordTableInfo) (expr: Expr) : ConditionalExp
         let (|Comparison|_|) (pat: Expr) (expr: Expr) =
             match expr with
             | SpecificCall pat (None, _, args) ->
-                let pickler = args |> List.tryPick (|AttributeGet|_|) |> Option.map (fun attr -> attr.Pickler)
+                let pickler = args |> List.tryPick (|AttributeGet|_|) |> Option.map _.Pickler
                 let operands = args |> List.map (extractOperand pickler)
                 let pickler =
                     match pickler with
                     | Some p -> p
-                    | None -> Pickler.resolveUntyped args.[0].Type
+                    | None -> Pickler.resolveUntyped args[0].Type
                 Some(pickler, operands)
 
             | _ -> None
@@ -354,7 +354,7 @@ let applyParams (cond: ConditionalExpression) (inputValues: obj[]) =
     let applyOperand (op: Operand) =
         match op with
         | Param(i, pickler) ->
-            match pickler.PickleCoerced inputValues.[i] with
+            match pickler.PickleCoerced inputValues[i] with
             | Some av -> Value(wrap av)
             | None -> Undefined
 
@@ -396,7 +396,7 @@ let applyParams (cond: ConditionalExpression) (inputValues: obj[]) =
 
 /// prints a query expression to string recognizable by the DynamoDB APIs
 let writeConditionExpression (writer: AttributeWriter) (cond: ConditionalExpression) =
-    let sb = new System.Text.StringBuilder()
+    let sb = System.Text.StringBuilder()
     let inline (!) (p: string) = sb.Append p |> ignore
     let inline writeOp o =
         match o with
@@ -411,12 +411,12 @@ let writeConditionExpression (writer: AttributeWriter) (cond: ConditionalExpress
 
     let writeOps (ops: Operand array) =
         if ops.Length = 1 then
-            writeOp ops.[0]
+            writeOp ops[0]
         else
             for i = 0 to ops.Length - 2 do
-                writeOp ops.[i]
+                writeOp ops[i]
                 ! ", "
-            writeOp ops.[ops.Length - 1]
+            writeOp ops[ops.Length - 1]
 
 
     let inline writeCmp cmp =
