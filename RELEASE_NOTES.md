@@ -1,5 +1,6 @@
 ### 0.13.0-beta
-* Targeted `AWSSDK.DynamoDBv2` v4 [#86](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/86)
+* Updated `AWSSDK.DynamoDBv2` dependency to `4.0.10.4` [#86](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/86).
+* (breaking) NOTE [the underlying dependency change may trigger breaking changes to your application](https://docs.aws.amazon.com/sdk-for-net/v4/developer-guide/net-dg-v4.html) that can impact your application either as compile-time errors (if your system has low-level calls not using this library), or runtime exceptions (if you have external logic that falls foul of the V4 SDK `List`/`Dictionary` behavior changes)
 ### 0.12.3-beta
 * Removed erroneous `Dotnet.Reproduciblebuilds` dependency [#75](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/75)
 ### 0.12.2-beta
