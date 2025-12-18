@@ -255,7 +255,7 @@ type AttributeWriter(names: Dictionary<string, string>, values: Dictionary<strin
 
     new() = AttributeWriter(Dictionary(), Dictionary())
 
-    member _.Names= if names.Count = 0 then null else names
+    member _.Names = if names.Count = 0 then null else names
     member _.Values = if values.Count = 0 then null else values
 
     member _.WriteValue(av: AttributeValue) =

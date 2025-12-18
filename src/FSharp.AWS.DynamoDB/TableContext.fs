@@ -65,7 +65,7 @@ module internal Streaming =
         | Streaming.Enabled svt -> StreamSpecification(StreamEnabled = true, StreamViewType = svt)
         | Streaming.Disabled -> StreamSpecification(StreamEnabled = false)
     let applyToCreateRequest (req: CreateTableRequest) (Spec spec) = req.StreamSpecification <- spec
-    let private isStreamEnabled (x: StreamSpecification)= x.StreamEnabled.GetValueOrDefault false
+    let private isStreamEnabled (x: StreamSpecification) = x.StreamEnabled.GetValueOrDefault false
     let requiresUpdate (desc: TableDescription) =
         function
         | Streaming.Disabled ->

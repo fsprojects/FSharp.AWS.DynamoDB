@@ -23,7 +23,7 @@ module Utils =
 
     let shouldFailwith<'T, 'Exn when 'Exn :> exn> (f: unit -> 'T) = <@ f () |> ignore @> |> raises<'Exn>
 
-    let getDynamoDBAccount ()=
+    let getDynamoDBAccount () =
         let credentials = BasicAWSCredentials("Fake", "Fake")
         let config = AmazonDynamoDBConfig(ServiceURL = "http://localhost:8000")
 
