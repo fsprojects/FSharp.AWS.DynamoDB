@@ -408,7 +408,7 @@ let writeUpdateExpression (writer: AttributeWriter) (uops: UpdateOperations) =
     let sb = new System.Text.StringBuilder()
     let inline (!) (s: string) = sb.Append s |> ignore
 
-    let inline writeAttr attr = !(writer.WriteAttibute attr)
+    let inline writeAttr attr = !(writer.WriteAttribute attr)
     let inline writeVal v = !(writer.WriteValue(unwrap v))
 
     let writeOp op =
@@ -494,7 +494,7 @@ type UpdateOperations with
     member uops.Write(writer: AttributeWriter) = writeUpdateExpression writer uops
 
     member uops.GetDebugData() =
-        let aw = new AttributeWriter()
+        let aw = AttributeWriter()
         let expr = writeUpdateExpression aw uops
         let names = aw.Names |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
         let values = aw.Values |> Seq.map (fun kv -> kv.Key, kv.Value.Print()) |> Seq.toList

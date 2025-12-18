@@ -247,19 +247,18 @@ type QuotedAttribute =
 
         extractProps [] e
 
-/// Wrapper API for writing attribute names and values for Dynamo query expressions
+/// Wrapper API for writing attribute names and values for Dynamo query, update and condition expressions
+/// Responsible for generating unique placeholders for attribute names and values
 type AttributeWriter(names: Dictionary<string, string>, values: Dictionary<string, AttributeValue>) =
-    let names = if names = null then Dictionary() else names
-    let values = if values = null then Dictionary() else values
     static let cmp = new AttributeValueComparer()
     let vcontents = new Dictionary<AttributeValue, string>(cmp)
 
     new() = AttributeWriter(Dictionary(), Dictionary())
 
-    member __.Names = names
-    member __.Values = values
+    member _.Names= if names.Count = 0 then null else names
+    member _.Values = if values.Count = 0 then null else values
 
-    member __.WriteValue(av: AttributeValue) =
+    member _.WriteValue(av: AttributeValue) =
         let ok, found = vcontents.TryGetValue av
         if ok then
             found
@@ -268,9 +267,8 @@ type AttributeWriter(names: Dictionary<string, string>, values: Dictionary<strin
             vcontents.Add(av, id)
             values.Add(id, av)
             id
-
-    member __.WriteAttibute(attr: AttributeId) =
-        names.[attr.RootId] <- attr.RootName
+    member _.WriteAttribute(attr: AttributeId) =
+        names[attr.RootId] <- attr.RootName
         attr.Id
 
 /// Recognizes exprs of shape <@ fun p1 p2 ... -> body @>

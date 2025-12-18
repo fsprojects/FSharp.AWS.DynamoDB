@@ -143,12 +143,12 @@ type ProjectionExpr =
         for attr in __.Attributes do
             if isFirst then isFirst <- false else ! ", "
 
-            !(writer.WriteAttibute attr)
+            !(writer.WriteAttribute attr)
 
         sb.ToString()
 
     member __.GetDebugData() =
-        let aw = new AttributeWriter()
+        let aw = AttributeWriter()
         let expr = __.Write(aw)
         let names = aw.Names |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
         expr, names

@@ -403,10 +403,10 @@ let writeConditionExpression (writer: AttributeWriter) (cond: ConditionalExpress
         | Undefined -> invalidOp "internal error: attempting to reference undefined value in query expression."
         | Param _ -> invalidOp "internal error: attempting to reference parameter value in query expression."
         | Value v -> !(writer.WriteValue(unwrap v))
-        | Attribute a -> !(writer.WriteAttibute a)
+        | Attribute a -> !(writer.WriteAttribute a)
         | SizeOf a ->
             ! "( size ( "
-            !(writer.WriteAttibute a)
+            !(writer.WriteAttribute a)
             ! " ))"
 
     let writeOps (ops: Operand array) =
@@ -464,23 +464,23 @@ let writeConditionExpression (writer: AttributeWriter) (cond: ConditionalExpress
             ! " )"
         | BeginsWith(attr, op) ->
             ! "( begins_with ( "
-            !(writer.WriteAttibute attr)
+            !(writer.WriteAttribute attr)
             ! ", "
             writeOp op
             ! " ))"
         | Contains(attr, op) ->
             ! "( contains ( "
-            !(writer.WriteAttibute attr)
+            !(writer.WriteAttribute attr)
             ! ", "
             writeOp op
             ! " ))"
         | Attribute_Exists attr ->
             ! "( attribute_exists ( "
-            !(writer.WriteAttibute attr)
+            !(writer.WriteAttribute attr)
             ! "))"
         | Attribute_Not_Exists attr ->
             ! "( attribute_not_exists ( "
-            !(writer.WriteAttibute attr)
+            !(writer.WriteAttribute attr)
             ! "))"
         | In(op, ops) ->
             ! "("
@@ -524,7 +524,7 @@ type ConditionalExpression with
         | None -> None
 
     member cond.GetDebugData() =
-        let aw = new AttributeWriter()
+        let aw = AttributeWriter()
         let expr = writeConditionExpression aw cond
         let names = aw.Names |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
         let values = aw.Values |> Seq.map (fun kv -> kv.Key, kv.Value.Print()) |> Seq.toList
