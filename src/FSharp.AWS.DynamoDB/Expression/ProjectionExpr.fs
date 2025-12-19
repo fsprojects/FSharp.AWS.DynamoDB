@@ -47,7 +47,7 @@ type AttributeId with
                     if i < 0 || i >= av.L.Count then
                         sprintf "Indexed path '%s' out of range." id.Name |> ArgumentOutOfRangeException |> raise
                     else
-                        aux result tl av.L.[i]
+                        aux result tl av.L[i]
                 else
                     av.Print() |> sprintf "Expected list, but was '%s'." |> InvalidCastException |> raise
 
@@ -107,8 +107,8 @@ type ProjectionExpr =
                         | _ -> invalidExpr ())
                     |> Seq.toArray
 
-                let attrs = qAttrs |> Array.map (fun qa -> qa.Id)
-                let picklers = qAttrs |> Array.map (fun qa -> qa.Pickler)
+                let attrs = qAttrs |> Array.map _.Id
+                let picklers = qAttrs |> Array.map _.Pickler
 
                 // check for conflicting projection attributes
                 match tryFindConflictingPaths attrs with
@@ -123,11 +123,11 @@ type ProjectionExpr =
                     let values = Array.zeroCreate<obj> attrs.Length
                     for i = 0 to attrs.Length - 1 do
                         let mutable av = null
-                        let ok = attrs.[i].View(ro, &av)
+                        let ok = attrs[i].View(ro, &av)
                         if ok then
-                            values.[i] <- picklers.[i].UnPickleUntyped av
+                            values[i] <- picklers[i].UnPickleUntyped av
                         else
-                            values.[i] <- picklers.[i].DefaultValueUntyped
+                            values[i] <- picklers[i].DefaultValueUntyped
 
                     tupleCtor values
 
@@ -137,18 +137,18 @@ type ProjectionExpr =
         | _ -> invalidExpr ()
 
     member __.Write(writer: AttributeWriter) =
-        let sb = new System.Text.StringBuilder()
+        let sb = System.Text.StringBuilder()
         let inline (!) (x: string) = sb.Append x |> ignore
         let mutable isFirst = true
         for attr in __.Attributes do
             if isFirst then isFirst <- false else ! ", "
 
-            !(writer.WriteAttibute attr)
+            !(writer.WriteAttribute attr)
 
         sb.ToString()
 
     member __.GetDebugData() =
-        let aw = new AttributeWriter()
+        let aw = AttributeWriter()
         let expr = __.Write(aw)
         let names = aw.Names |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
         expr, names

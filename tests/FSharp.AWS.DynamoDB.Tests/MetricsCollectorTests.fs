@@ -45,7 +45,7 @@ type TestCollector() =
 
     member _.Clear() = metrics.Clear()
 
-let (|TotalCu|): ConsumedCapacity list -> float = Seq.sumBy (fun c -> c.CapacityUnits)
+let (|TotalCu|): ConsumedCapacity list -> float = Seq.sumBy (fun c -> c.CapacityUnits.GetValueOrDefault 0)
 
 /// Tests without common setup
 type Tests(fixture: TableFixture) =

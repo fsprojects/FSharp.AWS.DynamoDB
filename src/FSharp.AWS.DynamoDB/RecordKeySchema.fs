@@ -28,14 +28,15 @@ type PrimaryKeyStructure =
 /// Used for compatibility comparisons
 [<Sealed; StructuredFormatDisplay("{StructuredFormatDisplay}")>]
 type TableKeySchemata(schemata: TableKeySchema[]) =
-    let schemata = schemata |> Array.sortBy (fun s -> s.Type)
-    member __.Schemata = schemata
-    override __.Equals y =
+    let schemata = schemata |> Array.sortBy _.Type
+
+    member _.Schemata = schemata
+    override _.Equals y =
         match y with
         | :? TableKeySchemata as kss -> schemata = kss.Schemata
         | _ -> false
-    override __.GetHashCode() = hash schemata
-    member private __.StructuredFormatDisplay = sprintf "%A" schemata
+    override _.GetHashCode() = hash schemata
+    member private _.StructuredFormatDisplay = sprintf "%A" schemata
     override __.ToString() = __.StructuredFormatDisplay
 
 /// Infered key schema metadata for an F# record
@@ -59,7 +60,7 @@ type PrimaryKeyStructure with
 
     /// Converts given TableKey to AttributeValue form
     static member ToAttributeValues(keyStructure: PrimaryKeyStructure, key: TableKey) =
-        let dict = new Dictionary<string, AttributeValue>()
+        let dict = Dictionary<string, AttributeValue>()
         let extractKey name (pickler: Pickler) (value: obj) =
             if isNull value then
                 invalidArg name "Key value was not specified."
@@ -133,7 +134,7 @@ type KeyAttributeSchema with
             invalidArg name <| sprintf "Unsupported type '%O' for DynamoDB Key attribute." pickler.Type
 
         if pickler.PicklerType = PicklerType.Wrapper && not allowNull then
-            invalidArg name <| "DynamoDB Primary Key attributes can't be nullable or option"
+            invalidArg name "DynamoDB Primary Key attributes can't be nullable or option"
 
         let keyType =
             match pickler.PickleType with
@@ -180,7 +181,7 @@ type RecordTableInfo with
             | _ -> None
 
 
-        let primaryKey = ref None
+        let mutable primaryKey = None
         let extractKeySchema (kst: KeySchemaType) (attributes: seq<PropertyMetadata * KeyType * KeySchemaType>) =
             let groupedAttrs =
                 attributes
@@ -193,7 +194,7 @@ type RecordTableInfo with
             | PrimaryKey, _ ->
                 let setResult (pks: PrimaryKeyStructure) =
                     let ks = TableKeySchema.OfKeyStructure pks
-                    primaryKey := Some(pks, ks)
+                    primaryKey <- Some(pks, ks)
                     ks
 
                 match hkcaOpt, rkcaOpt, groupedAttrs with
@@ -226,7 +227,7 @@ type RecordTableInfo with
                 | _ -> invalidArg (string typeof<'T>) "Invalid combination of HashKey and RangeKey attributes."
 
             | LocalSecondaryIndex _, [| (KeyType.Range, rk) |] ->
-                match !primaryKey with
+                match primaryKey with
                 | None -> "Does not specify a HashKey attribute." |> invalidArg (string typeof<'T>)
                 | Some(_, ks) when Option.isNone ks.RangeKey ->
                     "LocalSecondaryIndex tables must specify a primary RangeKey" |> invalidArg (string typeof<'T>)
@@ -260,7 +261,7 @@ type RecordTableInfo with
             |> Seq.map (fun (ty, attributes) -> extractKeySchema ty attributes)
             |> Seq.toArray
 
-        match !primaryKey with
+        match primaryKey with
         | None -> "Does not specify a HashKey attribute." |> invalidArg (string typeof<'T>)
         | Some(pkStruct, pkSchema) ->
 
@@ -284,7 +285,7 @@ type RecordTableInfo with
           PrimaryKeyStructure = pkStruct
           PrimaryKeySchema = pkSchema
           PropertySchemata = propSchema
-          Schemata = new TableKeySchemata(schemata) }
+          Schemata = TableKeySchemata(schemata) }
 
     member info.GetPropertySchemata(propName: string) = defaultArg (info.PropertySchemata.TryFind propName) [||]
 
@@ -326,7 +327,7 @@ type RecordTableInfo with
                 invalidArg ks.AttributeName "Key value was not specified."
             let meta = recordInfo.Properties |> Array.find (fun p -> p.Name = ks.AttributeName)
             let av = meta.Pickler.PickleUntyped value |> Option.get
-            dict.[ks.AttributeName] <- av
+            dict[ks.AttributeName] <- av
 
         match indexKeySchema with
         | { Type = PrimaryKey } -> ()
@@ -383,40 +384,44 @@ type TableKeySchemata with
 
         TableKeySchemata(
             [| yield primaryKey
-               yield! td.GlobalSecondaryIndexes |> Seq.map mkGlobalSecondaryIndex
-               yield! td.LocalSecondaryIndexes |> Seq.map mkLocalSecondaryIndex |]
+               if td.GlobalSecondaryIndexes <> null then
+                   yield! td.GlobalSecondaryIndexes |> Seq.map mkGlobalSecondaryIndex
+               if td.LocalSecondaryIndexes <> null then
+                   yield! td.LocalSecondaryIndexes |> Seq.map mkLocalSecondaryIndex |]
         )
 
     /// Applies the settings implied by the schema to the supplied CreateTableRequest
     member schema.ApplyToCreateTableRequest(ctr: CreateTableRequest) =
         let inline mkKSE n t = KeySchemaElement(n, t)
 
-        let keyAttrs = new Dictionary<string, KeyAttributeSchema>()
+        let keyAttrs = Dictionary<string, KeyAttributeSchema>()
         for tks in schema.Schemata do
-            keyAttrs.[tks.HashKey.AttributeName] <- tks.HashKey
-            tks.RangeKey |> Option.iter (fun rk -> keyAttrs.[rk.AttributeName] <- rk)
+            keyAttrs[tks.HashKey.AttributeName] <- tks.HashKey
+            tks.RangeKey |> Option.iter (fun rk -> keyAttrs[rk.AttributeName] <- rk)
 
             match tks.Type with
             | PrimaryKey ->
+                if ctr.KeySchema = null then ctr.KeySchema <- ResizeArray()
                 ctr.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
                 tks.RangeKey |> Option.iter (fun rk -> ctr.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
 
             | GlobalSecondaryIndex name ->
-                let gsi = new GlobalSecondaryIndex()
-                gsi.IndexName <- name
+                let gsi = new GlobalSecondaryIndex(IndexName = name, KeySchema = ResizeArray())
                 gsi.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
                 tks.RangeKey |> Option.iter (fun rk -> gsi.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
                 gsi.Projection <- Projection(ProjectionType = ProjectionType.ALL)
+                if ctr.GlobalSecondaryIndexes = null then ctr.GlobalSecondaryIndexes <- ResizeArray()
                 ctr.GlobalSecondaryIndexes.Add gsi
 
             | LocalSecondaryIndex name ->
-                let lsi = new LocalSecondaryIndex()
-                lsi.IndexName <- name
+                let lsi = new LocalSecondaryIndex(IndexName = name, KeySchema = ResizeArray())
                 lsi.KeySchema.Add <| mkKSE tks.HashKey.AttributeName KeyType.HASH
                 tks.RangeKey |> Option.iter (fun rk -> lsi.KeySchema.Add <| mkKSE rk.AttributeName KeyType.RANGE)
                 lsi.Projection <- Projection(ProjectionType = ProjectionType.ALL)
+                if ctr.LocalSecondaryIndexes = null then ctr.LocalSecondaryIndexes <- ResizeArray()
                 ctr.LocalSecondaryIndexes.Add lsi
 
         for attr in keyAttrs.Values do
             let ad = AttributeDefinition(attr.AttributeName, attr.KeyType)
+            if ctr.AttributeDefinitions = null then ctr.AttributeDefinitions <- ResizeArray()
             ctr.AttributeDefinitions.Add ad

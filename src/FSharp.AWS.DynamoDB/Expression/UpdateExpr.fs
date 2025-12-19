@@ -141,7 +141,7 @@ type UpdateOperation with
 let extractRecordExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : IntermediateUpdateExprs =
     if not expr.IsClosed then
         invalidArg "expr" "supplied update expression contains free variables."
-    let invalidExpr () = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
+    let invalidExpr () = invalidArg "expr" "Supplied expression is not a valid update expression."
 
     let nParams, pRecognizer, expr' = extractExprParams recordInfo expr
 
@@ -156,10 +156,10 @@ let extractRecordExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Inter
         let bindings, assignments = stripBindings Map.empty body
 
         let tryExtractValueExpr (i: int) (assignment: Expr) =
-            let rp = recordInfo.Properties.[i]
+            let rp = recordInfo.Properties[i]
             match assignment with
             | PropertyGet(Some(Var y), prop, []) when r = y && rp.PropertyInfo = prop -> None
-            | Var v when bindings.ContainsKey v -> Some(Root(rp, recordInfo.GetPropertySchemata rp.Name), bindings.[v])
+            | Var v when bindings.ContainsKey v -> Some(Root(rp, recordInfo.GetPropertySchemata rp.Name), bindings[v])
             | e -> Some(Root(rp, recordInfo.GetPropertySchemata rp.Name), e)
 
         let assignmentExprs = assignments |> Seq.mapi tryExtractValueExpr |> Seq.choose id |> Seq.toArray
@@ -178,7 +178,7 @@ let extractRecordExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Inter
 let extractOpExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : IntermediateUpdateExprs =
     if not expr.IsClosed then
         invalidArg "expr" "supplied update expression contains free variables."
-    let invalidExpr () = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
+    let invalidExpr () = invalidArg "expr" "Supplied expression is not a valid update expression."
 
     let nParams, (|PVar|_|), expr' = extractExprParams recordInfo expr
 
@@ -196,9 +196,9 @@ let extractOpExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Intermedi
     match expr' with
     | Lambda(r, body) when r.Type = recordInfo.Type ->
         let (|AttributeGet|_|) (e: Expr) = QuotedAttribute.TryExtract (|PVar|_|) r recordInfo e
-        let attrs = new ResizeArray<QuotedAttribute>()
-        let assignments = new ResizeArray<QuotedAttribute * Expr>()
-        let updateOps = new ResizeArray<UpdateOperation>()
+        let attrs = ResizeArray<QuotedAttribute>()
+        let assignments = ResizeArray<QuotedAttribute * Expr>()
+        let updateOps = ResizeArray<UpdateOperation>()
         let rec extract e =
             match e with
             | SpecificCall2 <@ (&&&) @> (None, _, _, [ l; r ]) ->
@@ -227,7 +227,7 @@ let extractOpExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Intermedi
 
         do extract body
 
-        match attrs |> Seq.map (fun attr -> attr.Id) |> tryFindConflictingPaths with
+        match attrs |> Seq.map _.Id |> tryFindConflictingPaths with
         | Some(p1, p2) ->
             let msg = sprintf "found conflicting paths '%s' and '%s' being accessed in update expression." p1 p2
             invalidArg "expr" msg
@@ -248,7 +248,7 @@ let extractOpExprUpdaters (recordInfo: RecordTableInfo) (expr: Expr) : Intermedi
 
 /// Completes conversion from intermediate update expression to final update operations
 let extractUpdateOps (exprs: IntermediateUpdateExprs) =
-    let invalidExpr () = invalidArg "expr" <| sprintf "Supplied expression is not a valid update expression."
+    let invalidExpr () = invalidArg "expr" "Supplied expression is not a valid update expression."
     let (|PVar|_|) = exprs.ParamRecognizer
     let (|AttributeGet|_|) (e: Expr) = QuotedAttribute.TryExtract (|PVar|_|) exprs.RVar exprs.RecordInfo e
 
@@ -368,7 +368,7 @@ let applyParams (uops: UpdateOperations) (inputValues: obj[]) =
     let applyOperand (op: Operand) =
         match op with
         | Param(i, pickler) ->
-            match pickler.PickleCoerced inputValues.[i] with
+            match pickler.PickleCoerced inputValues[i] with
             | Some av -> Value(wrap av)
             | None -> Undefined
 
@@ -405,10 +405,10 @@ let applyParams (uops: UpdateOperations) (inputValues: obj[]) =
 /// prints a set of update operations to string recognizable by the DynamoDB APIs
 let writeUpdateExpression (writer: AttributeWriter) (uops: UpdateOperations) =
 
-    let sb = new System.Text.StringBuilder()
+    let sb = System.Text.StringBuilder()
     let inline (!) (s: string) = sb.Append s |> ignore
 
-    let inline writeAttr attr = !(writer.WriteAttibute attr)
+    let inline writeAttr attr = !(writer.WriteAttribute attr)
     let inline writeVal v = !(writer.WriteValue(unwrap v))
 
     let writeOp op =
@@ -447,13 +447,13 @@ let writeUpdateExpression (writer: AttributeWriter) (uops: UpdateOperations) =
             ! "))"
 
     let isFirstGp =
-        let lastId = ref -1
+        let mutable lastId = -1
         fun (uo: UpdateOperation) ->
-            if lastId.Value = -1 then
-                lastId := uo.Id
+            if lastId = -1 then
+                lastId <- uo.Id
                 true
-            elif lastId.Value <> uo.Id then
-                lastId := uo.Id
+            elif lastId <> uo.Id then
+                lastId <- uo.Id
                 ! " "
                 true
             else
@@ -494,7 +494,7 @@ type UpdateOperations with
     member uops.Write(writer: AttributeWriter) = writeUpdateExpression writer uops
 
     member uops.GetDebugData() =
-        let aw = new AttributeWriter()
+        let aw = AttributeWriter()
         let expr = writeUpdateExpression aw uops
         let names = aw.Names |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
         let values = aw.Values |> Seq.map (fun kv -> kv.Key, kv.Value.Print()) |> Seq.toList

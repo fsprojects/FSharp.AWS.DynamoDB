@@ -21,28 +21,28 @@ type AttributeValueComparer() =
             let mutable areEqual = true
             let mutable i = 0
             while areEqual && i < ra.Count do
-                areEqual <- ra.[i] = ra'.[i]
+                areEqual <- ra[i] = ra'[i]
                 i <- i + 1
 
             areEqual
 
     static let rec areEqualAttributeValues (av: AttributeValue) (av': AttributeValue) =
-        if av.NULL then
-            av'.NULL
-        elif av.IsBOOLSet then
-            av'.IsBOOLSet && av.BOOL = av'.BOOL
+        if av.NULL.HasValue then
+            av'.NULL = av.NULL
+        elif av.BOOL.HasValue then
+            av'.BOOL = av.BOOL
         elif notNull av.S then
             notNull av'.S && av.S = av'.S
         elif notNull av.N then
             notNull av'.N && av.N = av'.N
         elif notNull av.B then
             notNull av'.B && areEqualMemoryStreams av.B av'.B
-        elif av.SS.Count > 0 then
-            av'.SS.Count > 0 && areEqualResizeArrays av.SS av'.SS
-        elif av.NS.Count > 0 then
-            av'.NS.Count > 0 && areEqualResizeArrays av.NS av'.NS
-        elif av.BS.Count > 0 then
-            av'.BS.Count > 0 && av.BS.Count = av'.BS.Count && Seq.forall2 areEqualMemoryStreams av.BS av'.BS
+        elif av.IsSSSet then
+            av'.IsSSSet && areEqualResizeArrays av.SS av'.SS
+        elif av.IsNSSet then
+            av'.IsNSSet && areEqualResizeArrays av.NS av'.NS
+        elif av.IsBSSet then
+            av'.IsBSSet && av.BS.Count = av'.BS.Count && Seq.forall2 areEqualMemoryStreams av.BS av'.BS
         elif av.IsLSet then
             av'.IsLSet && av.L.Count = av'.L.Count && Seq.forall2 areEqualAttributeValues av.L av'.L
         elif av.IsMSet then
@@ -62,7 +62,7 @@ type AttributeValueComparer() =
         h
 
     static let rec getAttributeValueHashCode (av: AttributeValue) =
-        if av.NULL then
+        if av.NULL.HasValue then
             0
         elif av.IsBOOLSet then
             hash av.BOOL
@@ -72,11 +72,11 @@ type AttributeValueComparer() =
             hash av.N
         elif notNull av.B then
             hash av.B.Length
-        elif av.SS.Count > 0 then
+        elif av.IsSSSet then
             getSeqHash hash av.SS
-        elif av.NS.Count > 0 then
+        elif av.IsNSSet then
             getSeqHash hash av.NS
-        elif av.BS.Count > 0 then
+        elif av.IsBSSet then
             av.BS |> getSeqHash (fun m -> hash m.Length)
         elif av.IsLSet then
             getSeqHash getAttributeValueHashCode av.L
@@ -89,34 +89,35 @@ type AttributeValueComparer() =
     static member GetHashCode av = getAttributeValueHashCode av
 
     interface IEqualityComparer<AttributeValue> with
-        member __.Equals(l, r) = areEqualAttributeValues l r
-        member __.GetHashCode av = getAttributeValueHashCode av
+        member _.Equals(l, r) = areEqualAttributeValues l r
+        member _.GetHashCode av = getAttributeValueHashCode av
 
 /// Struct AttributeValue wrapper with modified equality semantics
 [<Struct; CustomEquality; NoComparison>]
 type AttributeValueEqWrapper(av: AttributeValue) =
-    member __.AttributeValue = av
-    override __.Equals(o) =
+    member _.AttributeValue = av
+    override _.Equals(o) =
         match o with
         | :? AttributeValueEqWrapper as av' -> AttributeValueComparer.Equals(av, av')
         | _ -> false
 
-    override __.GetHashCode() = AttributeValueComparer.GetHashCode av
+    override _.GetHashCode() = AttributeValueComparer.GetHashCode av
 
-let inline wrap av = new AttributeValueEqWrapper(av)
+let inline wrap av = AttributeValueEqWrapper(av)
 let inline unwrap (avw: AttributeValueEqWrapper) = avw.AttributeValue
 
 type AttributeValue with
 
+    member inline x.IsNULL = x.NULL.GetValueOrDefault false 
     member inline av.IsSSSet = av.SS.Count > 0
     member inline av.IsNSSet = av.NS.Count > 0
     member inline av.IsBSSet = av.BS.Count > 0
 
     member av.Print() =
-        if av.NULL then
+        if av.IsNULL then
             "{ NULL = true }"
         elif av.IsBOOLSet then
-            sprintf "{ BOOL = %b }" av.BOOL
+            sprintf "{ BOOL = %b }" (av.BOOL.GetValueOrDefault false)
         elif av.S <> null then
             sprintf "{ S = %s }" av.S
         elif av.N <> null then
@@ -128,9 +129,9 @@ type AttributeValue with
         elif av.NS.Count > 0 then
             sprintf "{ SN = %A }" (Seq.toArray av.NS)
         elif av.BS.Count > 0 then
-            av.BS |> Seq.map (fun bs -> bs.ToArray()) |> Seq.toArray |> sprintf "{ BS = %A }"
+            av.BS |> Seq.map _.ToArray() |> Seq.toArray |> sprintf "{ BS = %A }"
         elif av.IsLSet then
-            av.L |> Seq.map (fun av -> av.Print()) |> Seq.toArray |> sprintf "{ L = %A }"
+            av.L |> Seq.map _.Print() |> Seq.toArray |> sprintf "{ L = %A }"
         elif av.IsMSet then
             av.M |> Seq.map (fun kv -> (kv.Key, kv.Value.Print())) |> Seq.toArray |> sprintf "{ M = %A }"
         else
