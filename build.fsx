@@ -46,6 +46,7 @@ let summary = "An F# wrapper over the standard Amazon.DynamoDB library"
 let gitOwner = "fsprojects"
 let gitName = "FSharp.AWS.DynamoDB"
 let gitHome = "https://github.com/" + gitOwner
+let sleetSource = "codesplice"
 
 // --------------------------------------------------------------------------------------
 // Build variables
@@ -196,15 +197,24 @@ Target.create "Push" (fun _ ->
             Source = Some "https://api.nuget.org/v3/index.json" }
     DotNet.nugetPush (fun o -> o.WithPushParams pushParams) (sprintf "%s**.*.nupkg" nugetDir))
 
+Target.create "PushInternal" (fun _ ->
+    CreateProcess.fromRawCommand "dotnet" [ "sleet"; "push"; nugetDir; "--source"; sleetSource; "--force" ]
+    |> CreateProcess.ensureExitCodeWithMessage "Error while running 'sleet push'"
+    |> Proc.run
+    |> ignore)
+
 // --------------------------------------------------------------------------------------
 // Build order
 // --------------------------------------------------------------------------------------
 Target.create "Default" DoNothing
+Target.create "ReleaseInternal" DoNothing
 Target.create "Release" DoNothing
 
 "Clean" ==> "AssemblyInfo" ==> "Restore" ==> "Build" ==> "Test" ==> "Default"
 
 "Clean" ==> "AssemblyInfo" ==> "Restore" ==> "BuildRelease" ==> "Docs"
+
+"Default" ==> "Pack" ==> "PushInternal" ==> "ReleaseInternal"
 
 "Default" ==> "Pack" ==> "ReleaseGitHub" ==> "Push" ==> "Release"
 

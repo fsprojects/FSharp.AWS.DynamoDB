@@ -13,6 +13,12 @@
       "commands": [
         "fantomas"
       ]
+    },
+    "sleet": {
+      "version": "6.5.13",
+      "commands": [
+        "sleet"
+      ]
     }
   }
 }
