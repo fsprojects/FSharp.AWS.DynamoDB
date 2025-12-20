@@ -26,7 +26,8 @@ type RecordPickler<'T>(ctor: obj[] -> obj, properties: PropertyMetadata[]) =
             let field = prop.PropertyInfo.GetValue value
             match prop.Pickler.PickleUntyped field with
             | None -> ()
-            | Some av -> values.Add(prop.Name, av)
+            | Some av when not (values.ContainsKey prop.Name) -> values.Add(prop.Name, av)
+            | Some _ -> ()
 
         values
 
