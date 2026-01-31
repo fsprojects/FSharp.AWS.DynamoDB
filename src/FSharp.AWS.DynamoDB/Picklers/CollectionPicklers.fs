@@ -13,10 +13,10 @@ open FSharp.AWS.DynamoDB
 
 type ListPickler<'List, 'T when 'List :> seq<'T>>(ctor: seq<'T> -> 'List, nullV: 'List, tp: Pickler<'T>) =
     inherit Pickler<'List>()
-    override __.PickleType = PickleType.List
-    override __.PicklerType = PicklerType.Value
-    override __.DefaultValue = ctor [||]
-    override __.PickleCoerced obj =
+    override _.PickleType = PickleType.List
+    override _.PicklerType = PicklerType.Value
+    override _.DefaultValue = ctor [||]
+    override _.PickleCoerced obj =
         match obj with
         | null -> Some <| AttributeValue(NULL = true)
         | :? 'T as t ->
@@ -32,22 +32,22 @@ type ListPickler<'List, 'T when 'List :> seq<'T>>(ctor: seq<'T> -> 'List, nullV:
 
     override __.Pickle list = __.PickleCoerced list
 
-    override __.UnPickle a =
-        if a.NULL then nullV
+    override _.UnPickle a =
+        if a.IsNULL then nullV
         elif a.IsLSet then a.L |> Seq.map tp.UnPickle |> ctor
         else invalidCast a
 
     interface ICollectionPickler with
-        member __.ElementPickler = tp :> _
+        member _.ElementPickler = tp :> _
 
 
 
 type BytesSetPickler() =
     inherit Pickler<Set<byte[]>>()
-    override __.PickleType = PickleType.BytesSet
-    override __.PicklerType = PicklerType.Value
-    override __.DefaultValue = Set.empty
-    override __.PickleCoerced obj =
+    override _.PickleType = PickleType.BytesSet
+    override _.PicklerType = PicklerType.Value
+    override _.DefaultValue = Set.empty
+    override _.PickleCoerced obj =
         match obj with
         | null -> Some <| AttributeValue(NULL = true)
         | :? (byte[]) as bs ->
@@ -69,25 +69,25 @@ type BytesSetPickler() =
 
     override __.Pickle bss = __.PickleCoerced bss
 
-    override __.UnPickle a =
-        if a.NULL then
+    override _.UnPickle a =
+        if a.IsNULL then
             Set.empty
         elif a.IsBSSet then
-            a.BS |> Seq.map (fun ms -> ms.ToArray()) |> set
+            a.BS |> Seq.map _.ToArray() |> set
         else
             invalidCast a
 
     interface ICollectionPickler with
-        member __.ElementPickler = new ByteArrayPickler() :> _
+        member _.ElementPickler = ByteArrayPickler() :> _
 
 
 
 type NumSetPickler<'T when 'T: comparison>(tp: NumRepresentablePickler<'T>) =
     inherit Pickler<Set<'T>>()
-    override __.DefaultValue = Set.empty
-    override __.PickleType = PickleType.NumberSet
-    override __.PicklerType = PicklerType.Value
-    override __.PickleCoerced obj =
+    override _.DefaultValue = Set.empty
+    override _.PickleType = PickleType.NumberSet
+    override _.PicklerType = PicklerType.Value
+    override _.PickleCoerced obj =
         match obj with
         | null -> Some <| AttributeValue(NULL = true)
         | :? 'T as t -> Some <| AttributeValue(NS = rlist [| tp.UnParse t |])
@@ -100,22 +100,22 @@ type NumSetPickler<'T when 'T: comparison>(tp: NumRepresentablePickler<'T>) =
 
     override __.Pickle set = __.PickleCoerced set
 
-    override __.UnPickle a =
-        if a.NULL then Set.empty
+    override _.UnPickle a =
+        if a.IsNULL then Set.empty
         elif a.IsNSSet then a.NS |> Seq.map tp.Parse |> set
         else invalidCast a
 
     interface ICollectionPickler with
-        member __.ElementPickler = tp :> _
+        member _.ElementPickler = tp :> _
 
 
 
 type StringSetPickler<'T when 'T: comparison>(tp: StringRepresentablePickler<'T>) =
     inherit Pickler<Set<'T>>()
-    override __.DefaultValue = Set.empty
-    override __.PickleType = PickleType.StringSet
-    override __.PicklerType = PicklerType.Value
-    override __.PickleCoerced obj =
+    override _.DefaultValue = Set.empty
+    override _.PickleType = PickleType.StringSet
+    override _.PicklerType = PicklerType.Value
+    override _.PickleCoerced obj =
         match obj with
         | null -> AttributeValue(NULL = true) |> Some
         | :? 'T as t -> AttributeValue(SS = rlist [| tp.UnParse t |]) |> Some
@@ -128,13 +128,13 @@ type StringSetPickler<'T when 'T: comparison>(tp: StringRepresentablePickler<'T>
 
     override __.Pickle set = __.PickleCoerced set
 
-    override __.UnPickle a =
-        if a.NULL then Set.empty
+    override _.UnPickle a =
+        if a.IsNULL then Set.empty
         elif a.IsSSSet then a.SS |> Seq.map tp.Parse |> set
         else invalidCast a
 
     interface ICollectionPickler with
-        member __.ElementPickler = tp :> _
+        member _.ElementPickler = tp :> _
 
 let mkSetPickler<'T when 'T: comparison> (tp: Pickler<'T>) : Pickler<Set<'T>> =
     if typeof<'T> = typeof<byte[]> then
@@ -149,10 +149,10 @@ let mkSetPickler<'T when 'T: comparison> (tp: Pickler<'T>) : Pickler<Set<'T>> =
 
 type MapPickler<'Value>(vp: Pickler<'Value>) =
     inherit Pickler<Map<string, 'Value>>()
-    override __.PickleType = PickleType.Map
-    override __.PicklerType = PicklerType.Value
-    override __.DefaultValue = Map.empty
-    override __.Pickle map =
+    override _.PickleType = PickleType.Map
+    override _.PicklerType = PicklerType.Value
+    override _.DefaultValue = Map.empty
+    override _.Pickle map =
         if isNull map then
             AttributeValue(NULL = true) |> Some
         elif map.Count = 0 then
@@ -177,8 +177,8 @@ type MapPickler<'Value>(vp: Pickler<'Value>) =
                 AttributeValue(M = m) |> Some
 
 
-    override __.UnPickle a =
-        if a.NULL then
+    override _.UnPickle a =
+        if a.IsNULL then
             Map.empty
         elif a.IsMSet then
             a.M |> Seq.map (fun kv -> kv.Key, vp.UnPickle kv.Value) |> Map.ofSeq
@@ -186,4 +186,4 @@ type MapPickler<'Value>(vp: Pickler<'Value>) =
             invalidCast a
 
     interface ICollectionPickler with
-        member __.ElementPickler = vp :> _
+        member _.ElementPickler = vp :> _

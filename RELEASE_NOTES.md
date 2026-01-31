@@ -1,10 +1,10 @@
 ### 1.0.0-alpha
 * **Breaking** Removed obsolete table creation/initialization methods (`TableContext.Create`, `TableContext.CreateAsync`, `UpdateProvisionedThroughputAsync` and `VerifyTableAsync`)
-* **Breaking** Removed `metricsCollector` - use the Activity/OpenTelemetry support for observability instead
-* **Breaking** Removed `GetItemAsync` - use `TryGetItemAsync` and unwrap if needed. Similarly changed `GetItemProjectedAsync` to `TryGetItemProjectedAsync`
+* **Breaking** Removed `metricsCollector` - use the Activity/OpenTelemetry support for observability instead (TODO: Make a call on custom vs AWS OpenTelemetry)
 
-### 0.12.4-beta
-* Added OpenTelemetry instrumentation
+### 0.13.0-beta
+* Updated `AWSSDK.DynamoDBv2` dependency to `4.0.10.4` [#86](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/86).
+* (breaking) NOTE [the underlying dependency change may trigger breaking changes to your application](https://docs.aws.amazon.com/sdk-for-net/v4/developer-guide/net-dg-v4.html) that can impact your application either as compile-time errors (if your system has low-level calls not using this library), or runtime exceptions (if you have external logic that falls foul of the V4 SDK changed `List`/`Dictionary` behavior)
 
 ### 0.12.3-beta
 * Removed erroneous `Dotnet.Reproduciblebuilds` dependency [#75](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/75)
@@ -57,7 +57,7 @@
 
 ### 0.9.4-beta
 * Moved Sync-over-Async versions of `TableContext` operations into `namespace FSharp.AWS.DynamoDB.Scripting`
-* Added `WithMetricsCollector()` copy method to allow separating metrics by context (eg by request)
+* Added `WithMetricsCollector()` copy method to allow separating metrics by context (e.g. by request)
 * Ensured metrics are reported even for failed requests
 * Added `TryGetItemAsync` (same as `GetItemAsync`, but returns `None`, instead of throwing, if an item is not present)
 * Switched test framework to Xunit, assertions to Unquote, runner to `dotnet test` 
@@ -84,7 +84,7 @@
 ### 0.8.1-beta
 * Replace deprecated AWS ProfileManager usage
 * Bumped test project netcoreapp version to 3.1
-* Fixed 'Invalid UpdateExpression' exception for precomputed Map.remove operations (#20)
+* Fixed 'Invalid UpdateExpression' exception for precomputed `Map.remove` operations (#20)
 
 ### 0.8.0-beta
 * Move to netstandard2.0.

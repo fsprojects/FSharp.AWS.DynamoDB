@@ -21,7 +21,11 @@ type BoolPickler() =
 
     override _.DefaultValue = false
     override _.Pickle b = AttributeValue(BOOL = b) |> Some
-    override _.UnPickle a = if a.IsBOOLSet then a.BOOL else invalidCast a
+    override _.UnPickle a =
+        if a.IsBOOLSet then
+            a.BOOL.GetValueOrDefault false
+        else
+            invalidCast a
 
     override _.Parse s = Boolean.Parse s
     override _.UnParse s = string s
@@ -41,7 +45,7 @@ type StringPickler() =
         |> Some
 
     override _.UnPickle a =
-        if a.NULL then null
+        if a.IsNULL then null
         elif not <| isNull a.S then a.S
         else invalidCast a
 
@@ -127,7 +131,7 @@ type ByteArrayPickler() =
         else Some <| AttributeValue(B = new MemoryStream(bs))
 
     override _.UnPickle a =
-        if a.NULL then null
+        if a.IsNULL then null
         elif not <| isNull a.B then a.B.ToArray()
         else invalidCast a
 
@@ -144,7 +148,7 @@ type MemoryStreamPickler() =
         else Some <| AttributeValue(B = m)
 
     override _.UnPickle a =
-        if a.NULL then null
+        if a.IsNULL then null
         elif notNull a.B then a.B
         else invalidCast a
 
@@ -224,7 +228,7 @@ type NullablePickler<'T when 'T: (new: unit -> 'T) and 'T :> ValueType and 'T: s
         else
             AttributeValue(NULL = true) |> Some
     override _.UnPickle a =
-        if a.NULL then
+        if a.IsNULL then
             Nullable<'T>()
         else
             new Nullable<'T>(tp.UnPickle a)
@@ -239,7 +243,7 @@ type OptionPickler<'T>(tp: Pickler<'T>) =
         match topt with
         | None -> None
         | Some t -> tp.Pickle t
-    override _.UnPickle a = if a.NULL then None else Some(tp.UnPickle a)
+    override _.UnPickle a = if a.IsNULL then None else Some(tp.UnPickle a)
     override x.PickleCoerced obj =
         match obj with
         | :? 'T as t -> tp.Pickle t

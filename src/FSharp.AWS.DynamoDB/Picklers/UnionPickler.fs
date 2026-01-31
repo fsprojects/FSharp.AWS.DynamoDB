@@ -30,10 +30,10 @@ type UnionPickler<'U>(resolver: IPicklerResolver) =
 
     let cases = ucis |> Array.map mkUCD
 
-    member __.OfUnion(union: 'U) : RestObject =
-        let values = new RestObject()
+    member _.OfUnion(union: 'U) : RestObject =
+        let values = RestObject()
         let tag = tagReader union
-        let case = cases.[tag]
+        let case = cases[tag]
         values.Add(caseAttr, AttributeValue(case.UCI.Name))
         for prop in case.Properties do
             let field = prop.PropertyInfo.GetValue union
@@ -43,8 +43,8 @@ type UnionPickler<'U>(resolver: IPicklerResolver) =
 
         values
 
-    member __.ToUnion(ro: RestObject) : 'U =
-        let notFound name = raise <| new KeyNotFoundException(sprintf "attribute %A not found." name)
+    member _.ToUnion(ro: RestObject) : 'U =
+        let notFound name = raise <| KeyNotFoundException(sprintf "attribute %A not found." name)
         let tag =
             let ok, av = ro.TryGetValue caseAttr
             if ok then
@@ -57,22 +57,22 @@ type UnionPickler<'U>(resolver: IPicklerResolver) =
         match cases |> Array.tryFind (fun c -> c.UCI.Name = tag) with
         | None ->
             let msg = sprintf "union case name %A does not correspond to type '%O'." tag typeof<'U>
-            raise <| new InvalidDataException(msg)
+            raise <| InvalidDataException(msg)
 
         | Some case ->
             let values = Array.zeroCreate<obj> case.Properties.Length
             for i = 0 to values.Length - 1 do
-                let prop = case.Properties.[i]
+                let prop = case.Properties[i]
                 let ok, av = ro.TryGetValue prop.Name
-                if ok then values.[i] <- prop.Pickler.UnPickleUntyped av
+                if ok then values[i] <- prop.Pickler.UnPickleUntyped av
                 elif prop.NoDefaultValue then notFound prop.Name
-                else values.[i] <- prop.Pickler.DefaultValueUntyped
+                else values[i] <- prop.Pickler.DefaultValueUntyped
 
             case.CaseCtor.Invoke(null, values) :?> 'U
 
-    override __.PicklerType = PicklerType.Union
-    override __.PickleType = PickleType.Map
-    override __.DefaultValue = invalidOp <| sprintf "default values not supported for unions."
+    override _.PicklerType = PicklerType.Union
+    override _.PickleType = PickleType.Map
+    override _.DefaultValue = invalidOp "default values not supported for unions."
 
     override __.Pickle(union: 'U) =
         let ro = __.OfUnion union

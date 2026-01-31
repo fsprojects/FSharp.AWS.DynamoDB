@@ -2,6 +2,7 @@ namespace FSharp.AWS.DynamoDB
 
 module internal Activity =
     open System.Diagnostics
+    open System
 
     let private activitySource = new ActivitySource "FSharp.AWS.DynamoDB"
 
@@ -42,9 +43,17 @@ module internal Activity =
 
     let addProjection (projection: string) = addTag "aws.dynamodb.projection" projection
 
-    let addCount (count: int) = addTag "aws.dynamodb.count" count
+    let addCount (count: Nullable<int>) =
+        if count.HasValue then
+            addTag "aws.dynamodb.count" count.Value
+        else
+            id
 
-    let addScannedCount (scannedCount: int) = addTag "aws.dynamodb.scanned_count" scannedCount
+    let addScannedCount (scannedCount: Nullable<int>) =
+        if scannedCount.HasValue then
+            addTag "aws.dynamodb.scanned_count" scannedCount.Value
+        else
+            id
 
     /// Starts a new activity for a DynamoDB operation named "{operation} {tableName}" (eg "GetItem MyTable").
     /// Sets the standard tags for all table operations and returns the `Activity` for further customization.
@@ -89,9 +98,9 @@ module internal Meter =
         )
 
     let recordConsumedCapacity (operation: string) (capacity: Amazon.DynamoDBv2.Model.ConsumedCapacity) =
-        if capacity <> null then
+        if capacity <> null && capacity.CapacityUnits.HasValue then
             consumedCapacity.Record(
-                capacity.CapacityUnits,
+                capacity.CapacityUnits.Value,
                 KeyValuePair("db.collection.name", capacity.TableName :> obj),
                 KeyValuePair("db.operation.name", operation :> obj)
             )

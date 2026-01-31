@@ -29,16 +29,15 @@ module Utils =
         let credentials = BasicAWSCredentials("Fake", "Fake")
         let config = AmazonDynamoDBConfig(ServiceURL = "http://localhost:8000")
 
-        new AmazonDynamoDBClient(credentials, config) :> IAmazonDynamoDB
-
+        new AmazonDynamoDBClient(credentials, config)
 
     let clearAttribute (table: TableContext<'T>) (key: TableKey) (attribute: string) =
         let keyAttr = table.Template.ToAttributeValues key
         table.Client.UpdateItemAsync(
-            new UpdateItemRequest(
+            UpdateItemRequest(
                 TableName = table.TableName,
                 Key = keyAttr,
-                AttributeUpdates = Dictionary(Map.ofSeq [ attribute, new AttributeValueUpdate(Action = AttributeAction.DELETE) ])
+                AttributeUpdates = Dictionary(Map [ attribute, AttributeValueUpdate(Action = AttributeAction.DELETE) ])
             )
         )
         |> Async.AwaitTask
@@ -73,7 +72,6 @@ module Utils =
                 | None -> null
                 | Some bs -> new MemoryStream(bs))
             |> Arb.fromGen
-
 
     type TableFixture() =
 
