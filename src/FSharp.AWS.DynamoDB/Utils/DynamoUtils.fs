@@ -7,6 +7,41 @@ open System.Text.RegularExpressions
 
 open Amazon.DynamoDBv2.Model
 
+type AttributeValue with
+
+    member inline x.IsNULL =
+        let nullable = x.NULL
+        nullable.HasValue && nullable.Value
+
+    member inline av.IsSSSet = av.SS.Count > 0
+    member inline av.IsNSSet = av.NS.Count > 0
+    member inline av.IsBSSet = av.BS.Count > 0
+
+    member av.Print() =
+        if av.IsNULL then
+            "{ NULL = true }"
+        elif av.IsBOOLSet then
+            let bool = av.BOOL
+            sprintf "{ BOOL = %b }" (bool.GetValueOrDefault false)
+        elif av.S <> null then
+            sprintf "{ S = %s }" av.S
+        elif av.N <> null then
+            sprintf "{ N = %s }" av.N
+        elif av.B <> null then
+            sprintf "{ N = %A }" (av.B.ToArray())
+        elif av.SS.Count > 0 then
+            sprintf "{ SS = %A }" (Seq.toArray av.SS)
+        elif av.NS.Count > 0 then
+            sprintf "{ SN = %A }" (Seq.toArray av.NS)
+        elif av.BS.Count > 0 then
+            av.BS |> Seq.map _.ToArray() |> Seq.toArray |> sprintf "{ BS = %A }"
+        elif av.IsLSet then
+            av.L |> Seq.map _.Print() |> Seq.toArray |> sprintf "{ L = %A }"
+        elif av.IsMSet then
+            av.M |> Seq.map (fun kv -> (kv.Key, kv.Value.Print())) |> Seq.toArray |> sprintf "{ M = %A }"
+        else
+            "{ }"
+
 type AttributeValueComparer() =
     static let areEqualMemoryStreams (m: MemoryStream) (m': MemoryStream) =
         if m.Length <> m'.Length then
@@ -27,9 +62,9 @@ type AttributeValueComparer() =
             areEqual
 
     static let rec areEqualAttributeValues (av: AttributeValue) (av': AttributeValue) =
-        if av.NULL.HasValue then
+        if av.IsNULL then
             av'.NULL = av.NULL
-        elif av.BOOL.HasValue then
+        elif av.IsBOOLSet then
             av'.BOOL = av.BOOL
         elif notNull av.S then
             notNull av'.S && av.S = av'.S
@@ -62,7 +97,7 @@ type AttributeValueComparer() =
         h
 
     static let rec getAttributeValueHashCode (av: AttributeValue) =
-        if av.NULL.HasValue then
+        if av.IsNULL then
             0
         elif av.IsBOOLSet then
             hash av.BOOL
@@ -105,37 +140,6 @@ type AttributeValueEqWrapper(av: AttributeValue) =
 
 let inline wrap av = AttributeValueEqWrapper(av)
 let inline unwrap (avw: AttributeValueEqWrapper) = avw.AttributeValue
-
-type AttributeValue with
-
-    member inline x.IsNULL = x.NULL.GetValueOrDefault false
-    member inline av.IsSSSet = av.SS.Count > 0
-    member inline av.IsNSSet = av.NS.Count > 0
-    member inline av.IsBSSet = av.BS.Count > 0
-
-    member av.Print() =
-        if av.IsNULL then
-            "{ NULL = true }"
-        elif av.IsBOOLSet then
-            sprintf "{ BOOL = %b }" (av.BOOL.GetValueOrDefault false)
-        elif av.S <> null then
-            sprintf "{ S = %s }" av.S
-        elif av.N <> null then
-            sprintf "{ N = %s }" av.N
-        elif av.B <> null then
-            sprintf "{ N = %A }" (av.B.ToArray())
-        elif av.SS.Count > 0 then
-            sprintf "{ SS = %A }" (Seq.toArray av.SS)
-        elif av.NS.Count > 0 then
-            sprintf "{ SN = %A }" (Seq.toArray av.NS)
-        elif av.BS.Count > 0 then
-            av.BS |> Seq.map _.ToArray() |> Seq.toArray |> sprintf "{ BS = %A }"
-        elif av.IsLSet then
-            av.L |> Seq.map _.Print() |> Seq.toArray |> sprintf "{ L = %A }"
-        elif av.IsMSet then
-            av.M |> Seq.map (fun kv -> (kv.Key, kv.Value.Print())) |> Seq.toArray |> sprintf "{ M = %A }"
-        else
-            "{ }"
 
 // DynamoDB Name limitations, see:
 // http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Limits.html

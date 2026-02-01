@@ -98,12 +98,14 @@ module internal Meter =
         )
 
     let recordConsumedCapacity (operation: string) (capacity: Amazon.DynamoDBv2.Model.ConsumedCapacity) =
-        if capacity <> null && capacity.CapacityUnits.HasValue then
-            consumedCapacity.Record(
-                capacity.CapacityUnits.Value,
-                KeyValuePair("db.collection.name", capacity.TableName :> obj),
-                KeyValuePair("db.operation.name", operation :> obj)
-            )
+        if capacity <> null then
+            let units = capacity.CapacityUnits
+            if units.HasValue then
+                consumedCapacity.Record(
+                    units.Value,
+                    KeyValuePair("db.collection.name", capacity.TableName :> obj),
+                    KeyValuePair("db.operation.name", operation :> obj)
+                )
 
 module internal Task =
     open System.Threading.Tasks

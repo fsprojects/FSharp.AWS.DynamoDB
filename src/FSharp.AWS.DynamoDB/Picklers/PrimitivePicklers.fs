@@ -23,7 +23,8 @@ type BoolPickler() =
     override _.Pickle b = AttributeValue(BOOL = b) |> Some
     override _.UnPickle a =
         if a.IsBOOLSet then
-            a.BOOL.GetValueOrDefault false
+            let b = a.BOOL
+            b.GetValueOrDefault false
         else
             invalidCast a
 
