@@ -1465,7 +1465,10 @@ and Transaction(client: IAmazonDynamoDB, ?metricsCollector: RequestMetrics -> un
         let! response = client.TransactWriteItemsAsync(req, ct) |> Async.AwaitTaskCorrect
         maybeReport
         |> Option.iter (fun r ->
-            response.ConsumedCapacity
+            (if isNull response.ConsumedCapacity then
+                ResizeArray()
+            else
+                response.ConsumedCapacity)
             |> Seq.groupBy _.TableName
             |> Seq.iter (fun (tableName, consumedCapacity) ->
                 r tableName Operation.TransactWriteItems (Seq.toList consumedCapacity) (Seq.length transactionItems)))
