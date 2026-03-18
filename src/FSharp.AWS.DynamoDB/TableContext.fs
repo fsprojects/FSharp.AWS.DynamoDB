@@ -280,7 +280,7 @@ type TableContext<'TRecord>
             failwithf "GetItem request returned error %O" response.HttpStatusCode
 
         if response.IsItemSet then
-            return Some response.Item
+            return Option.ofObj response.Item
         else
             return None
     }
