@@ -311,11 +311,11 @@ type TableContext<'TRecord>
         let! ct = Async.CancellationToken
         let! response = client.BatchGetItemAsync(request, ct) |> Async.AwaitTaskCorrect
         maybeReport
-        |> Option.iter (fun r -> r BatchGetItems (List.ofSeq response.ConsumedCapacity) response.Responses[tableName].Count)
+        |> Option.iter (fun r -> r BatchGetItems (if isNull response.ConsumedCapacity then [] else List.ofSeq response.ConsumedCapacity) (if isNull response.Responses then 0 else response.Responses[tableName].Count))
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "BatchGetItem request returned error %O" response.HttpStatusCode
 
-        return response.Responses[tableName]
+        return if isNull response.Responses then ResizeArray() else response.Responses[tableName]
     }
 
     let queryPaginatedAsync
