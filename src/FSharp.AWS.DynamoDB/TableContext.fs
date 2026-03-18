@@ -578,15 +578,18 @@ type TableContext<'TRecord>
         let! ct = Async.CancellationToken
         let! response = client.BatchWriteItemAsync(pbr, ct) |> Async.AwaitTaskCorrect
         let unprocessed =
-            match response.UnprocessedItems.TryGetValue tableName with
-            | true, reqs ->
-                reqs
-                |> Seq.choose (fun r -> r.PutRequest |> Option.ofObj)
-                |> Seq.map _.Item
-                |> Seq.toArray
-            | false, _ -> [||]
+            if isNull response.UnprocessedItems then
+                [||]
+            else
+                match response.UnprocessedItems.TryGetValue tableName with
+                | true, reqs ->
+                    reqs
+                    |> Seq.choose (fun r -> r.PutRequest |> Option.ofObj)
+                    |> Seq.map _.Item
+                    |> Seq.toArray
+                | false, _ -> [||]
         maybeReport
-        |> Option.iter (fun r -> r BatchWriteItems (Seq.toList response.ConsumedCapacity) (items.Length - unprocessed.Length))
+        |> Option.iter (fun r -> r BatchWriteItems (if isNull response.ConsumedCapacity then [] else Seq.toList response.ConsumedCapacity) (items.Length - unprocessed.Length))
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "BatchWriteItem put request returned error %O" response.HttpStatusCode
 
@@ -1412,7 +1415,7 @@ and Transaction(client: IAmazonDynamoDB, ?metricsCollector: RequestMetrics -> un
         let writer = AttributeWriter()
         req.UpdateExpression <- updater.UpdateOps.Write writer
         precondition |> Option.iter (fun cond -> req.ConditionExpression <- cond.Conditional.Write writer)
-        
+
         req.ExpressionAttributeNames <- writer.Names
         req.ExpressionAttributeValues <- writer.Values
         transactionItems.Add(TransactWriteItem(Update = req))
