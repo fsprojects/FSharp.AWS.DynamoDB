@@ -374,7 +374,9 @@ type TableContext<'TRecord>
                     emitMetrics ()
                     failwithf "Query request returned error %O" response.HttpStatusCode
 
-                downloaded.AddRange response.Items
+                if notNull response.Items then
+                    downloaded.AddRange response.Items
+
                 if response.LastEvaluatedKey <> null && response.LastEvaluatedKey.Count > 0 then
                     lastEvaluatedKey <- Some response.LastEvaluatedKey
                     if limit.IsDownloadIncomplete downloaded.Count then
