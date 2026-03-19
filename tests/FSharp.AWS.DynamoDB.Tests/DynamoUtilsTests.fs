@@ -13,6 +13,13 @@ open Amazon.DynamoDBv2.Model
 type ``DynamoUtils Tests``() =
 
     [<Fact>]
+    let ``AttributeValue.Print() works for NULL`` () =
+        let attributeValue = AttributeValue(NULL = true)
+        let expected = "{ NULL = true }"
+
+        test <@ attributeValue.Print() = expected @>
+
+    [<Fact>]
     let ``AttributeValue.Print() works for S`` () =
         let attributeValue = AttributeValue(S = "abc")
         let expected = "{ S = abc }"
@@ -29,7 +36,7 @@ type ``DynamoUtils Tests``() =
     [<Fact>]
     let ``AttributeValue.Print() works for B`` () =
         let attributeValue = AttributeValue(B = new MemoryStream([| 1uy; 2uy; 3uy |]))
-        let expected = "{ B = [|1; 2; 3|] }"
+        let expected = "{ B = [|1uy; 2uy; 3uy|] }"
 
         test <@ attributeValue.Print() = expected @>
 
@@ -37,6 +44,13 @@ type ``DynamoUtils Tests``() =
     let ``AttributeValue.Print() works for SS`` () =
         let attributeValue = AttributeValue(SS = ResizeArray [ "a"; "b"; "c" ])
         let expected = "{ SS = [|\"a\"; \"b\"; \"c\"|] }"
+
+        test <@ attributeValue.Print() = expected @>
+
+    [<Fact>]
+    let ``AttributeValue.Print() works for SS singleton`` () =
+        let attributeValue = AttributeValue(SS = ResizeArray [ "abc" ])
+        let expected = "{ SS = [|\"abc\"|] }"
 
         test <@ attributeValue.Print() = expected @>
 
@@ -51,14 +65,14 @@ type ``DynamoUtils Tests``() =
     let ``AttributeValue.Print() works for BS`` () =
         let attributeValue =
             AttributeValue(BS = ResizeArray [ new MemoryStream([| 1uy; 2uy; 3uy |]); new MemoryStream([| 4uy; 5uy; 6uy |]) ])
-        let expected = "{ BS = [|[|1; 2; 3|]; [|4; 5; 6|]|] }"
+        let expected = "{ BS = [|[|1uy; 2uy; 3uy|]; [|4uy; 5uy; 6uy|]|] }"
 
         test <@ attributeValue.Print() = expected @>
 
     [<Fact>]
     let ``AttributeValue.Print() works for L`` () =
         let attributeValue = AttributeValue(L = ResizeArray [ AttributeValue(S = "a"); AttributeValue(S = "b"); AttributeValue(S = "c") ])
-        let expected = "{ L = [|{ S = a }; { S = b }; { S = c }|] }"
+        let expected = "{ L = [|\"{ S = a }\"; \"{ S = b }\"; \"{ S = c }\"|] }"
 
         test <@ attributeValue.Print() = expected @>
 
@@ -73,6 +87,6 @@ type ``DynamoUtils Tests``() =
                     )
             )
 
-        let expected = "{ M = [|(\"a\", { S = 1 }); (\"b\", { S = 2 }); (\"c\", { S = 3 })|] }"
+        let expected = "{ M = [|(\"a\", \"{ S = 1 }\"); (\"b\", \"{ S = 2 }\"); (\"c\", \"{ S = 3 }\")|] }"
 
         test <@ attributeValue.Print() = expected @>
