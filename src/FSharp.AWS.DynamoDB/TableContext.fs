@@ -1467,13 +1467,9 @@ and Transaction(client: IAmazonDynamoDB, ?metricsCollector: RequestMetrics -> un
         let! response = client.TransactWriteItemsAsync(req, ct) |> Async.AwaitTaskCorrect
         maybeReport
         |> Option.iter (fun r ->
-            (if isNull response.ConsumedCapacity then
-                ResizeArray()
-            else
-                response.ConsumedCapacity)
-            |> Seq.groupBy _.TableName
-            |> Seq.iter (fun (tableName, consumedCapacity) ->
-                r tableName Operation.TransactWriteItems (Seq.toList consumedCapacity) (Seq.length transactionItems)))
+            let cc = if response.ConsumedCapacity = null then [] else Seq.toList response.ConsumedCapacity
+            for tableName, consumedCapacity in cc |> Seq.groupBy _.TableName do
+                r tableName Operation.TransactWriteItems (Seq.toList consumedCapacity) (Seq.length transactionItems))
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "TransactWriteItems request returned error %O" response.HttpStatusCode
     }
