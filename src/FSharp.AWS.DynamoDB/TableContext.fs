@@ -313,14 +313,14 @@ type TableContext<'TRecord>
         maybeReport
         |> Option.iter (fun r ->
             let cc =
-                if isNull response.ConsumedCapacity then
+                if response.ConsumedCapacity = null then
                     []
                 else
                     List.ofSeq response.ConsumedCapacity
             r
                 BatchGetItems
                 cc
-                (if isNull response.Responses then
+                (if response.Responses = null then
                      0
                  else
                      response.Responses[tableName].Count))
@@ -328,7 +328,7 @@ type TableContext<'TRecord>
             failwithf "BatchGetItem request returned error %O" response.HttpStatusCode
 
         return
-            if isNull response.Responses then
+            if response.Responses = null then
                 ResizeArray()
             else
                 response.Responses[tableName]
@@ -879,7 +879,7 @@ type TableContext<'TRecord>
         maybeReport
         |> Option.iter (fun r ->
             let cc =
-                if isNull response.ConsumedCapacity then
+                if response.ConsumedCapacity = null then
                     []
                 else
                     Seq.toList response.ConsumedCapacity
