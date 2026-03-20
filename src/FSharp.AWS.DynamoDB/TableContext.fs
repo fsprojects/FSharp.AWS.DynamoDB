@@ -582,16 +582,15 @@ type TableContext<'TRecord>
         let! ct = Async.CancellationToken
         let! response = client.BatchWriteItemAsync(pbr, ct) |> Async.AwaitTaskCorrect
         let unprocessed =
-            if isNull response.UnprocessedItems then
-                [||]
-            else
-                match response.UnprocessedItems.TryGetValue tableName with
-                | true, reqs ->
-                    reqs
-                    |> Seq.choose (fun r -> r.PutRequest |> Option.ofObj)
-                    |> Seq.map _.Item
-                    |> Seq.toArray
-                | false, _ -> [||]
+            [|
+                if response.UnprocessedItems <> null then
+                    match response.UnprocessedItems.TryGetValue tableName with
+                    | true, reqs ->
+                        for r in reqs do
+                            if r.PutRequest <> null then
+                                yield r.PutRequest.Item
+                    | false, _ -> ()
+            |]
         maybeReport
         |> Option.iter (fun r -> r BatchWriteItems (if isNull response.ConsumedCapacity then [] else Seq.toList response.ConsumedCapacity) (items.Length - unprocessed.Length))
         if response.HttpStatusCode <> HttpStatusCode.OK then
