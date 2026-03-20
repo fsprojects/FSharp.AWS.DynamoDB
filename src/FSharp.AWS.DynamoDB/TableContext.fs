@@ -374,7 +374,7 @@ type TableContext<'TRecord>
                     emitMetrics ()
                     failwithf "Query request returned error %O" response.HttpStatusCode
 
-                if notNull response.Items then
+                if response.Items <> null then
                     downloaded.AddRange response.Items
 
                 if response.LastEvaluatedKey <> null && response.LastEvaluatedKey.Count > 0 then
@@ -458,7 +458,7 @@ type TableContext<'TRecord>
                     emitMetrics ()
                     failwithf "Scan request returned error %O" response.HttpStatusCode
 
-                if notNull response.Items then
+                if response.Items <> null then
                     downloaded.AddRange response.Items
 
                 consumedCapacity.Add response.ConsumedCapacity
