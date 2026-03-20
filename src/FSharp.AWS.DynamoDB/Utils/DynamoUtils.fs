@@ -108,10 +108,7 @@ let inline unwrap (avw: AttributeValueEqWrapper) = avw.AttributeValue
 
 type AttributeValue with
 
-    member inline x.IsNULL = x.NULL.GetValueOrDefault false 
-    member inline av.IsSSSet = av.SS.Count > 0
-    member inline av.IsNSSet = av.NS.Count > 0
-    member inline av.IsBSSet = av.BS.Count > 0
+    member inline x.IsNULL = x.NULL.GetValueOrDefault false
 
     member av.Print() =
         if av.IsNULL then
@@ -123,17 +120,17 @@ type AttributeValue with
         elif av.N <> null then
             sprintf "{ N = %s }" av.N
         elif av.B <> null then
-            sprintf "{ N = %A }" (av.B.ToArray())
-        elif av.SS.Count > 0 then
+            sprintf "{ B = %A }" (av.B.ToArray())
+        elif av.IsSSSet then
             sprintf "{ SS = %A }" (Seq.toArray av.SS)
-        elif av.NS.Count > 0 then
-            sprintf "{ SN = %A }" (Seq.toArray av.NS)
-        elif av.BS.Count > 0 then
+        elif av.IsNSSet then
+            sprintf "{ NS = %A }" (Seq.toArray av.NS)
+        elif av.IsBSSet then
             av.BS |> Seq.map _.ToArray() |> Seq.toArray |> sprintf "{ BS = %A }"
         elif av.IsLSet then
             av.L |> Seq.map _.Print() |> Seq.toArray |> sprintf "{ L = %A }"
         elif av.IsMSet then
-            av.M |> Seq.map (fun kv -> (kv.Key, kv.Value.Print())) |> Seq.toArray |> sprintf "{ M = %A }"
+            av.M |> Seq.map (fun kv -> kv.Key, kv.Value.Print()) |> Seq.toArray |> sprintf "{ M = %A }"
         else
             "{ }"
 
