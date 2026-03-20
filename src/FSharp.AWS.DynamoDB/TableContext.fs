@@ -592,7 +592,10 @@ type TableContext<'TRecord>
                     | false, _ -> ()
             |]
         maybeReport
-        |> Option.iter (fun r -> r BatchWriteItems (if isNull response.ConsumedCapacity then [] else Seq.toList response.ConsumedCapacity) (items.Length - unprocessed.Length))
+        |> Option.iter (fun r ->
+            let cc = if response.ConsumedCapacity = null then [] else Seq.toList response.ConsumedCapacity
+            r BatchWriteItems cc (items.Length - unprocessed.Length))
+
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "BatchWriteItem put request returned error %O" response.HttpStatusCode
 
