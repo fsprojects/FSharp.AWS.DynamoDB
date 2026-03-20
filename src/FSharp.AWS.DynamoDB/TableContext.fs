@@ -312,12 +312,14 @@ type TableContext<'TRecord>
         let! response = client.BatchGetItemAsync(request, ct) |> Async.AwaitTaskCorrect
         maybeReport
         |> Option.iter (fun r ->
+            let cc =
+                if isNull response.ConsumedCapacity then
+                    []
+                else
+                    List.ofSeq response.ConsumedCapacity
             r
                 BatchGetItems
-                (if isNull response.ConsumedCapacity then
-                     []
-                 else
-                     List.ofSeq response.ConsumedCapacity)
+                cc
                 (if isNull response.Responses then
                      0
                  else
