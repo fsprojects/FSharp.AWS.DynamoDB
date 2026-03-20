@@ -311,11 +311,25 @@ type TableContext<'TRecord>
         let! ct = Async.CancellationToken
         let! response = client.BatchGetItemAsync(request, ct) |> Async.AwaitTaskCorrect
         maybeReport
-        |> Option.iter (fun r -> r BatchGetItems (if isNull response.ConsumedCapacity then [] else List.ofSeq response.ConsumedCapacity) (if isNull response.Responses then 0 else response.Responses[tableName].Count))
+        |> Option.iter (fun r ->
+            r
+                BatchGetItems
+                (if isNull response.ConsumedCapacity then
+                     []
+                 else
+                     List.ofSeq response.ConsumedCapacity)
+                (if isNull response.Responses then
+                     0
+                 else
+                     response.Responses[tableName].Count))
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "BatchGetItem request returned error %O" response.HttpStatusCode
 
-        return if isNull response.Responses then ResizeArray() else response.Responses[tableName]
+        return
+            if isNull response.Responses then
+                ResizeArray()
+            else
+                response.Responses[tableName]
     }
 
     let queryPaginatedAsync
@@ -582,18 +596,20 @@ type TableContext<'TRecord>
         let! ct = Async.CancellationToken
         let! response = client.BatchWriteItemAsync(pbr, ct) |> Async.AwaitTaskCorrect
         let unprocessed =
-            [|
-                if response.UnprocessedItems <> null then
-                    match response.UnprocessedItems.TryGetValue tableName with
-                    | true, reqs ->
-                        for r in reqs do
-                            if r.PutRequest <> null then
-                                yield r.PutRequest.Item
-                    | false, _ -> ()
-            |]
+            [| if response.UnprocessedItems <> null then
+                   match response.UnprocessedItems.TryGetValue tableName with
+                   | true, reqs ->
+                       for r in reqs do
+                           if r.PutRequest <> null then
+                               yield r.PutRequest.Item
+                   | false, _ -> () |]
         maybeReport
         |> Option.iter (fun r ->
-            let cc = if response.ConsumedCapacity = null then [] else Seq.toList response.ConsumedCapacity
+            let cc =
+                if response.ConsumedCapacity = null then
+                    []
+                else
+                    Seq.toList response.ConsumedCapacity
             r BatchWriteItems cc (items.Length - unprocessed.Length))
 
         if response.HttpStatusCode <> HttpStatusCode.OK then
@@ -695,7 +711,8 @@ type TableContext<'TRecord>
     /// <param name="key">Key to be checked.</param>
     member _.ContainsKeyAsync(key: TableKey) : Async<bool> = async {
         let kav = template.ToAttributeValues(key)
-        let request = GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity, ExpressionAttributeNames = Dictionary())
+        let request =
+            GetItemRequest(tableName, kav, ReturnConsumedCapacity = returnConsumedCapacity, ExpressionAttributeNames = Dictionary())
         request.ExpressionAttributeNames.Add("#HKEY", template.PrimaryKey.HashKey.AttributeName)
         request.ProjectionExpression <- "#HKEY"
         let! ct = Async.CancellationToken
@@ -850,18 +867,20 @@ type TableContext<'TRecord>
         let! ct = Async.CancellationToken
         let! response = client.BatchWriteItemAsync(request, ct) |> Async.AwaitTaskCorrect
         let unprocessed =
-            [|
-                if response.UnprocessedItems <> null then
-                    match response.UnprocessedItems.TryGetValue tableName with
-                    | true, reqs ->
-                        for req in reqs do
-                            if req.DeleteRequest <> null then
-                                yield req.DeleteRequest.Key
-                    | false, _ -> ()
-            |]
+            [| if response.UnprocessedItems <> null then
+                   match response.UnprocessedItems.TryGetValue tableName with
+                   | true, reqs ->
+                       for req in reqs do
+                           if req.DeleteRequest <> null then
+                               yield req.DeleteRequest.Key
+                   | false, _ -> () |]
         maybeReport
         |> Option.iter (fun r ->
-            let cc = if isNull response.ConsumedCapacity then [] else Seq.toList response.ConsumedCapacity
+            let cc =
+                if isNull response.ConsumedCapacity then
+                    []
+                else
+                    Seq.toList response.ConsumedCapacity
             r BatchWriteItems cc (keys.Length - unprocessed.Length))
         if response.HttpStatusCode <> HttpStatusCode.OK then
             failwithf "BatchWriteItem deletion request returned error %O" response.HttpStatusCode
@@ -1347,8 +1366,7 @@ type TableContext<'TRecord>
             t.VerifyTableAsync()
 
     /// <summary>Creates a new `Transaction`, using the DynamoDB client and metricsCollector configured for this `TableContext`</summary>
-    member _.CreateTransaction() =
-        Transaction(client, ?metricsCollector = metricsCollector)
+    member _.CreateTransaction() = Transaction(client, ?metricsCollector = metricsCollector)
 
 /// <summary>
 ///    Represents a transactional set of operations to be applied atomically to an arbitrary number of DynamoDB tables.
@@ -1376,12 +1394,7 @@ and Transaction(client: IAmazonDynamoDB, ?metricsCollector: RequestMetrics -> un
     /// <param name="tableContext">Table context to operate on.</param>
     /// <param name="item">Item to be put.</param>
     /// <param name="precondition">Optional precondition expression.</param>
-    member _.Put<'TRecord>
-        (
-            tableContext: TableContext<'TRecord>,
-            item: 'TRecord,
-            ?precondition: ConditionExpression<'TRecord>
-        ) =
+    member _.Put<'TRecord>(tableContext: TableContext<'TRecord>, item: 'TRecord, ?precondition: ConditionExpression<'TRecord>) =
         let req = Put(TableName = tableContext.TableName, Item = tableContext.Template.ToAttributeValues item)
         match precondition with
         | None -> ()
@@ -1436,12 +1449,7 @@ and Transaction(client: IAmazonDynamoDB, ?metricsCollector: RequestMetrics -> un
     /// <param name="tableContext">Table context to operate on.</param>
     /// <param name="key">Key of item to delete.</param>
     /// <param name="precondition">Optional precondition expression.</param>
-    member _.Delete
-        (
-            tableContext: TableContext<'TRecord>,
-            key: TableKey,
-            ?precondition: ConditionExpression<'TRecord>
-        ) =
+    member _.Delete(tableContext: TableContext<'TRecord>, key: TableKey, ?precondition: ConditionExpression<'TRecord>) =
         let req = Delete(TableName = tableContext.TableName, Key = tableContext.Template.ToAttributeValues key)
         match precondition with
         | None -> ()
@@ -1468,7 +1476,11 @@ and Transaction(client: IAmazonDynamoDB, ?metricsCollector: RequestMetrics -> un
         let! response = client.TransactWriteItemsAsync(req, ct) |> Async.AwaitTaskCorrect
         maybeReport
         |> Option.iter (fun r ->
-            let cc = if response.ConsumedCapacity = null then [] else Seq.toList response.ConsumedCapacity
+            let cc =
+                if response.ConsumedCapacity = null then
+                    []
+                else
+                    Seq.toList response.ConsumedCapacity
             for tableName, consumedCapacity in cc |> Seq.groupBy _.TableName do
                 r tableName Operation.TransactWriteItems (Seq.toList consumedCapacity) (Seq.length transactionItems))
         if response.HttpStatusCode <> HttpStatusCode.OK then
