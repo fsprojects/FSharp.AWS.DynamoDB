@@ -153,7 +153,7 @@ type MapPickler<'Value>(vp: Pickler<'Value>) =
     override _.PicklerType = PicklerType.Value
     override _.DefaultValue = Map.empty
     override _.Pickle map =
-        if isNull map then
+        if obj.ReferenceEquals(map, null) then
             AttributeValue(NULL = true) |> Some
         elif map.Count = 0 then
             None
