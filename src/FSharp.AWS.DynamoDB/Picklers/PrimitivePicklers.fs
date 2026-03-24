@@ -21,7 +21,11 @@ type BoolPickler() =
 
     override _.DefaultValue = false
     override _.Pickle b = AttributeValue(BOOL = b) |> Some
-    override _.UnPickle a = if a.IsBOOLSet then a.BOOL.GetValueOrDefault false else invalidCast a
+    override _.UnPickle a =
+        if a.IsBOOLSet then
+            a.BOOL.GetValueOrDefault false
+        else
+            invalidCast a
 
     override _.Parse s = Boolean.Parse s
     override _.UnParse s = string s
@@ -34,15 +38,15 @@ type StringPickler() =
 
     override _.DefaultValue = null
     override _.Pickle s =
-        if isNull s then
+        if s = null then
             AttributeValue(NULL = true)
         else
-            AttributeValue(s)
+            AttributeValue s
         |> Some
 
     override _.UnPickle a =
         if a.IsNULL then null
-        elif not <| isNull a.S then a.S
+        elif a.IsSSet then a.S
         else invalidCast a
 
     override _.Parse s = s
@@ -56,7 +60,7 @@ type CharPickler() =
 
     override _.DefaultValue = char 0
     override _.Pickle c = AttributeValue(string c) |> Some
-    override _.UnPickle a = if not <| isNull a.S then Char.Parse(a.S) else invalidCast a
+    override _.UnPickle a = if a.IsSSet then Char.Parse(a.S) else invalidCast a
 
     override _.Parse s = Char.Parse s
     override _.UnParse c = string c
@@ -79,7 +83,7 @@ let inline mkNumericalPickler< ^N
 
         member _.DefaultValue = Unchecked.defaultof< ^N>
         member _.Pickle num = AttributeValue(N = toString num) |> Some
-        member _.UnPickle a = if not <| isNull a.N then parseNum a.N else invalidCast a
+        member _.UnPickle a = if a.IsNSet then parseNum a.N else invalidCast a
 
         member x.PickleCoerced o =
             let n =
@@ -102,7 +106,7 @@ type DoublePickler() =
 
     override _.DefaultValue = Unchecked.defaultof<double>
     override _.Pickle num = AttributeValue(N = unparse num) |> Some
-    override _.UnPickle a = if not <| isNull a.N then parse a.N else invalidCast a
+    override _.UnPickle a = if a.IsNSet then parse a.N else invalidCast a
 
     override x.PickleCoerced o =
         let n =
@@ -122,13 +126,13 @@ type ByteArrayPickler() =
 
     override _.DefaultValue = [||]
     override _.Pickle bs =
-        if isNull bs then Some <| AttributeValue(NULL = true)
+        if bs = null then Some <| AttributeValue(NULL = true)
         elif bs.Length = 0 then None
         else Some <| AttributeValue(B = new MemoryStream(bs))
 
     override _.UnPickle a =
         if a.IsNULL then null
-        elif not <| isNull a.B then a.B.ToArray()
+        elif a.IsBSet then a.B.ToArray()
         else invalidCast a
 
 
@@ -139,13 +143,13 @@ type MemoryStreamPickler() =
 
     override _.DefaultValue = null
     override _.Pickle m =
-        if isNull m then Some <| AttributeValue(NULL = true)
+        if m = null then Some <| AttributeValue(NULL = true)
         elif m.Length = 0L then None
         else Some <| AttributeValue(B = m)
 
     override _.UnPickle a =
         if a.IsNULL then null
-        elif notNull a.B then a.B
+        elif a.IsBSet then a.B
         else invalidCast a
 
 type GuidPickler() =
@@ -156,7 +160,7 @@ type GuidPickler() =
 
     override _.DefaultValue = Guid.Empty
     override _.Pickle g = AttributeValue(string g) |> Some
-    override _.UnPickle a = if not <| isNull a.S then Guid.Parse a.S else invalidCast a
+    override _.UnPickle a = if a.IsSSet then Guid.Parse a.S else invalidCast a
 
     override _.Parse s = Guid.Parse s
     override _.UnParse g = string g
@@ -176,7 +180,7 @@ type DateTimeOffsetPickler() =
     override _.UnParse d = unparse d
 
     override _.Pickle d = AttributeValue(unparse d) |> Some
-    override _.UnPickle a = if not <| isNull a.S then parse a.S else invalidCast a
+    override _.UnPickle a = if a.IsSSet then parse a.S else invalidCast a
 
 
 type TimeSpanPickler() =
@@ -190,7 +194,7 @@ type TimeSpanPickler() =
     override _.DefaultValue = TimeSpan.Zero
     override _.Pickle t = AttributeValue(N = string t.Ticks) |> Some
     override _.UnPickle a =
-        if not <| isNull a.N then
+        if a.IsNSet then
             TimeSpan.FromTicks(int64 a.N)
         else
             invalidCast a
@@ -204,7 +208,7 @@ type EnumerationPickler<'E, 'U when 'E: enum<'U> and 'E: struct and 'E :> ValueT
     override _.DefaultValue = Unchecked.defaultof<'E>
     override _.Pickle e = AttributeValue(S = e.ToString()) |> Some
     override _.UnPickle a =
-        if notNull a.S then
+        if a.IsSSet then
             Enum.Parse(typeof<'E>, a.S) :?> 'E
         else
             invalidCast a
@@ -252,7 +256,7 @@ type StringRepresentationPickler<'T>(ep: StringRepresentablePickler<'T>) =
     override _.PicklerType = ep.PicklerType
     override _.DefaultValue = ep.DefaultValue
     override _.Pickle t = AttributeValue(S = ep.UnParse t) |> Some
-    override _.UnPickle a = if notNull a.S then ep.Parse a.S else invalidCast a
+    override _.UnPickle a = if a.IsSSet then ep.Parse a.S else invalidCast a
 
 let mkStringRepresentationPickler (resolver: IPicklerResolver) (prop: PropertyInfo) =
     TypeShape.Create(prop.PropertyType).Accept
