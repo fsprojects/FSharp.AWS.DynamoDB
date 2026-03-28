@@ -47,10 +47,10 @@ type LocalSecondaryIndexAttribute private (indexName: string option) =
 type ConstantHashKeyAttribute(name: string, hashkey: obj) =
     inherit Attribute()
     do
-        if isNull name then
-            raise <| ArgumentNullException("name")
-        if isNull hashkey then
-            raise <| ArgumentNullException("hashkey")
+        if name = null then
+            nullArg (nameof name)
+        if hashkey = null then
+            nullArg (nameof hashkey)
 
     member _.Name = name
     member _.HashKey = hashkey
@@ -62,10 +62,10 @@ type ConstantHashKeyAttribute(name: string, hashkey: obj) =
 type ConstantRangeKeyAttribute(name: string, rangeKey: obj) =
     inherit Attribute()
     do
-        if isNull name then
-            raise <| ArgumentNullException("name")
-        if isNull rangeKey then
-            raise <| ArgumentNullException("rangeKey")
+        if name = null then
+            nullArg (nameof name)
+        if rangeKey = null then
+            nullArg (nameof rangeKey)
 
     member _.Name = name
     member _.RangeKey = rangeKey
@@ -82,8 +82,8 @@ type StringRepresentationAttribute() =
 type CustomNameAttribute(name: string) =
     inherit Attribute()
     do
-        if isNull name then
-            raise <| ArgumentNullException("name")
+        if name = null then
+            nullArg (nameof name)
     member _.Name = name
 
 /// Specifies that record deserialization should fail if not corresponding attribute
@@ -142,8 +142,8 @@ type TableKeySchema =
 type TableKey private (hashKey: obj, rangeKey: obj) =
     member _.HashKey = hashKey
     member _.RangeKey = rangeKey
-    member _.IsRangeKeySpecified = notNull rangeKey
-    member _.IsHashKeySpecified = notNull hashKey
+    member _.IsRangeKeySpecified = rangeKey <> null
+    member _.IsHashKeySpecified = hashKey <> null
     member private _.Format =
         match rangeKey with
         | null -> sprintf "{ HashKey = %A }" hashKey
@@ -152,7 +152,7 @@ type TableKey private (hashKey: obj, rangeKey: obj) =
             | null -> sprintf "{ RangeKey = %A }" rk
             | hk -> sprintf "{ HashKey = %A ; RangeKey = %A }" hk rk
 
-    override __.ToString() = __.Format
+    override tk.ToString() = tk.Format
 
     override tk.Equals o =
         match o with
@@ -163,20 +163,20 @@ type TableKey private (hashKey: obj, rangeKey: obj) =
 
     /// Defines a table key using provided HashKey
     static member Hash<'HashKey>(hashKey: 'HashKey) =
-        if isNull hashKey then
-            raise <| ArgumentNullException("hashKey")
+        if obj.ReferenceEquals(hashKey, null) then
+            nullArg (nameof hashKey)
         TableKey(hashKey, null)
 
     /// Defines a table key using provided RangeKey
     static member Range<'RangeKey>(rangeKey: 'RangeKey) =
-        if isNull rangeKey then
-            raise <| ArgumentNullException("rangeKey")
+        if obj.ReferenceEquals(rangeKey, null) then
+            nullArg (nameof rangeKey)
         TableKey(null, rangeKey)
 
     /// Defines a table key using combined HashKey and RangeKey
     static member Combined<'HashKey, 'RangeKey>(hashKey: 'HashKey, rangeKey: 'RangeKey) =
-        if isNull hashKey then
-            raise <| ArgumentNullException("hashKey")
+        if obj.ReferenceEquals(hashKey, null) then
+            nullArg (nameof hashKey)
         TableKey(hashKey, rangeKey)
 
 /// Query (start/last evaluated) key identifier
@@ -184,7 +184,7 @@ type TableKey private (hashKey: obj, rangeKey: obj) =
 type IndexKey private (hashKey: obj, rangeKey: obj, primaryKey: TableKey) =
     member _.HashKey = hashKey
     member _.RangeKey = rangeKey
-    member _.IsRangeKeySpecified = notNull rangeKey
+    member _.IsRangeKeySpecified = rangeKey <> null
     member _.PrimaryKey = primaryKey
     member private _.Format =
         match (hashKey, rangeKey) with
@@ -203,14 +203,14 @@ type IndexKey private (hashKey: obj, rangeKey: obj, primaryKey: TableKey) =
 
     /// Defines an index key using provided HashKey and primary TableKey
     static member Hash<'HashKey>(hashKey: 'HashKey, primaryKey: TableKey) =
-        if isNull hashKey then
-            raise <| ArgumentNullException("hashKey")
+        if obj.ReferenceEquals(hashKey, null) then
+            nullArg (nameof hashKey)
         IndexKey(hashKey, null, primaryKey)
 
     /// Defines an index key using combined HashKey, RangeKey and primary TableKey
     static member Combined<'HashKey, 'RangeKey>(hashKey: 'HashKey, rangeKey: 'RangeKey, primaryKey: TableKey) =
-        if isNull hashKey then
-            raise <| ArgumentNullException("hashKey")
+        if obj.ReferenceEquals(hashKey, null) then
+            nullArg (nameof hashKey)
         IndexKey(hashKey, rangeKey, primaryKey)
 
     // Defines an index key using just the primary TableKey

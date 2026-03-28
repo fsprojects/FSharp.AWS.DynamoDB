@@ -64,7 +64,7 @@ type PrimaryKeyStructure with
     static member ToAttributeValues(keyStructure: PrimaryKeyStructure, key: TableKey) =
         let dict = Dictionary<string, AttributeValue>()
         let extractKey name (pickler: Pickler) (value: obj) =
-            if isNull value then
+            if obj.ReferenceEquals(value, null) then
                 invalidArg name "Key value was not specified."
             let av = pickler.PickleUntyped value |> Option.get
             dict.Add(name, av)
@@ -325,7 +325,7 @@ type RecordTableInfo with
     static member IndexKeyToAttributeValues(indexKeySchema: TableKeySchema, recordInfo: RecordTableInfo, key: IndexKey) =
         let dict = PrimaryKeyStructure.ToAttributeValues(recordInfo.PrimaryKeyStructure, key.PrimaryKey)
         let extractKey (ks: KeyAttributeSchema) (value: obj) =
-            if isNull value then
+            if obj.ReferenceEquals(value, null) then
                 invalidArg ks.AttributeName "Key value was not specified."
             let meta = recordInfo.Properties |> Array.find (fun p -> p.Name = ks.AttributeName)
             let av = meta.Pickler.PickleUntyped value |> Option.get

@@ -9,36 +9,32 @@ open Amazon.DynamoDBv2.Model
 
 type AttributeValue with
 
-    member inline x.IsNULL =
-        let nullable = x.NULL
-        nullable.HasValue && nullable.Value
-
-    member inline av.IsSSSet = av.SS.Count > 0
-    member inline av.IsNSSet = av.NS.Count > 0
-    member inline av.IsBSSet = av.BS.Count > 0
+    member inline x.IsNULL = x.NULL.GetValueOrDefault false
+    member inline x.IsBSet = x.B <> null
+    member inline x.IsNSet = x.N <> null
+    member inline x.IsSSet = x.S <> null
 
     member av.Print() =
         if av.IsNULL then
             "{ NULL = true }"
         elif av.IsBOOLSet then
-            let bool = av.BOOL
-            sprintf "{ BOOL = %b }" (bool.GetValueOrDefault false)
-        elif av.S <> null then
+            sprintf "{ BOOL = %b }" (av.BOOL.GetValueOrDefault false)
+        elif av.IsSSet then
             sprintf "{ S = %s }" av.S
-        elif av.N <> null then
+        elif av.IsNSet then
             sprintf "{ N = %s }" av.N
-        elif av.B <> null then
-            sprintf "{ N = %A }" (av.B.ToArray())
-        elif av.SS.Count > 0 then
+        elif av.IsBSet then
+            sprintf "{ B = %A }" (av.B.ToArray())
+        elif av.IsSSSet then
             sprintf "{ SS = %A }" (Seq.toArray av.SS)
-        elif av.NS.Count > 0 then
-            sprintf "{ SN = %A }" (Seq.toArray av.NS)
-        elif av.BS.Count > 0 then
+        elif av.IsNSSet then
+            sprintf "{ NS = %A }" (Seq.toArray av.NS)
+        elif av.IsBSSet then
             av.BS |> Seq.map _.ToArray() |> Seq.toArray |> sprintf "{ BS = %A }"
         elif av.IsLSet then
             av.L |> Seq.map _.Print() |> Seq.toArray |> sprintf "{ L = %A }"
         elif av.IsMSet then
-            av.M |> Seq.map (fun kv -> (kv.Key, kv.Value.Print())) |> Seq.toArray |> sprintf "{ M = %A }"
+            av.M |> Seq.map (fun kv -> kv.Key, kv.Value.Print()) |> Seq.toArray |> sprintf "{ M = %A }"
         else
             "{ }"
 
@@ -62,16 +58,16 @@ type AttributeValueComparer() =
             areEqual
 
     static let rec areEqualAttributeValues (av: AttributeValue) (av': AttributeValue) =
-        if av.IsNULL then
+        if av.NULL.HasValue then
             av'.NULL = av.NULL
-        elif av.IsBOOLSet then
+        elif av.BOOL.HasValue then
             av'.BOOL = av.BOOL
-        elif notNull av.S then
-            notNull av'.S && av.S = av'.S
-        elif notNull av.N then
-            notNull av'.N && av.N = av'.N
-        elif notNull av.B then
-            notNull av'.B && areEqualMemoryStreams av.B av'.B
+        elif av.IsSSet then
+            av'.IsSSet && av.S = av'.S
+        elif av.IsNSet then
+            av'.IsNSet && av.N = av'.N
+        elif av.IsBSet then
+            av'.IsBSet && areEqualMemoryStreams av.B av'.B
         elif av.IsSSSet then
             av'.IsSSSet && areEqualResizeArrays av.SS av'.SS
         elif av.IsNSSet then
@@ -86,7 +82,7 @@ type AttributeValueComparer() =
             && av.M
                |> Seq.forall (fun kv ->
                    let ok, found = av'.M.TryGetValue kv.Key
-                   if ok then areEqualAttributeValues kv.Value found else false)
+                   ok && areEqualAttributeValues kv.Value found)
         else
             true
 
@@ -97,15 +93,15 @@ type AttributeValueComparer() =
         h
 
     static let rec getAttributeValueHashCode (av: AttributeValue) =
-        if av.IsNULL then
+        if av.NULL.HasValue then
             0
         elif av.IsBOOLSet then
             hash av.BOOL
-        elif notNull av.S then
+        elif av.IsSSet then
             hash av.S
-        elif notNull av.N then
+        elif av.IsNSet then
             hash av.N
-        elif notNull av.B then
+        elif av.IsBSet then
             hash av.B.Length
         elif av.IsSSSet then
             getSeqHash hash av.SS
