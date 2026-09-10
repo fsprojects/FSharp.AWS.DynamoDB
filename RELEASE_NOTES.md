@@ -1,3 +1,7 @@
+### 0.13.2-beta
+* Bump AWS DynamoDbv2 version to avoid [this data corruption bug](https://github.com/aws/aws-sdk-net/issues/4502) (thanks @njlr) [#89](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/89)
+* Fixed a bug where some projected queries fetch the full item (thanks @jfjonsson) [#90] (https://github.com/fsprojects/FSharp.AWS.DynamoDB/issues/90)
+
 ### 0.13.1-beta
 * Fixed what looks like a decade-old encoding bug with Number Sets (thanks @njlr) [#87](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/87)
 * Added some additional null checks for AWSSDKv4 (thanks again @njlr) [#88](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/88)
@@ -5,8 +9,10 @@
 ### 0.13.0-beta
 * Updated `AWSSDK.DynamoDBv2` dependency to `4.0.10.4` [#86](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/86).
 * (breaking) NOTE [the underlying dependency change may trigger breaking changes to your application](https://docs.aws.amazon.com/sdk-for-net/v4/developer-guide/net-dg-v4.html) that can impact your application either as compile-time errors (if your system has low-level calls not using this library), or runtime exceptions (if you have external logic that falls foul of the V4 SDK changed `List`/`Dictionary` behavior)
+
 ### 0.12.3-beta
 * Removed erroneous `Dotnet.Reproduciblebuilds` dependency [#75](https://github.com/fsprojects/FSharp.AWS.DynamoDB/pull/75)
+
 ### 0.12.2-beta
 * (breaking) Revised multi-table transaction API (thanks @bartelink)
 

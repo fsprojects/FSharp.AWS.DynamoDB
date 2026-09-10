@@ -958,7 +958,8 @@ type TableContext<'TRecord>
         async {
 
             let filterCondition = filterCondition |> Option.map _.Conditional
-            let! downloaded = queryAsync keyCondition.Conditional filterCondition None limit consistentRead scanIndexForward
+            let! downloaded =
+                queryAsync keyCondition.Conditional filterCondition (Some projection.ProjectionExpr) limit consistentRead scanIndexForward
             return downloaded |> Seq.map projection.UnPickle |> Seq.toArray
         }
 
@@ -1088,7 +1089,7 @@ type TableContext<'TRecord>
                 queryPaginatedAsync
                     keyCondition.Conditional
                     filterCondition
-                    None
+                    (Some projection.ProjectionExpr)
                     (LimitType.DefaultOrCount limit)
                     exclusiveStartKey
                     consistentRead
