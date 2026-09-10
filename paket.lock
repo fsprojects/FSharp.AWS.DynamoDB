@@ -2,13 +2,13 @@ STORAGE: NONE
 RESTRICTION: || (== net8.0) (== netstandard2.0) (== netstandard2.1)
 NUGET
   remote: https://api.nuget.org/v3/index.json
-    AWSSDK.Core (4.0.3.6)
+    AWSSDK.Core (4.0.102.3)
       Microsoft.Bcl.AsyncInterfaces (>= 8.0) - restriction: || (&& (== net8.0) (< netcoreapp3.1)) (== netstandard2.0) (== netstandard2.1)
       System.Buffers (>= 4.5.1) - restriction: || (&& (== net8.0) (>= net472)) (&& (== net8.0) (< netcoreapp3.1)) (== netstandard2.0) (== netstandard2.1)
       System.Memory (>= 4.5.5) - restriction: || (&& (== net8.0) (>= net472)) (&& (== net8.0) (< netcoreapp3.1)) (== netstandard2.0) (== netstandard2.1)
-      System.Text.Json (>= 8.0.5) - restriction: || (&& (== net8.0) (>= net472)) (&& (== net8.0) (< netcoreapp3.1)) (== netstandard2.0) (== netstandard2.1)
-    AWSSDK.DynamoDBv2 (4.0.10.4)
-      AWSSDK.Core (>= 4.0.3.6 < 5.0)
+      System.Text.Json (>= 8.0.6) - restriction: || (&& (== net8.0) (>= net472)) (&& (== net8.0) (< netcoreapp3.1)) (== netstandard2.0) (== netstandard2.1)
+    AWSSDK.DynamoDBv2 (4.0.103.6)
+      AWSSDK.Core (>= 4.0.102.3 < 5.0)
     DotNet.ReproducibleBuilds (1.1.1) - copy_local: true
       Microsoft.SourceLink.AzureRepos.Git (>= 1.1.1)
       Microsoft.SourceLink.Bitbucket.Git (>= 1.1.1)
