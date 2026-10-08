@@ -19,6 +19,16 @@ module MultiKeyTypes =
           [<GlobalSecondaryHashKey(indexName = "Inverted")>]
           SortKey: string }
 
+    type InverseKeyRecordUsingCustomName =
+        { [<HashKey>]
+          PrimaryKey: string
+          [<RangeKey>]
+          SortKey: string
+          [<GlobalSecondaryHashKey(indexName = "GSIReversed"); CustomName("SortKey")>]
+          GSIReverseHashKey: string
+          [<GlobalSecondaryRangeKey(indexName = "GSIReversed"); CustomName("PrimaryKey")>]
+          GSIReverseRangeKey: string }
+
     type SharedRangeKeyRecord =
         { [<HashKey>]
           HashKey: string
@@ -32,7 +42,7 @@ module MultiKeyTypes =
 
 type ``Inverse GSI Table Operation Tests``(fixture: TableFixture) =
 
-    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
+    let rand = let r = Random.Shared in fun () -> r.Next() |> int64
     let mkItem () =
         { PrimaryKey = ((int (rand ())) % 50).ToString()
           SortKey = ((int (rand ())) % 50).ToString() }
@@ -51,9 +61,42 @@ type ``Inverse GSI Table Operation Tests``(fixture: TableFixture) =
 
     interface IClassFixture<TableFixture>
 
+type ``Inverse GSI Table with Custom Names Operation Tests``(fixture: TableFixture) =
+
+    let rand = let r = Random.Shared in fun () -> r.Next() |> int64
+    let mkItem () =
+        let hashKey = ((int (rand ())) % 50).ToString()
+        let sortKey = ((int (rand ())) % 50).ToString()
+        { PrimaryKey = hashKey
+          SortKey = sortKey
+          GSIReverseHashKey = sortKey
+          GSIReverseRangeKey = hashKey }
+
+    let table = fixture.CreateEmpty<InverseKeyRecordUsingCustomName>()
+
+    [<Fact>]
+    let ``Query by Table Key and GSI`` () =
+        let values = set [ for _ in 1L .. 1000L -> mkItem () ]
+        for batch in values |> Set.toSeq |> Seq.chunkBySize 25 do
+            table.BatchPutItems batch =! [||]
+        let queriedTable = table.Query <@ fun (i: InverseKeyRecordUsingCustomName) -> i.PrimaryKey = "1" && i.SortKey.StartsWith "2" @>
+        test <@ set queriedTable = set (values |> Set.filter (fun i -> i.PrimaryKey = "1" && i.SortKey.StartsWith "2")) @>
+        let queriedGSI = table.Query <@ fun (i: InverseKeyRecordUsingCustomName) -> i.SortKey = "1" && i.PrimaryKey.StartsWith "2" @>
+        test <@ set queriedGSI = set (values |> Set.filter (fun i -> i.SortKey = "1" && i.PrimaryKey.StartsWith "2")) @>
+        let queriedGSIWithCustomName =
+            table.Query <@ fun (i: InverseKeyRecordUsingCustomName) -> i.GSIReverseHashKey = "1" && i.GSIReverseRangeKey.StartsWith "2" @>
+        test
+            <@
+                set queriedGSIWithCustomName = set (
+                    values |> Set.filter (fun i -> i.GSIReverseHashKey = "1" && i.GSIReverseRangeKey.StartsWith "2")
+                )
+            @>
+
+    interface IClassFixture<TableFixture>
+
 type ``Shared Range Key Table Operation Tests``(fixture: TableFixture) =
 
-    let rand = let r = Random.Shared in fun () -> int64 <| r.Next()
+    let rand = let r = Random.Shared in fun () -> r.Next() |> int64
 
     let mkItem () =
         { HashKey = guid ()
